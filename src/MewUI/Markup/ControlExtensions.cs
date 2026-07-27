@@ -678,7 +678,7 @@ public static class ControlExtensions
         if (accessKey)
         {
             var at = new AccessText().SemiBold();
-            at.SetRawText(text ?? string.Empty);
+            at.RawText = text ?? string.Empty;
             control.Header = at;
         }
         else
@@ -1115,7 +1115,7 @@ public static class ControlExtensions
 
     internal static AccessText RawText(this AccessText at, string text)
     {
-        at.SetRawText(text);
+        at.RawText = text;
         return at;
     }
 
@@ -1190,7 +1190,7 @@ public static class ControlExtensions
                 TextAlignment = MewUI.TextAlignment.Center,
                 VerticalTextAlignment = MewUI.TextAlignment.Center,
             };
-            at.SetRawText(text);
+            at.RawText = text;
             button.Content = at;
         }
         else
@@ -1212,18 +1212,34 @@ public static class ControlExtensions
     /// </summary>
     /// <param name="button">Target button.</param>
     /// <param name="source">Observable source.</param>
+    /// <param name="accessKey">Whether underscore prefixes define access keys.</param>
     /// <returns>The button for chaining.</returns>
-    public static Button BindContent(this Button button, ObservableValue<string> source)
+    public static Button BindContent(this Button button, ObservableValue<string> source, bool accessKey = true)
     {
-        var tb = new TextBlock
+        if (accessKey)
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextAlignment = MewUI.TextAlignment.Center,
-            VerticalTextAlignment = MewUI.TextAlignment.Center,
-        };
-        tb.SetBinding(TextBlock.TextProperty, source, BindingMode.OneWay);
-        button.Content = tb;
+            var at = new AccessText
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = MewUI.TextAlignment.Center,
+                VerticalTextAlignment = MewUI.TextAlignment.Center,
+            };
+            at.SetBinding(AccessText.RawTextProperty, source, BindingMode.OneWay);
+            button.Content = at;
+        }
+        else
+        {
+            var tb = new TextBlock
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = MewUI.TextAlignment.Center,
+                VerticalTextAlignment = MewUI.TextAlignment.Center,
+            };
+            tb.SetBinding(TextBlock.TextProperty, source, BindingMode.OneWay);
+            button.Content = tb;
+        }
         return button;
     }
 
@@ -1234,18 +1250,34 @@ public static class ControlExtensions
     /// <param name="button">Target button.</param>
     /// <param name="source">Observable source.</param>
     /// <param name="convert">Conversion function.</param>
+    /// <param name="accessKey">Whether underscore prefixes define access keys.</param>
     /// <returns>The button for chaining.</returns>
-    public static Button BindContent<TSource>(this Button button, ObservableValue<TSource> source, Func<TSource, string> convert)
+    public static Button BindContent<TSource>(this Button button, ObservableValue<TSource> source, Func<TSource, string> convert, bool accessKey = true)
     {
-        var tb = new TextBlock
+        if (accessKey)
         {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            TextAlignment = MewUI.TextAlignment.Center,
-            VerticalTextAlignment = MewUI.TextAlignment.Center,
-        };
-        tb.SetBinding(TextBlock.TextProperty, source, v => convert(v) ?? string.Empty);
-        button.Content = tb;
+            var at = new AccessText
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = MewUI.TextAlignment.Center,
+                VerticalTextAlignment = MewUI.TextAlignment.Center,
+            };
+            at.SetBinding(AccessText.RawTextProperty, source, v => convert(v) ?? string.Empty);
+            button.Content = at;
+        }
+        else
+        {
+            var tb = new TextBlock
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = MewUI.TextAlignment.Center,
+                VerticalTextAlignment = MewUI.TextAlignment.Center,
+            };
+            tb.SetBinding(TextBlock.TextProperty, source, v => convert(v) ?? string.Empty);
+            button.Content = tb;
+        }
         return button;
     }
 
@@ -1633,12 +1665,66 @@ public static class ControlExtensions
         if (accessKey)
         {
             var at = new AccessText();
-            at.SetRawText(text);
+            at.RawText = text;
             control.Content = at;
         }
         else
         {
             control.Content = new TextBlock { Text = text };
+        }
+        return control;
+    }
+
+    /// <summary>
+    /// Binds the content to an observable text label. When <paramref name="accessKey"/> is true (default),
+    /// "_" prefixes mark access key characters and stay in sync as the source changes.
+    /// </summary>
+    /// <typeparam name="T">Toggle control type.</typeparam>
+    /// <param name="control">Target toggle control.</param>
+    /// <param name="source">Observable source.</param>
+    /// <param name="accessKey">Whether underscore prefixes define access keys.</param>
+    /// <returns>The control for chaining.</returns>
+    public static T BindContent<T>(this T control, ObservableValue<string> source, bool accessKey = true) where T : ToggleBase
+    {
+        if (accessKey)
+        {
+            var at = new AccessText();
+            at.SetBinding(AccessText.RawTextProperty, source, BindingMode.OneWay);
+            control.Content = at;
+        }
+        else
+        {
+            var tb = new TextBlock();
+            tb.SetBinding(TextBlock.TextProperty, source, BindingMode.OneWay);
+            control.Content = tb;
+        }
+        return control;
+    }
+
+    /// <summary>
+    /// Binds the content to an observable value with a converter. When <paramref name="accessKey"/> is true
+    /// (default), "_" prefixes in the converted text mark access key characters.
+    /// </summary>
+    /// <typeparam name="T">Toggle control type.</typeparam>
+    /// <typeparam name="TSource">Source value type.</typeparam>
+    /// <param name="control">Target toggle control.</param>
+    /// <param name="source">Observable source.</param>
+    /// <param name="convert">Conversion function.</param>
+    /// <param name="accessKey">Whether underscore prefixes define access keys.</param>
+    /// <returns>The control for chaining.</returns>
+    public static T BindContent<T, TSource>(this T control, ObservableValue<TSource> source, Func<TSource, string> convert, bool accessKey = true) where T : ToggleBase
+    {
+        if (accessKey)
+        {
+            var at = new AccessText();
+            at.SetBinding(AccessText.RawTextProperty, source, v => convert(v) ?? string.Empty);
+            control.Content = at;
+        }
+        else
+        {
+            var tb = new TextBlock();
+            tb.SetBinding(TextBlock.TextProperty, source, v => convert(v) ?? string.Empty);
+            control.Content = tb;
         }
         return control;
     }
@@ -1686,12 +1772,64 @@ public static class ControlExtensions
         if (accessKey)
         {
             var at = new AccessText();
-            at.SetRawText(text);
+            at.RawText = text;
             checkBox.Content = at;
         }
         else
         {
             checkBox.Content = new TextBlock { Text = text };
+        }
+        return checkBox;
+    }
+
+    /// <summary>
+    /// Binds the content to an observable text label. When <paramref name="accessKey"/> is true (default),
+    /// "_" prefixes mark access key characters and stay in sync as the source changes.
+    /// </summary>
+    /// <param name="checkBox">Target check box.</param>
+    /// <param name="source">Observable source.</param>
+    /// <param name="accessKey">Whether underscore prefixes define access keys.</param>
+    /// <returns>The check box for chaining.</returns>
+    public static CheckBox BindContent(this CheckBox checkBox, ObservableValue<string> source, bool accessKey = true)
+    {
+        if (accessKey)
+        {
+            var at = new AccessText();
+            at.SetBinding(AccessText.RawTextProperty, source, BindingMode.OneWay);
+            checkBox.Content = at;
+        }
+        else
+        {
+            var tb = new TextBlock();
+            tb.SetBinding(TextBlock.TextProperty, source, BindingMode.OneWay);
+            checkBox.Content = tb;
+        }
+        return checkBox;
+    }
+
+    /// <summary>
+    /// Binds the content to an observable value with a converter. When <paramref name="accessKey"/> is true
+    /// (default), "_" prefixes in the converted text mark access key characters.
+    /// </summary>
+    /// <typeparam name="TSource">Source value type.</typeparam>
+    /// <param name="checkBox">Target check box.</param>
+    /// <param name="source">Observable source.</param>
+    /// <param name="convert">Conversion function.</param>
+    /// <param name="accessKey">Whether underscore prefixes define access keys.</param>
+    /// <returns>The check box for chaining.</returns>
+    public static CheckBox BindContent<TSource>(this CheckBox checkBox, ObservableValue<TSource> source, Func<TSource, string> convert, bool accessKey = true)
+    {
+        if (accessKey)
+        {
+            var at = new AccessText();
+            at.SetBinding(AccessText.RawTextProperty, source, v => convert(v) ?? string.Empty);
+            checkBox.Content = at;
+        }
+        else
+        {
+            var tb = new TextBlock();
+            tb.SetBinding(TextBlock.TextProperty, source, v => convert(v) ?? string.Empty);
+            checkBox.Content = tb;
         }
         return checkBox;
     }
@@ -1988,7 +2126,7 @@ public static class ControlExtensions
                 TextAlignment = MewUI.TextAlignment.Center,
                 VerticalTextAlignment = MewUI.TextAlignment.Center,
             };
-            at.SetRawText(text);
+            at.RawText = text;
             toggleButton.Content = at;
         }
         else
@@ -2001,6 +2139,82 @@ public static class ControlExtensions
                 TextAlignment = MewUI.TextAlignment.Center,
                 VerticalTextAlignment = MewUI.TextAlignment.Center,
             };
+        }
+        return toggleButton;
+    }
+
+    /// <summary>
+    /// Binds the content to an observable text label (centered). When <paramref name="accessKey"/> is true
+    /// (default), "_" prefixes mark access key characters and stay in sync as the source changes.
+    /// </summary>
+    /// <param name="toggleButton">Target toggle button.</param>
+    /// <param name="source">Observable source.</param>
+    /// <param name="accessKey">Whether underscore prefixes define access keys.</param>
+    /// <returns>The toggle button for chaining.</returns>
+    public static ToggleButton BindContent(this ToggleButton toggleButton, ObservableValue<string> source, bool accessKey = true)
+    {
+        if (accessKey)
+        {
+            var at = new AccessText
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = MewUI.TextAlignment.Center,
+                VerticalTextAlignment = MewUI.TextAlignment.Center,
+            };
+            at.SetBinding(AccessText.RawTextProperty, source, BindingMode.OneWay);
+            toggleButton.Content = at;
+        }
+        else
+        {
+            var tb = new TextBlock
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = MewUI.TextAlignment.Center,
+                VerticalTextAlignment = MewUI.TextAlignment.Center,
+            };
+            tb.SetBinding(TextBlock.TextProperty, source, BindingMode.OneWay);
+            toggleButton.Content = tb;
+        }
+        return toggleButton;
+    }
+
+    /// <summary>
+    /// Binds the content to an observable value with a converter (centered). When <paramref name="accessKey"/>
+    /// is true (default), "_" prefixes in the converted text mark access key characters.
+    /// </summary>
+    /// <typeparam name="TSource">Source value type.</typeparam>
+    /// <param name="toggleButton">Target toggle button.</param>
+    /// <param name="source">Observable source.</param>
+    /// <param name="convert">Conversion function.</param>
+    /// <param name="accessKey">Whether underscore prefixes define access keys.</param>
+    /// <returns>The toggle button for chaining.</returns>
+    public static ToggleButton BindContent<TSource>(this ToggleButton toggleButton, ObservableValue<TSource> source, Func<TSource, string> convert, bool accessKey = true)
+    {
+        if (accessKey)
+        {
+            var at = new AccessText
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = MewUI.TextAlignment.Center,
+                VerticalTextAlignment = MewUI.TextAlignment.Center,
+            };
+            at.SetBinding(AccessText.RawTextProperty, source, v => convert(v) ?? string.Empty);
+            toggleButton.Content = at;
+        }
+        else
+        {
+            var tb = new TextBlock
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextAlignment = MewUI.TextAlignment.Center,
+                VerticalTextAlignment = MewUI.TextAlignment.Center,
+            };
+            tb.SetBinding(TextBlock.TextProperty, source, v => convert(v) ?? string.Empty);
+            toggleButton.Content = tb;
         }
         return toggleButton;
     }
@@ -3710,7 +3924,7 @@ public static class ControlExtensions
         if (accessKey)
         {
             var at = new AccessText();
-            at.SetRawText(text);
+            at.RawText = text;
             tab.Header = at;
         }
         else
