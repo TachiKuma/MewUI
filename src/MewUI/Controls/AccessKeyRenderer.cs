@@ -47,17 +47,29 @@ internal static class AccessKeyRenderer
             return default;
         }
 
+        // Measure intrinsic character widths with left alignment and no wrap/trim: the format's own
+        // alignment (e.g. Center on button captions) collapses the measured width to zero against an
+        // unbounded constraint, so the underline would never be sized.
+        var measureFormat = new TextFormat
+        {
+            Font = format.Font,
+            HorizontalAlignment = TextAlignment.Left,
+            VerticalAlignment = format.VerticalAlignment,
+            Wrapping = TextWrapping.NoWrap,
+            Trimming = TextTrimming.None,
+        };
+
         double prefixWidth = 0;
         if (underlineIndex > 0)
         {
             var prefixBounds = new Rect(0, 0, double.PositiveInfinity, 0);
             var prefixConstraints = new TextLayoutConstraints(prefixBounds);
-            prefixWidth = context.CreateTextLayout(displayText.AsSpan(0, underlineIndex), format, in prefixConstraints)?.MeasuredSize.Width ?? 0;
+            prefixWidth = context.CreateTextLayout(displayText.AsSpan(0, underlineIndex), measureFormat, in prefixConstraints)?.MeasuredSize.Width ?? 0;
         }
 
         var charBounds = new Rect(0, 0, double.PositiveInfinity, 0);
         var charConstraints = new TextLayoutConstraints(charBounds);
-        var charWidth = context.CreateTextLayout(displayText.AsSpan(underlineIndex, 1), format, in charConstraints)?.MeasuredSize.Width ?? 0;
+        var charWidth = context.CreateTextLayout(displayText.AsSpan(underlineIndex, 1), measureFormat, in charConstraints)?.MeasuredSize.Width ?? 0;
 
         return new UnderlineMetrics(layout.MeasuredSize.Width, layout.MeasuredSize.Height, prefixWidth, charWidth);
     }
