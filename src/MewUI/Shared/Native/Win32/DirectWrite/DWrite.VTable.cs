@@ -52,6 +52,30 @@ internal static unsafe class DWriteVTable
         return hr;
     }
 
+    /// <summary>
+    /// IDWriteFactory1::CreateCustomRenderingParams (vtable index 25), which additionally carries the
+    /// contrast used for grayscale antialiasing. Caller must Release.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CreateCustomRenderingParams1(
+        nint factory1,
+        float gamma,
+        float enhancedContrast,
+        float grayscaleEnhancedContrast,
+        float clearTypeLevel,
+        DWRITE_PIXEL_GEOMETRY pixelGeometry,
+        DWRITE_RENDERING_MODE renderingMode,
+        out nint renderingParams)
+    {
+        renderingParams = 0;
+        nint prms = 0;
+        var vtbl = *(nint**)factory1;
+        var fn = (delegate* unmanaged[Stdcall]<nint, float, float, float, float, DWRITE_PIXEL_GEOMETRY, DWRITE_RENDERING_MODE, nint*, int>)vtbl[25];
+        int hr = fn(factory1, gamma, enhancedContrast, grayscaleEnhancedContrast, clearTypeLevel, pixelGeometry, renderingMode, &prms);
+        renderingParams = prms;
+        return hr;
+    }
+
     /// <summary>Reads the four IDWriteRenderingParams getters (vtable indices 3..6), each a
     /// by-value return: GetGamma, GetEnhancedContrast, GetClearTypeLevel, GetPixelGeometry.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

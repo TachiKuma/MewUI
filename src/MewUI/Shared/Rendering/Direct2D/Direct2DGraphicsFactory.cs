@@ -183,6 +183,33 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
         try
         {
             DWriteVTable.ReadRenderingParams(systemDefault, out float gamma, out float _, out float clearTypeLevel, out DWRITE_PIXEL_GEOMETRY pixelGeometry);
+            // Grayscale antialiasing has its own contrast, which DirectWrite defaults to 1.0 and the
+            // older CreateCustomRenderingParams cannot set - so popups and cached bitmaps, which
+            // cannot use ClearType, would otherwise keep rendering heavier than the window.
+            if (ComHelpers.QueryInterface((nint)factory, in DWrite.IID_IDWriteFactory1, out nint factory1) >= 0 && factory1 != 0)
+            {
+                try
+                {
+                    int hr1 = DWriteVTable.CreateCustomRenderingParams1(
+                        factory1,
+                        gamma,
+                        TEXT_CONTRAST,
+                        TEXT_CONTRAST,
+                        clearTypeLevel,
+                        pixelGeometry,
+                        DWRITE_RENDERING_MODE.GDI_CLASSIC,
+                        out nint tuned1);
+                    if (hr1 >= 0 && tuned1 != 0)
+                    {
+                        return tuned1;
+                    }
+                }
+                finally
+                {
+                    ComHelpers.Release(factory1);
+                }
+            }
+
             int hr = DWriteVTable.CreateCustomRenderingParams(
                 factory,
                 gamma,
