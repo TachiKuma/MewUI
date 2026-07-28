@@ -15,6 +15,9 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
     private const int D2DERR_RECREATE_TARGET = unchecked((int)0x8899000C);
     private const int D2DERR_WRONG_RESOURCE_DOMAIN = unchecked((int)0x88990015);
 
+    // Far beyond any render target, so a clip using it bounds only the other axis.
+    private const float UNBOUNDED_CLIP_EXTENT = 1 << 20;
+
     // ENABLE_COLOR_FONT is a Windows 8.1+ DrawText/DrawTextLayout option. On Win7 / Win8.0 the
     // D2D runtime rejects it with a deferred E_INVALIDARG at EndDraw, which silently drops the
     // whole frame (blank window). Resolve the supported flag once at startup.
@@ -1082,12 +1085,35 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
 
         nint brush = GetSolidBrush(color);
         var options = _textPixelSnap
-            ? D2D1_DRAW_TEXT_OPTIONS.CLIP | _colorFontOption
-            : D2D1_DRAW_TEXT_OPTIONS.NO_SNAP | D2D1_DRAW_TEXT_OPTIONS.CLIP | _colorFontOption;
+            ? _colorFontOption
+            : D2D1_DRAW_TEXT_OPTIONS.NO_SNAP | _colorFontOption;
 
         var rt = _deviceContext != 0 ? _deviceContext : _renderTarget;
-        D2D1VTable.DrawTextLayout((ID2D1RenderTarget*)rt,
-            new D2D1_POINT_2F((float)bounds.X, (float)bounds.Y), layout.BackendHandle, brush, options);
+        var origin = new D2D1_POINT_2F((float)bounds.X, (float)bounds.Y);
+
+        if (layout.ContentHeight > bounds.Height)
+        {
+            options |= D2D1_DRAW_TEXT_OPTIONS.CLIP;
+            D2D1VTable.DrawTextLayout((ID2D1RenderTarget*)rt, origin, layout.BackendHandle, brush, options);
+            return;
+        }
+
+        // Clipping at the line box shaves the antialiased edge row of a flush descender, so text that
+        // fits is bounded horizontally only.
+        var horizontalClip = new D2D1_RECT_F(
+            (float)bounds.X,
+            -UNBOUNDED_CLIP_EXTENT,
+            (float)bounds.Right,
+            UNBOUNDED_CLIP_EXTENT);
+        D2D1VTable.PushAxisAlignedClip((ID2D1RenderTarget*)rt, horizontalClip);
+        try
+        {
+            D2D1VTable.DrawTextLayout((ID2D1RenderTarget*)rt, origin, layout.BackendHandle, brush, options);
+        }
+        finally
+        {
+            D2D1VTable.PopAxisAlignedClip((ID2D1RenderTarget*)rt);
+        }
     }
 
     public override Size MeasureText(ReadOnlySpan<char> text, IFont font)
