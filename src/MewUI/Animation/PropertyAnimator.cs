@@ -1,3 +1,5 @@
+using Aprillz.MewUI.Controls;
+
 namespace Aprillz.MewUI.Animation;
 
 /// <summary>
@@ -7,11 +9,13 @@ namespace Aprillz.MewUI.Animation;
 /// </summary>
 internal sealed class PropertyAnimator
 {
+    private readonly Element _owner;
     private readonly PropertyValueStore _store;
     private Dictionary<int, AnimState>? _states;
 
-    internal PropertyAnimator(PropertyValueStore store)
+    internal PropertyAnimator(Element owner, PropertyValueStore store)
     {
+        _owner = owner;
         _store = store;
         store.StopAnimationCallback = StopAnimation;
         store.StopAllAnimationsCallback = StopAll;
@@ -64,7 +68,7 @@ internal sealed class PropertyAnimator
         {
             state = new AnimState();
             _states[id] = state;
-            state.Clock = new AnimationClock(duration, easing);
+            state.Clock = new AnimationClock(duration, easing).AttachTo(_owner);
             state.Clock.TickCallback = progress => OnTick(id, progress);
             // Drop the state once the clock finishes on its own so a property that animated
             // once doesn't keep its (boxed) from/target values alive for the element's lifetime.
@@ -119,7 +123,7 @@ internal sealed class PropertyAnimator
         {
             state = new AnimState();
             _states[id] = state;
-            state.Clock = new AnimationClock(duration, easing);
+            state.Clock = new AnimationClock(duration, easing).AttachTo(_owner);
             state.Clock.TickCallback = progress => OnTick(id, progress);
             state.Clock.CompletedCallback = () => _states?.Remove(id);
         }

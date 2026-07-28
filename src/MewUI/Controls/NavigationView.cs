@@ -322,7 +322,8 @@ public sealed class NavigationView : Control, IVisualTreeHost
 
     private AnimationClock CreateWidthClock()
     {
-        var clock = new AnimationClock(TimeSpan.FromMilliseconds(200), Easing.EaseOutCubic);
+        var clock = new AnimationClock(TimeSpan.FromMilliseconds(200), Easing.EaseOutCubic)
+            .AttachTo(this);
         clock.TickCallback = progress =>
         {
             _inlineWidth = _widthFrom + (_widthTo - _widthFrom) * progress;
@@ -350,7 +351,8 @@ public sealed class NavigationView : Control, IVisualTreeHost
 
     private AnimationClock CreateOverlayClock()
     {
-        var clock = new AnimationClock(TimeSpan.FromMilliseconds(200), Easing.EaseOutCubic);
+        var clock = new AnimationClock(TimeSpan.FromMilliseconds(200), Easing.EaseOutCubic)
+            .AttachTo(this);
         clock.TickCallback = progress =>
         {
             _overlayProgress = _overlayFrom + (_overlayTo - _overlayFrom) * progress;

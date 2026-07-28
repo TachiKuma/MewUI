@@ -1,5 +1,7 @@
 using System.Diagnostics;
 
+using Aprillz.MewUI.Animation;
+
 namespace Aprillz.MewUI.Platform.MacOS;
 
 public sealed class MacOSPlatformHost : IPlatformHost
@@ -235,6 +237,25 @@ public sealed class MacOSPlatformHost : IPlatformHost
         }
     }
 
+    private void RenderContinuousWindows(RenderLoopSettings settings)
+    {
+        using var pulse = AnimationManager.Instance.BeginPulse(settings);
+
+        _renderBackends.Clear();
+        foreach (var backend in _windows.Values)
+        {
+            if (pulse.ShouldRender(backend.Window, backend.NeedsRender))
+            {
+                _renderBackends.Add(backend);
+            }
+        }
+
+        for (int i = 0; i < _renderBackends.Count; i++)
+        {
+            _renderBackends[i].RenderNow();
+        }
+    }
+
     public void Run(Application app, Window mainWindow)
     {
         ArgumentNullException.ThrowIfNull(app);
@@ -333,7 +354,7 @@ public sealed class MacOSPlatformHost : IPlatformHost
             {
                 try
                 {
-                    RenderAllWindows();
+                    RenderContinuousWindows(scheduler);
                 }
                 catch (Exception ex)
                 {

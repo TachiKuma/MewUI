@@ -60,9 +60,8 @@ public class ProgressRing : Control
         if (isActive)
         {
             _clock = new AnimationClock(TimeSpan.FromMilliseconds(StoryboardDurationMs), Easing.Linear)
-            {
-                RepeatCount = -1,
-            };
+                .AttachTo(this);
+            _clock.RepeatCount = -1;
             _clock.TickCallback = OnAnimationTick;
             _clock.Start();
         }
@@ -163,9 +162,8 @@ public class ProgressRing : Control
         {
             // Re-attached while still active - restart.
             _clock = new AnimationClock(TimeSpan.FromMilliseconds(StoryboardDurationMs), Easing.Linear)
-            {
-                RepeatCount = -1,
-            };
+                .AttachTo(this);
+            _clock.RepeatCount = -1;
             _clock.TickCallback = OnAnimationTick;
             _clock.Start();
         }

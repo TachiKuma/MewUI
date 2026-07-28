@@ -2,7 +2,6 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 
-using Aprillz.MewUI.Animation;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Diagnostics;
 using Aprillz.MewUI.Input;
@@ -2595,17 +2594,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
     {
         var profiler = PerformanceProfiler.Instance;
         var frameTiming = _excludeFromProfiler ? default : profiler.BeginFrame(_profilerSourceId);
-
-        // Update animations before rendering so controls see current values.
-        long phaseStart = frameTiming.Enabled ? Stopwatch.GetTimestamp() : 0;
-        using (frameTiming.Enabled ? ProfilerMarkers.AnimationUpdate.Auto() : default)
-        {
-            AnimationManager.Instance.Update();
-        }
-        if (frameTiming.Enabled)
-        {
-            frameTiming.AnimationTicks += Stopwatch.GetTimestamp() - phaseStart;
-        }
+        long phaseStart;
 
         // Render surfaces are one-shot (different target instance per call).
         // Window-targeted contexts are cached so backends can pool per-frame state.
