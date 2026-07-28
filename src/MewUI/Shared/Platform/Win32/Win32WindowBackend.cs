@@ -727,6 +727,12 @@ internal sealed class Win32WindowBackend : IWindowBackend
                 return User32.DefWindowProc(Handle, msg, wParam, lParam);
 
             case WindowMessages.WM_NCHITTEST:
+                if (Window.IsInputTransparentSurface)
+                {
+                    // Taking the pointer would end the owner's hover and close the popup under the cursor.
+                    const int HTTRANSPARENT = -1;
+                    return HTTRANSPARENT;
+                }
                 if (_allowsTransparency)
                 {
                     return HandleNcHitTest(lParam);
