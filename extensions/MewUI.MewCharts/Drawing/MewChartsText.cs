@@ -15,7 +15,7 @@ public static class MewChartsText
     private static IGraphicsContext? _measure;
 
     /// <summary>Font family for chart text; set from the chart's (inherited) <c>Control.FontFamily</c>.</summary>
-    public static string FontFamily { get; set; } = "Segoe UI";
+    public static string FontFamily { get; set; } = ThemeMetrics.SystemFontFamily;
 
     /// <summary>
     /// Multiplier applied to every text size, set from the chart's <c>Control.FontSize</c> relative
@@ -39,7 +39,7 @@ public static class MewChartsText
     public static IFont? GetFont(float size)
     {
         if (_factory is null) return null;
-        var family = string.IsNullOrEmpty(FontFamily) ? "Segoe UI" : FontFamily;
+        var family = string.IsNullOrEmpty(FontFamily) ? ThemeManager.DefaultMetrics.FontFamily : FontFamily;
         var scaled = (float)Math.Max(1, size * FontScale);
         lock (_lock)
         {
