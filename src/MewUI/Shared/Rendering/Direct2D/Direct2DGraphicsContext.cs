@@ -1912,6 +1912,10 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         DrawImageBitmapCore(image.GetOrCreateBitmap(_renderTarget, _renderTargetGeneration, _deviceContext), destRect, sourceRect);
     }
 
+    // Pure translation: the only case where a bitmap can be blitted 1:1 against the device grid.
+    private bool IsUnscaledAxisAligned()
+        => _transform.M12 == 0f && _transform.M21 == 0f && _transform.M11 == 1f && _transform.M22 == 1f;
+
     private void DrawImageBitmapCore(nint bmp, Rect destRect, Rect sourceRect)
     {
         if (_renderTarget == 0)
@@ -1931,6 +1935,20 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         double ty = _transform.M32;
         var worldDest = new Rect(destRect.X + tx, destRect.Y + ty, destRect.Width, destRect.Height);
         var snappedWorldDest = LayoutRounding.SnapRectEdgesToPixels(worldDest, DpiScale);
+
+        // Within a pixel of native size (a BitmapCache at its own DPI): match the source exactly, or
+        // D2D resamples the whole bitmap by a sub-pixel factor and softens its pixel-snapped text.
+        if (IsUnscaledAxisAligned() &&
+            Math.Abs(snappedWorldDest.Width * DpiScale - sourceRect.Width) <= 1.0 &&
+            Math.Abs(snappedWorldDest.Height * DpiScale - sourceRect.Height) <= 1.0)
+        {
+            snappedWorldDest = new Rect(
+                snappedWorldDest.X,
+                snappedWorldDest.Y,
+                sourceRect.Width / DpiScale,
+                sourceRect.Height / DpiScale);
+        }
+
         var snappedLocalDest = new Rect(
             snappedWorldDest.X - tx,
             snappedWorldDest.Y - ty,

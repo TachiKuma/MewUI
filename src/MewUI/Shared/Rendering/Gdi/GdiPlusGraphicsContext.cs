@@ -1872,6 +1872,16 @@ internal sealed class GdiPlusGraphicsContext : GraphicsContextBase
             return;
         }
 
+        // Within a pixel of native size: snap to the source and take the 1:1 path below, or AlphaBlend
+        // stretches the bitmap and softens its pixel-snapped text.
+        int nativeSrcW = (int)sourceRect.Width;
+        int nativeSrcH = (int)sourceRect.Height;
+        if (m.M11 == 1f && m.M22 == 1f &&
+            Math.Abs(destPx.Width - nativeSrcW) <= 1 && Math.Abs(destPx.Height - nativeSrcH) <= 1)
+        {
+            destPx = RECT.FromLTRB(destPx.left, destPx.top, destPx.left + nativeSrcW, destPx.top + nativeSrcH);
+        }
+
         // Resolve backend default:
         // - Default => factory default (which is Linear by default to match other backends)
         // - NearestNeighbor => GDI stretch with COLORONCOLOR (fast, pixelated)
