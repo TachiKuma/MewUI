@@ -3,6 +3,7 @@
   "displayName": "MewUI Preview",
   "description": "Live preview for Aprillz.MewUI components and windows",
   "version": "0.1.0",
+  "icon": "images/icon.png",
   "publisher": "aprillz",
   "license": "MIT",
   "repository": {
@@ -25,6 +26,15 @@
     }
   },
   "contributes": {
+    "menus": {
+      "editor/context": [
+        {
+          "command": "mewui.preview.start",
+          "when": "resourceLangId == csharp",
+          "group": "navigation@9"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "mewui.preview.start",
