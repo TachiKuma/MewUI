@@ -550,6 +550,18 @@ internal sealed class X11WindowBackend : IWindowBackend
         NativeX11.XFlush(Display);
     }
 
+    public void SetPositionPx(int leftPx, int topPx)
+    {
+        if (Display == 0 || Handle == 0)
+        {
+            return;
+        }
+
+        // X11 window coordinates are already device pixels, so this is the unscaled form of SetPosition.
+        NativeX11.XMoveWindow(Display, Handle, leftPx, topPx);
+        NativeX11.XFlush(Display);
+    }
+
     public void CaptureMouse()
     {
         if (Display == 0 || Handle == 0)

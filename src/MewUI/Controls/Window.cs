@@ -712,6 +712,17 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         }
     }
 
+    /// <summary>Startup position in screen device pixels; takes precedence over <see cref="StartupPosition"/>.</summary>
+    internal (int X, int Y)? StartupPositionPx
+    {
+        get;
+        set
+        {
+            ThrowIfShown();
+            field = value;
+        }
+    }
+
     /// <summary>
     /// Gets or sets the window opacity (0..1).
     /// </summary>
@@ -1025,6 +1036,20 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         }
 
         _backend.SetPosition(leftDip, topDip);
+    }
+
+    /// <summary>
+    /// Moves the window to a screen position given in device pixels.
+    /// </summary>
+    internal void MoveToPx(int leftPx, int topPx)
+    {
+        if (_backend == null || Handle == 0)
+        {
+            return;
+        }
+
+        // DIPs would pick up whichever monitor's scale each side assumed.
+        _backend.SetPositionPx(leftPx, topPx);
     }
 
     /// <summary>

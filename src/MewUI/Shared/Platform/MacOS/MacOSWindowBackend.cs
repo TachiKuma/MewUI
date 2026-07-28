@@ -573,6 +573,19 @@ internal sealed class MacOSWindowBackend : IWindowBackend
         MacOSWindowInterop.SetWindowPosition(_nsWindow, leftDip, cocoaY);
     }
 
+    public void SetPositionPx(int leftPx, int topPx)
+    {
+        if (_nsWindow == 0)
+        {
+            return;
+        }
+
+        // Cocoa places windows in points from the bottom-left - the conversion ClientToScreen inverts.
+        var cocoaTopLeft = TopLeftPxToCocoaScreenPoint(new Point(leftPx, topPx));
+        var frame = MacOSWindowInterop.GetWindowFrame(_nsWindow);
+        MacOSWindowInterop.SetWindowPosition(_nsWindow, cocoaTopLeft.x, cocoaTopLeft.y - frame.size.height);
+    }
+
     public void CaptureMouse()
     { }
 

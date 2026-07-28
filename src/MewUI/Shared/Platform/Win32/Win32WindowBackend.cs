@@ -641,6 +641,16 @@ internal sealed class Win32WindowBackend : IWindowBackend
         return new Point(r.left / dpiScale, r.top / dpiScale);
     }
 
+    public void SetPositionPx(int leftPx, int topPx)
+    {
+        if (Handle == 0)
+        {
+            return;
+        }
+
+        MoveWindowTo(leftPx, topPx);
+    }
+
     public void SetPosition(double leftDip, double topDip)
     {
         if (Handle == 0)
@@ -658,11 +668,16 @@ internal sealed class Win32WindowBackend : IWindowBackend
         int x = (int)Math.Round(leftDip * dpiScale);
         int y = (int)Math.Round(topDip * dpiScale);
 
+        MoveWindowTo(x, y);
+    }
+
+    private void MoveWindowTo(int xPx, int yPx)
+    {
         const uint SWP_NOSIZE = 0x0001;
         const uint SWP_NOZORDER = 0x0004;
         const uint SWP_NOACTIVATE = 0x0010;
 
-        User32.SetWindowPos(Handle, 0, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+        User32.SetWindowPos(Handle, 0, xPx, yPx, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     public void CaptureMouse()
@@ -1105,6 +1120,12 @@ internal sealed class Win32WindowBackend : IWindowBackend
             }
         }
 
+        // Already screen coordinates; scaling would reintroduce the mismatch this avoids.
+        if (Window.StartupPositionPx is { } posPx)
+        {
+            return ClampToWorkArea(posPx.X, posPx.Y, windowWidthPx, windowHeightPx, GetStartupMonitor());
+        }
+
         if (Window.ResolvedStartupPosition is { } pos)
         {
             double dpiScale = Math.Max(1.0, dpi / 96.0);
@@ -1123,7 +1144,8 @@ internal sealed class Win32WindowBackend : IWindowBackend
             return;
         }
 
-        if (Window.StartupLocation == WindowStartupLocation.Manual && Window.ResolvedStartupPosition is null)
+        if (Window.StartupLocation == WindowStartupLocation.Manual &&
+            Window.ResolvedStartupPosition is null && Window.StartupPositionPx is null)
         {
             return;
         }
@@ -1179,8 +1201,15 @@ internal sealed class Win32WindowBackend : IWindowBackend
             return User32.MonitorFromWindow(ownerWindow.Handle, MonitorDefaultToNearest);
         }
 
+        if (Window.StartupPositionPx is { } posPx)
+        {
+            return User32.MonitorFromPoint(new POINT(posPx.X, posPx.Y), MonitorDefaultToNearest);
+        }
+
         if (Window.ResolvedStartupPosition is { } pos)
         {
+            // The system scale only finds the right monitor when the target shares it; a higher-DPI
+            // secondary is missed, and the window then lands scaled by the wrong monitor's DPI.
             uint systemDpi = Win32DpiApiResolver.GetSystemDpi();
             double scale = Math.Max(1.0, systemDpi / 96.0);
             var point = new POINT((int)Math.Round(pos.X * scale), (int)Math.Round(pos.Y * scale));

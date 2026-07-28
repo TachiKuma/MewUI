@@ -59,16 +59,17 @@ internal sealed class NativePopupHost : IPopupHost
         popupWindow.ShowSurface(_ownerWindow, ResolveScreenPosition(initialOrigin));
     }
 
-    private Point? ResolveScreenPosition(Point origin)
+    private (int X, int Y)? ResolveScreenPosition(Point origin)
     {
         if (_ownerWindow.Handle == 0)
         {
             return null;
         }
 
+        // Unconverted: dividing by the target monitor's scale and multiplying back by the popup's own
+        // put it on the wrong monitor whenever the two differed.
         var screenPx = _ownerWindow.ClientToScreen(origin);
-        double scale = ResolveScreenScale(screenPx);
-        return new Point(screenPx.X / scale, screenPx.Y / scale);
+        return ((int)Math.Round(screenPx.X), (int)Math.Round(screenPx.Y));
     }
 
     // The popup content snaps to device pixels in the owner's coordinate space, so the surface it lives on
@@ -125,8 +126,7 @@ internal sealed class NativePopupHost : IPopupHost
         }
 
         var screenPx = _ownerWindow.ClientToScreen(origin);
-        double scale = ResolveScreenScale(screenPx);
-        popupWindow.MoveTo(screenPx.X / scale, screenPx.Y / scale);
+        popupWindow.MoveToPx((int)Math.Round(screenPx.X), (int)Math.Round(screenPx.Y));
     }
 
     public void UpdateBounds(PopupEntry entry, Rect bounds)

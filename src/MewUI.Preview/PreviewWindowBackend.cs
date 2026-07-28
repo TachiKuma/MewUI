@@ -86,6 +86,7 @@ internal sealed class PreviewWindowBackend : IWindowBackend
 
     public void SetPosition(double leftDip, double topDip) { }
 
+    public void SetPositionPx(int leftPx, int topPx) { }
 
     public void CaptureMouse() { }
 
