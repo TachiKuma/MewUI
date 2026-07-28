@@ -22,7 +22,9 @@ public sealed class MacOSPlatformHost : IPlatformHost
         MacOSInterop.EnsureApplicationInitialized();
     }
 
-    public string DefaultFontFamily => ".AppleSystemUIFont";
+    internal const string SystemFontFamily = ".AppleSystemUIFont";
+
+    public string DefaultFontFamily => SystemFontFamily;
 
     public IReadOnlyList<string> DefaultFontFallbacks { get; } = BuildDefaultFontFallbacks();
 

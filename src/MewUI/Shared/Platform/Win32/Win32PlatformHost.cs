@@ -30,7 +30,12 @@ public sealed class Win32PlatformHost : IPlatformHost
     private int _renderRequested;
     private nint _renderEvent;
 
-    public string DefaultFontFamily { get; } = QuerySystemFontFamily();
+    /// <summary>
+    /// Gets the system UI font family, queried once so registration can report it without a host instance.
+    /// </summary>
+    internal static string SystemFontFamily { get; } = QuerySystemFontFamily();
+
+    public string DefaultFontFamily => SystemFontFamily;
 
     public IReadOnlyList<string> DefaultFontFallbacks { get; } = BuildDefaultFontFallbacks();
 
