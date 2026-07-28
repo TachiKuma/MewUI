@@ -56,7 +56,7 @@ internal sealed class ManagedFileDialogWindow : Window
         this.Bind(TitleProperty, ModeTitle(mode));
         this.Resizable(780, 560);
 
-        _breadcrumb = new FileDialogBreadcrumb(EnterPathEdit);
+        _breadcrumb = new FileDialogBreadcrumb(EnterPathEdit, _browser.ListSubdirectories);
         _grid = BuildGrid();
         _iconView = BuildIconView();
         _viewHost = new Border { Child = _grid };
