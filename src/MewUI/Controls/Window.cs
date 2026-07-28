@@ -668,6 +668,9 @@ public partial class Window : ContentControl, ILayoutRoundingHost
     /// </summary>
     internal bool IsNonActivatingSurface => _kind is WindowKind.Popup or WindowKind.Overlay;
 
+    /// <summary>Whether this surface lets the mouse through to whatever is underneath.</summary>
+    internal bool IsInputTransparentSurface { get; set; }
+
     /// <summary>
     /// Whether this window is a chrome-less surface: no native title bar, border, shadow, or close
     /// affordance - the framework draws everything. Backends consult this where OS chrome machinery

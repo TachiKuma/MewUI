@@ -41,6 +41,8 @@ internal sealed class NativePopupHost : IPopupHost
         // the popup window translates by this origin at its render/input edges.
         var initialOrigin = new Point(initialChromeBounds.X, initialChromeBounds.Y);
         popupWindow.HostedPortalOrigin = initialOrigin;
+        // Hover popups (ToolTip) are not hit-testable and must not take the mouse from the owner.
+        popupWindow.IsInputTransparentSurface = !entry.Element.IsHitTestVisible;
         chrome.HostSurface = popupWindow;
         entry.NativeWindow = popupWindow;
 
