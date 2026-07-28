@@ -39,12 +39,14 @@ internal sealed class PreviewSession : IDisposable
     private double _viewportWidth = DEFAULT_VIEWPORT_WIDTH;
     private double _viewportHeight = DEFAULT_VIEWPORT_HEIGHT;
     private double _clientDpi;
+    private bool _closingOwnedWindow;
 
     public void Start(Application app, Window mainWindow, Action requestWake)
     {
         _app = app;
         _mainWindow = mainWindow;
         _activeWindow = mainWindow;
+        BlockUserClose(mainWindow);
         _requestWake = requestWake;
         MewUiHotReload.DeltaApplied += OnDeltaApplied;
         _channel = new PreviewChannel(OnChannelMessage, OnChannelConnected);
@@ -578,7 +580,45 @@ internal sealed class PreviewSession : IDisposable
         }
         finally
         {
-            previousWrapper?.Close();
+            CloseOwnedWindow(previousWrapper);
+        }
+    }
+
+    /// <summary>
+    /// Cancels close requests coming from the previewed UI itself (a Close button, Escape
+    /// handlers): closing a preview window would tear the target down mid-session. The session's
+    /// own teardown goes through <see cref="CloseOwnedWindow"/>, which bypasses the block.
+    /// </summary>
+    private void BlockUserClose(Window window)
+    {
+        window.Closing += args =>
+        {
+            if (!_closingOwnedWindow)
+            {
+                args.Cancel = true;
+                SendStatus("Close is disabled in preview sessions");
+            }
+        };
+    }
+
+    /// <summary>Reports a window command the headless backend refused (minimize, maximize).</summary>
+    internal void NotifyBlockedWindowCommand(string command) =>
+        SendStatus($"{command} is disabled in preview sessions");
+
+    private void CloseOwnedWindow(Window? window)
+    {
+        if (window == null)
+        {
+            return;
+        }
+        _closingOwnedWindow = true;
+        try
+        {
+            window.Close();
+        }
+        finally
+        {
+            _closingOwnedWindow = false;
         }
     }
 
@@ -592,6 +632,7 @@ internal sealed class PreviewSession : IDisposable
             // A real Window keeps its own size logic; a DesignSize hint overrides per axis.
             window = targetWindow;
             _wrapperIsComponentHost = false;
+            BlockUserClose(window);
             window.Show();
             Design.TryGetDesignSize(window, out double designWidth, out double designHeight);
             if (designWidth > 0 || designHeight > 0)
@@ -606,6 +647,7 @@ internal sealed class PreviewSession : IDisposable
         {
             window = new Window { Content = (Element)instance };
             _wrapperIsComponentHost = true;
+            BlockUserClose(window);
             ApplyWrapperWindowSize(window, instance as FrameworkElement);
             window.Show();
         }
