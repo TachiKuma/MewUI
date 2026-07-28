@@ -45,7 +45,7 @@ public sealed class TooltipDescenderClipTests
             }
         }
 
-        Assert.AreEqual(0, clipped.Count,
+        Assert.IsEmpty(clipped,
             $"descender clipped at {clipped.Count} of 10 sub-pixel positions: {string.Join(", ", clipped)}");
     }
 
