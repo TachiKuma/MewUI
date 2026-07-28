@@ -383,9 +383,9 @@ internal sealed class PreviewSession : IDisposable
     }
 
     /// <summary>
-    /// Adopts the IDE panel's size and DPI. Per plan.md 4.5, the viewport is a constraint for
-    /// auto-sized component wrappers only; Window targets keep their own size logic and IDE
-    /// zoom is purely a client-side display scale.
+    /// Adopts the IDE panel's size and DPI. The viewport is a constraint for auto-sized
+    /// component wrappers only; Window targets keep their own size logic. IDE zoom rides the
+    /// requested DPI, so zoomed previews are vector re-renders, not scaled bitmaps.
     /// </summary>
     private void ApplyClientMetrics(double width, double height, double dpi)
     {
