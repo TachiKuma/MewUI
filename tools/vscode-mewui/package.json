@@ -68,6 +68,11 @@
           "default": 60,
           "description": "Seconds to wait for the preview handshake before retrying with a shim session that skips the app entry point (low fidelity). 0 disables the fallback."
         },
+        "mewui.preview.openSourceOnSelect": {
+          "type": "boolean",
+          "default": true,
+          "description": "Jump to the declaration when the preview target changes (the Go to code checkbox in the panel)."
+        },
         "mewui.preview.autoSelectTarget": {
           "type": "boolean",
           "default": true,

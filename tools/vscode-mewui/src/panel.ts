@@ -13,6 +13,7 @@ export interface PanelCallbacks {
     onViewport(width: number, height: number, dpi: number): void;
     onSetTheme(mode: string): void;
     onInput(kind: string, body: object): void;
+    onSetNavigate(value: boolean): void;
     onDisposed(): void;
 }
 
@@ -26,14 +27,14 @@ export class PreviewPanel {
     private pendingStatus: StatusInfo | undefined;
     private pendingState: { state: string; detail?: string } | undefined;
 
-    constructor(title: string, private readonly callbacks: PanelCallbacks) {
+    constructor(title: string, navigateOnSelect: boolean, private readonly callbacks: PanelCallbacks) {
         this.panel = vscode.window.createWebviewPanel(
             "mewuiPreview",
             title,
             { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
             { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [] },
         );
-        this.panel.webview.html = createHtml();
+        this.panel.webview.html = createHtml(navigateOnSelect);
         this.panel.webview.onDidReceiveMessage((message) => this.onMessage(message));
         this.panel.onDidDispose(() => callbacks.onDisposed());
     }
@@ -143,11 +144,14 @@ export class PreviewPanel {
             case "input":
                 this.callbacks.onInput(message.kind as string, message.body as object);
                 break;
+            case "setNavigate":
+                this.callbacks.onSetNavigate(message.value as boolean);
+                break;
         }
     }
 }
 
-function createHtml(): string {
+function createHtml(navigateOnSelect: boolean): string {
     const nonce = Math.random().toString(36).slice(2);
     return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -195,6 +199,8 @@ function createHtml(): string {
     <button id="theme" title="Toggle light/dark theme">Theme</button>
     <button id="refresh" title="Rebuild the current target">Refresh</button>
     <button id="restart" title="Restart the preview session (full state reset)">Restart</button>
+    <label title="Jump to the target's declaration when the preview target changes">
+      <input type="checkbox" id="navigate"${navigateOnSelect ? " checked" : ""}>Go to code</label>
     <span id="state">Starting...</span>
   </div>
   <div id="surface"><canvas id="canvas" width="1" height="1" tabindex="0"></canvas></div>
@@ -316,6 +322,9 @@ function createHtml(): string {
   });
   document.getElementById("restart").addEventListener("click", () => {
     vscode.postMessage({ type: "restart" });
+  });
+  document.getElementById("navigate").addEventListener("change", (event) => {
+    vscode.postMessage({ type: "setNavigate", value: event.target.checked });
   });
 
   function postViewport() {
