@@ -5,7 +5,23 @@ namespace Aprillz.MewUI;
 /// </summary>
 public sealed record class ThemeMetrics
 {
-    internal static string DefaultFontFamily = "Segoe UI";
+    private const string FALLBACK_FONT_FAMILY = "Segoe UI";
+
+    // Set when the platform package registers, before any window exists. Reads before that fall back.
+    private static string _platformFontFamily = FALLBACK_FONT_FAMILY;
+
+    private readonly string _fontFamily = string.Empty;
+
+    /// <summary>
+    /// Gets the <see cref="FontFamily"/> value that follows the platform's system UI font.
+    /// </summary>
+    public static string SystemFontFamily { get; } = string.Empty;
+
+    internal static string PlatformFontFamily
+    {
+        get => _platformFontFamily;
+        set => _platformFontFamily = string.IsNullOrWhiteSpace(value) ? FALLBACK_FONT_FAMILY : value;
+    }
 
     /// <summary>
     /// Gets the default theme metrics.
@@ -17,7 +33,7 @@ public sealed record class ThemeMetrics
         ControlBorderThickness = 1,
         ItemPadding = new Thickness(8, 2, 8, 2),
         ContainerPadding = new Thickness(8),
-        FontFamily = DefaultFontFamily,
+        FontFamily = SystemFontFamily,
         FontSize = 12,
         FontWeight = FontWeight.Normal,
         ScrollBarThickness = 4,
@@ -54,9 +70,19 @@ public sealed record class ThemeMetrics
     public required Thickness ItemPadding { get; init; }
 
     /// <summary>
-    /// Gets the default font family name.
+    /// Gets the default font family name, resolved to the platform's system UI font
+    /// when <see cref="SystemFontFamily"/> was assigned.
     /// </summary>
-    public required string FontFamily { get; init; }
+    public required string FontFamily
+    {
+        get => _fontFamily.Length == 0 ? PlatformFontFamily : _fontFamily;
+        init => _fontFamily = string.IsNullOrWhiteSpace(value) ? SystemFontFamily : value;
+    }
+
+    /// <summary>
+    /// Gets whether the font family follows the platform's system UI font.
+    /// </summary>
+    public bool IsSystemFontFamily => _fontFamily.Length == 0;
 
     /// <summary>
     /// Gets the default font size (in DIPs).

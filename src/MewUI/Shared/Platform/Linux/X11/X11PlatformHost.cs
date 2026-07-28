@@ -49,7 +49,9 @@ public sealed class X11PlatformHost : IPlatformHost
     private int _wakeWriteFd = -1;
     private bool _usePollWait;
 
-    public string DefaultFontFamily => "sans-serif";
+    internal const string SystemFontFamily = "sans-serif";
+
+    public string DefaultFontFamily => SystemFontFamily;
 
     public IReadOnlyList<string> DefaultFontFallbacks { get; } = BuildDefaultFontFallbacks();
 

@@ -415,9 +415,9 @@ internal sealed class PopupManager
     }
 
     /// <summary>
-    /// Ensures the tooltip can resolve inherited properties (e.g. FontFamily) before
-    /// it is added to the visual tree via ShowPopup. Without this, the tooltip measures
-    /// with the registered default font ("Segoe UI") instead of the platform/theme font.
+    /// Ensures the tooltip can resolve inherited properties (e.g. FontSize, Foreground) before
+    /// it is added to the visual tree via ShowPopup. Without this, the tooltip measures with
+    /// registered property defaults instead of the theme values.
     /// </summary>
     private void EnsureToolTipInheritsFromWindow()
     {

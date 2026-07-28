@@ -95,20 +95,7 @@ public sealed class ApplicationBuilder
 
         if (Options.Metrics != null)
         {
-            var metrics = Options.Metrics;
-
-            // If the user's metrics still has the compile-time default font ("Segoe UI")
-            // but the platform provides a different system font (e.g. ".AppleSystemUIFont"),
-            // merge the platform font so it isn't lost.
-            var platformFont = ThemeMetrics.DefaultFontFamily;
-            if (!string.IsNullOrEmpty(platformFont) &&
-                metrics.FontFamily == ThemeMetrics.Default.FontFamily &&
-                metrics.FontFamily != platformFont)
-            {
-                metrics = metrics with { FontFamily = platformFont };
-            }
-
-            ThemeManager.DefaultMetrics = metrics;
+            ThemeManager.DefaultMetrics = Options.Metrics;
         }
 
         if (Options.LightSeed != null)

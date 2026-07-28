@@ -427,9 +427,11 @@ public sealed class Application
     /// <summary>
     /// Registers the platform host. Platform packages call this once at startup; only one is allowed per process.
     /// <paramref name="surface"/> is the native surface family the host produces, checked against the
-    /// registered graphics backend.
+    /// registered graphics backend. <paramref name="systemFontFamily"/> is the platform's system UI font,
+    /// taken here rather than from the host instance so themes resolve fonts before the host is created.
     /// </summary>
-    internal static void RegisterPlatformHost(Func<IPlatformHost> factory, PlatformSurfaceKind surface, string origin)
+    internal static void RegisterPlatformHost(Func<IPlatformHost> factory, PlatformSurfaceKind surface, string origin,
+        string systemFontFamily)
     {
         ArgumentNullException.ThrowIfNull(factory);
         EnsureNotRunning("platform host");
@@ -440,6 +442,7 @@ public sealed class Application
             throw new InvalidOperationException("A platform host is already registered. Register only one per process.");
         }
 
+        ThemeMetrics.PlatformFontFamily = systemFontFamily;
         _platformSurfaceKind = surface;
         _platformSurfaceOrigin = origin;
         VerifySurfaceKindMatch();
@@ -517,21 +520,9 @@ public sealed class Application
 
     private static void ApplyPlatformFontDefaults(IPlatformHost host)
     {
-        var fontFamily = host.DefaultFontFamily;
-        if (string.IsNullOrEmpty(fontFamily))
-        {
-            return;
-        }
+        // Normally already set by RegisterPlatformHost; repeated here for hosts swapped by an interceptor.
+        ThemeMetrics.PlatformFontFamily = host.DefaultFontFamily;
 
-        ThemeMetrics.DefaultFontFamily = fontFamily;
-
-        var metrics = ThemeManager.DefaultMetrics;
-        if (metrics.FontFamily != fontFamily)
-        {
-            ThemeManager.DefaultMetrics = metrics with { FontFamily = fontFamily };
-        }
-
-        // Apply platform default font fallback chain (same pattern as DefaultFontFamily).
         Rendering.FontFallback.ApplyPlatformDefaults(host.DefaultFontFallbacks);
     }
 
