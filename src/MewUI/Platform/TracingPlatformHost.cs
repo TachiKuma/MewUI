@@ -169,6 +169,12 @@ internal sealed class TracingPlatformHost : IPlatformHost
             _innerBackend.SetPosition(leftDip, topDip);
         }
 
+        public void SetPositionPx(int leftPx, int topPx)
+        {
+            DiagLog.Write($"[WindowBackend#{_backendId}] SetPositionPx {leftPx},{topPx}");
+            _innerBackend.SetPositionPx(leftPx, topPx);
+        }
+
         public void CaptureMouse()
         {
             DiagLog.Write($"[WindowBackend#{_backendId}] CaptureMouse");

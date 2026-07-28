@@ -138,7 +138,7 @@ internal sealed class PopupManager
             {
                 _popups[i].Owner = owner;
                 _popups[i].Host?.OnOwnerChanged(_popups[i]);
-                var updatedBounds = measureBounds(_window);
+                var updatedBounds = SnapPlacementToDevicePixels(measureBounds(_window));
                 UpdatePopup(popup, updatedBounds);
                 return updatedBounds;
             }
@@ -153,7 +153,7 @@ internal sealed class PopupManager
         // to) sized the popup from unstyled metrics - a zero border thickness that forced a spurious
         // scrollbar, or a fallback font that clipped content.
         PopupHostSupport.AttachChrome(_window, entry);
-        var measuredBounds = measureBounds(_window);
+        var measuredBounds = SnapPlacementToDevicePixels(measureBounds(_window));
         entry.Bounds = measuredBounds;
         // Register before showing the native surface: when a sibling popup (submenu) shows and takes
         // the platform watch during ShowSurface, the parent's watch-transfer check scans _popups to
@@ -169,6 +169,7 @@ internal sealed class PopupManager
 
     internal void UpdatePopup(UIElement popup, Rect bounds)
     {
+        bounds = SnapPlacementToDevicePixels(bounds);
         for (int i = 0; i < _popups.Count; i++)
         {
             if (_popups[i].Element != popup)
@@ -180,6 +181,17 @@ internal sealed class PopupManager
             _window.Invalidate();
             return;
         }
+    }
+
+    /// <summary>Snaps a popup's placement origin to the device-pixel grid; the size is left as measured.</summary>
+    private Rect SnapPlacementToDevicePixels(Rect bounds)
+    {
+        double dpiScale = _window.DpiScale;
+        return new Rect(
+            LayoutRounding.RoundToPixel(bounds.X, dpiScale),
+            LayoutRounding.RoundToPixel(bounds.Y, dpiScale),
+            bounds.Width,
+            bounds.Height);
     }
 
     internal void ClosePopup(UIElement popup)

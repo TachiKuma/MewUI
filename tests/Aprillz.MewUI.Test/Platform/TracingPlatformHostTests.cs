@@ -101,6 +101,8 @@ public sealed class TracingPlatformHostTests
         public void SetClientSize(double widthDip, double heightDip) { }
         public Point GetPosition() => default;
         public void SetPosition(double leftDip, double topDip) { }
+
+        public void SetPositionPx(int leftPx, int topPx) { }
         public void CaptureMouse() { }
         public void ReleaseMouseCapture() { }
         public Point ClientToScreen(Point clientPointDip) => clientPointDip;
