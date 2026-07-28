@@ -664,10 +664,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
 
     /// <summary>
     /// Whether this window is a non-activating surface (popup or overlay): it must never take native
-    /// activation/key/main status away from its owner. Backends consult this at every decision point
-    /// that can activate a window - show command, mouse activation, programmatic move/resize/style
-    /// refresh, zoom/state sync, and close path. The decision-point checklist lives in
-    /// agent/popup-native-window/plan.md.
+    /// activation away from its owner. Backends consult it wherever a window could be activated.
     /// </summary>
     internal bool IsNonActivatingSurface => _kind is WindowKind.Popup or WindowKind.Overlay;
 
@@ -1284,7 +1281,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         ResolveStartupPosition();
         _backend!.EnsureTheme(Theme.IsDark);
 
-        // Unified display sequence, identical on every backend (see agent/window-lifecycle/plan.md):
+        // Unified display sequence, identical on every backend:
         //   1) CreateSurface   create hidden, Handle/DPI valid
         //   2) PerformLayout   confirm size (unconditional, so step 4 always sees a laid-out tree even
         //                      when step 3 defers Loaded)
