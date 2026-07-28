@@ -53,6 +53,10 @@ internal static unsafe class D2D1VTable
     private const int BindDCIndex = 57; // First method after ID2D1RenderTarget
     private const int DeviceContextPushLayerIndex = 86; // ID2D1DeviceContext::PushLayer (D2D1_LAYER_PARAMETERS1)
 
+    // DWRITE_MEASURING_MODE_GDI_CLASSIC: text is measured on GDI's metrics, matching the GDI-compatible
+    // layouts the text paths build.
+    private const uint DWRITE_MEASURING_MODE_GDI_CLASSIC = 1;
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int CreateHwndRenderTarget(
         ID2D1Factory* factory,
@@ -374,7 +378,7 @@ internal static unsafe class D2D1VTable
         fixed (D2D1_RECT_F* pRect = &layoutRect)
         {
             var fn = (delegate* unmanaged[Stdcall]<ID2D1RenderTarget*, char*, uint, nint, D2D1_RECT_F*, nint, D2D1_DRAW_TEXT_OPTIONS, uint, void>)(rt->lpVtbl[27]);
-            fn(rt, pText, (uint)text.Length, textFormat, pRect, brush, D2D1_DRAW_TEXT_OPTIONS.NONE, 0);
+            fn(rt, pText, (uint)text.Length, textFormat, pRect, brush, D2D1_DRAW_TEXT_OPTIONS.NONE, DWRITE_MEASURING_MODE_GDI_CLASSIC);
         }
     }
 
@@ -390,7 +394,7 @@ internal static unsafe class D2D1VTable
         fixed (D2D1_RECT_F* pRect = &layoutRect)
         {
             var fn = (delegate* unmanaged[Stdcall]<ID2D1RenderTarget*, char*, uint, nint, D2D1_RECT_F*, nint, D2D1_DRAW_TEXT_OPTIONS, uint, void>)(rt->lpVtbl[27]);
-            fn(rt, pText, (uint)text.Length, textFormat, pRect, brush, options, 0);
+            fn(rt, pText, (uint)text.Length, textFormat, pRect, brush, options, DWRITE_MEASURING_MODE_GDI_CLASSIC);
         }
     }
 

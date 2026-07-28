@@ -163,6 +163,31 @@ internal static unsafe class DWriteVTable
         }
     }
 
+    /// <summary>
+    /// IDWriteFactory::CreateGdiCompatibleTextLayout (vtable index 19). Lays text out on GDI's
+    /// metrics for the given pixels-per-DIP.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CreateGdiCompatibleTextLayout(
+        IDWriteFactory* factory,
+        ReadOnlySpan<char> text,
+        nint textFormat,
+        float maxWidth,
+        float maxHeight,
+        float pixelsPerDip,
+        bool useGdiNatural,
+        out nint textLayout)
+    {
+        nint layout = 0;
+        fixed (char* pText = text)
+        {
+            var fn = (delegate* unmanaged[Stdcall]<IDWriteFactory*, char*, uint, nint, float, float, float, void*, int, nint*, int>)factory->lpVtbl[19];
+            int hr = fn(factory, pText, (uint)text.Length, textFormat, maxWidth, maxHeight, pixelsPerDip, null, useGdiNatural ? 1 : 0, &layout);
+            textLayout = layout;
+            return hr;
+        }
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int SetTextAlignment(nint textFormat, DWRITE_TEXT_ALIGNMENT alignment)
     {

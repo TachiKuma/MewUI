@@ -997,7 +997,8 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
 
         float w = maxWidth >= float.MaxValue ? float.MaxValue : (float)maxWidth;
         float h = bounds.Height > 0 && !double.IsPositiveInfinity(bounds.Height) ? (float)bounds.Height : float.MaxValue;
-        int hr = DWriteVTable.CreateTextLayout((IDWriteFactory*)_dwriteFactory, text, nativeFormat, w, h, out nint nativeLayout);
+        int hr = DWriteVTable.CreateGdiCompatibleTextLayout(
+            (IDWriteFactory*)_dwriteFactory, text, nativeFormat, w, h, (float)DpiScale, useGdiNatural: false, out nint nativeLayout);
 
         if (hr < 0 || nativeLayout == 0)
         {
@@ -1506,8 +1507,8 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
 
             if (trimming == TextTrimming.CharacterEllipsis)
             {
-                int hr = DWriteVTable.CreateTextLayout((IDWriteFactory*)_dwriteFactory, text, textFormat,
-                    w, h, out textLayout);
+                int hr = DWriteVTable.CreateGdiCompatibleTextLayout((IDWriteFactory*)_dwriteFactory, text, textFormat,
+                    w, h, (float)DpiScale, useGdiNatural: false, out textLayout);
                 if (hr >= 0 && textLayout != 0)
                 {
                     ApplyCustomFontFallback(textLayout);
@@ -1828,7 +1829,8 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
             }
 
             float w = maxWidth >= float.MaxValue ? float.MaxValue : (float)Math.Max(0, maxWidth);
-            int hr = DWriteVTable.CreateTextLayout((IDWriteFactory*)_dwriteFactory, text, textFormat, w, float.MaxValue, out textLayout);
+            int hr = DWriteVTable.CreateGdiCompatibleTextLayout(
+                (IDWriteFactory*)_dwriteFactory, text, textFormat, w, float.MaxValue, (float)DpiScale, useGdiNatural: false, out textLayout);
             if (hr < 0 || textLayout == 0)
             {
                 return Size.Empty;

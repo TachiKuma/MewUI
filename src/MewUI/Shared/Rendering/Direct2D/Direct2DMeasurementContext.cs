@@ -8,11 +8,15 @@ internal sealed unsafe class Direct2DMeasurementContext : MeasureGraphicsContext
     private readonly nint _dwriteFactory;
     private readonly DWriteTextFormatCache? _textFormatCache;
 
+    // Layout grid for the GDI-compatible metrics; sizes still come back in DIPs.
+    private readonly float _pixelsPerDip;
+
     public override double DpiScale => 1.0;
 
-    public Direct2DMeasurementContext(nint dwriteFactory, DWriteTextFormatCache? textFormatCache = null)
+    public Direct2DMeasurementContext(nint dwriteFactory, uint dpi = 96, DWriteTextFormatCache? textFormatCache = null)
     {
         _dwriteFactory = dwriteFactory;
+        _pixelsPerDip = dpi > 0 ? dpi / 96f : 1f;
         _textFormatCache = textFormatCache;
     }
 
@@ -51,7 +55,8 @@ internal sealed unsafe class Direct2DMeasurementContext : MeasureGraphicsContext
             if (textFormat == 0) return null;
 
             float w = maxWidth >= float.MaxValue ? float.MaxValue : (float)maxWidth;
-            int hr = DWriteVTable.CreateTextLayout((IDWriteFactory*)_dwriteFactory, text, textFormat, w, float.MaxValue, out textLayout);
+            int hr = DWriteVTable.CreateGdiCompatibleTextLayout(
+                (IDWriteFactory*)_dwriteFactory, text, textFormat, w, float.MaxValue, _pixelsPerDip, useGdiNatural: false, out textLayout);
             if (hr < 0 || textLayout == 0) return null;
 
             ApplyCustomFontFallback(textLayout);
