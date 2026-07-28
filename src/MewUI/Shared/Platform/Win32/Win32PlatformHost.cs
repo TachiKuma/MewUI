@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
+using Aprillz.MewUI.Animation;
 using Aprillz.MewUI.Native;
 using Aprillz.MewUI.Native.Constants;
 using Aprillz.MewUI.Native.Structs;
@@ -213,7 +214,7 @@ public sealed class Win32PlatformHost : IPlatformHost
 
                 try
                 {
-                    RenderAllWindows();
+                    RenderContinuousWindows(scheduler);
                 }
                 catch (Exception ex)
                 {
@@ -506,6 +507,25 @@ public sealed class Win32PlatformHost : IPlatformHost
         foreach (var backend in _windows.Values)
         {
             _renderBackends.Add(backend);
+        }
+
+        for (int i = 0; i < _renderBackends.Count; i++)
+        {
+            _renderBackends[i].RenderNow();
+        }
+    }
+
+    private void RenderContinuousWindows(RenderLoopSettings settings)
+    {
+        using var pulse = AnimationManager.Instance.BeginPulse(settings);
+
+        _renderBackends.Clear();
+        foreach (var backend in _windows.Values)
+        {
+            if (pulse.ShouldRender(backend.Window, backend.NeedsRender))
+            {
+                _renderBackends.Add(backend);
+            }
         }
 
         for (int i = 0; i < _renderBackends.Count; i++)

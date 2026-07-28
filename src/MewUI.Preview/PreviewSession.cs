@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
+using Aprillz.MewUI.Animation;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.HotReload;
 using Aprillz.MewUI.Input;
@@ -153,6 +154,7 @@ internal sealed class PreviewSession : IDisposable
         }
 
         long renderStart = Stopwatch.GetTimestamp();
+        using var pulse = AnimationManager.Instance.BeginPulse(_app!.RenderLoopSettings);
         window.PerformLayout();
         window.RenderFrameToSurface(_surface);
         long renderMs = (Stopwatch.GetTimestamp() - renderStart) * 1000 / Stopwatch.Frequency;

@@ -906,17 +906,13 @@ internal sealed class Win32WindowBackend : IWindowBackend
             case WindowMessages.WM_TIMER:
                 if (wParam == 1)
                 {
-                    // AnimationManager.Update runs inside RenderFrameCore, so we must force a
-                    // render every tick while animations are active to advance their clocks.
-                    // Otherwise honor the standard NeedsRender flag - the dispatcher will dispatch
-                    // its own WM_INVOKE inside the modal pump and flip the flag at its own pace.
-                    if (AnimationManager.Instance.HasRenderDemand)
+                    // A native move/size loop blocks the host pump. Advance the shared animation pulse
+                    // here and repaint this window only when one of its clocks consumed the pulse.
+                    using var pulse = AnimationManager.Instance.BeginPulse(
+                        Application.Current.RenderLoopSettings);
+                    if (pulse.ShouldRender(Window, NeedsRender))
                     {
                         RenderNow();
-                    }
-                    else
-                    {
-                        RenderIfNeeded();
                     }
                     return 0;
                 }

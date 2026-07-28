@@ -873,7 +873,7 @@ public abstract partial class UIElement : Element
     /// Used by the style system to drive animated transitions.
     /// </summary>
     internal Animation.PropertyAnimator Animator
-        => _animator ??= new Animation.PropertyAnimator(PropertyStore);
+        => _animator ??= new Animation.PropertyAnimator(this, PropertyStore);
 
     /// <summary>
     /// Sets the animation target for a visual property. No-op when target is unchanged.

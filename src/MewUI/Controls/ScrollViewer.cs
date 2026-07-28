@@ -237,7 +237,7 @@ public sealed class ScrollViewer : ContentControl
         _vBar.Parent = this;
         _hBar.Parent = this;
 
-        _barFade = new ScrollBarFade(_vBar, _hBar, InvalidateVisual);
+        _barFade = new ScrollBarFade(this, _vBar, _hBar, InvalidateVisual);
 
         _vBar.ValueChanged += v =>
         {
@@ -770,6 +770,7 @@ public sealed class ScrollViewer : ContentControl
     /// </summary>
     private sealed class ScrollBarFade
     {
+        private readonly ScrollViewer _owner;
         private readonly ScrollBar _vBar;
         private readonly ScrollBar _hBar;
         private readonly Action _invalidate;
@@ -782,8 +783,9 @@ public sealed class ScrollViewer : ContentControl
         private DispatcherTimer? _idleTimer;
         private AnimationClock? _fadeClock;
 
-        public ScrollBarFade(ScrollBar vBar, ScrollBar hBar, Action invalidate)
+        public ScrollBarFade(ScrollViewer owner, ScrollBar vBar, ScrollBar hBar, Action invalidate)
         {
+            _owner = owner;
             _vBar = vBar;
             _hBar = hBar;
             _invalidate = invalidate;
@@ -884,7 +886,8 @@ public sealed class ScrollViewer : ContentControl
 
         private AnimationClock CreateFadeClock()
         {
-            var clock = new AnimationClock(TimeSpan.FromMilliseconds(200), Easing.EaseOutCubic);
+            var clock = new AnimationClock(TimeSpan.FromMilliseconds(200), Easing.EaseOutCubic)
+                .AttachTo(_owner);
             clock.TickCallback = progress =>
             {
                 _opacity = Math.Clamp(_fadeFrom + (_fadeTarget - _fadeFrom) * progress, 0, 1);
