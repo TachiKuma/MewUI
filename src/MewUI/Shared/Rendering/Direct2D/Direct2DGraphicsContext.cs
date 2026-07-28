@@ -179,6 +179,14 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
             ? D2D1_TEXT_ANTIALIAS_MODE.CLEARTYPE
             : D2D1_TEXT_ANTIALIAS_MODE.GRAYSCALE;
         D2D1VTable.SetTextAntialiasMode((ID2D1RenderTarget*)_renderTarget, textAa);
+
+        // Tuned params applied to every target, so grayscale (popup / cached bitmap) surfaces get the
+        // same glyph weight as the window. 0 leaves the target on its default params.
+        nint textParams = _ownerFactory.TextRenderingParams;
+        if (textParams != 0)
+        {
+            D2D1VTable.SetTextRenderingParams((ID2D1RenderTarget*)_renderTarget, textParams);
+        }
     }
 
     // True when this context's BeginGpuPixelSurfaceFrame was the outermost entry on the

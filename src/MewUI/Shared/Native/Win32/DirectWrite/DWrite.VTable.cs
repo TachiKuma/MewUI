@@ -14,8 +14,60 @@ internal unsafe struct IDWriteFactory
 internal static unsafe class DWriteVTable
 {
     private const uint GetSystemFontCollectionIndex = 3;
+    private const uint CreateRenderingParamsIndex = 10;
+    private const uint CreateCustomRenderingParamsIndex = 12;
     private const uint CreateTextFormatIndex = 15;
     private const uint CreateTextLayoutIndex = 18;
+
+    /// <summary>IDWriteFactory::CreateRenderingParams (vtable index 10). Returns the system
+    /// default rendering params, which carry the user's per-monitor ClearType calibration
+    /// (gamma, enhanced contrast, ClearType level, subpixel geometry). Caller must Release.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CreateRenderingParams(IDWriteFactory* factory, out nint renderingParams)
+    {
+        renderingParams = 0;
+        nint prms = 0;
+        var fn = (delegate* unmanaged[Stdcall]<IDWriteFactory*, nint*, int>)factory->lpVtbl[CreateRenderingParamsIndex];
+        int hr = fn(factory, &prms);
+        renderingParams = prms;
+        return hr;
+    }
+
+    /// <summary>IDWriteFactory::CreateCustomRenderingParams (vtable index 12). Caller must Release.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CreateCustomRenderingParams(
+        IDWriteFactory* factory,
+        float gamma,
+        float enhancedContrast,
+        float clearTypeLevel,
+        DWRITE_PIXEL_GEOMETRY pixelGeometry,
+        DWRITE_RENDERING_MODE renderingMode,
+        out nint renderingParams)
+    {
+        renderingParams = 0;
+        nint prms = 0;
+        var fn = (delegate* unmanaged[Stdcall]<IDWriteFactory*, float, float, float, DWRITE_PIXEL_GEOMETRY, DWRITE_RENDERING_MODE, nint*, int>)factory->lpVtbl[CreateCustomRenderingParamsIndex];
+        int hr = fn(factory, gamma, enhancedContrast, clearTypeLevel, pixelGeometry, renderingMode, &prms);
+        renderingParams = prms;
+        return hr;
+    }
+
+    /// <summary>Reads the four IDWriteRenderingParams getters (vtable indices 3..6), each a
+    /// by-value return: GetGamma, GetEnhancedContrast, GetClearTypeLevel, GetPixelGeometry.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ReadRenderingParams(
+        nint renderingParams,
+        out float gamma,
+        out float enhancedContrast,
+        out float clearTypeLevel,
+        out DWRITE_PIXEL_GEOMETRY pixelGeometry)
+    {
+        var vtbl = *(nint**)renderingParams;
+        gamma = ((delegate* unmanaged[Stdcall]<nint, float>)vtbl[3])(renderingParams);
+        enhancedContrast = ((delegate* unmanaged[Stdcall]<nint, float>)vtbl[4])(renderingParams);
+        clearTypeLevel = ((delegate* unmanaged[Stdcall]<nint, float>)vtbl[5])(renderingParams);
+        pixelGeometry = ((delegate* unmanaged[Stdcall]<nint, DWRITE_PIXEL_GEOMETRY>)vtbl[6])(renderingParams);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int GetSystemFontCollection(IDWriteFactory* factory, out nint fontCollection, bool checkForUpdates)
