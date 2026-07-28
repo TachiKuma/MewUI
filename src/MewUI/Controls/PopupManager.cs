@@ -12,9 +12,7 @@ namespace Aprillz.MewUI;
 internal sealed class PopupManager
 {
     /// <summary>
-    /// Host popups in their own OS windows (native) instead of the owner surface. Internal, not a public
-    /// policy surface (see agent/popup-native-window/plan.md). Headless tests set this false to keep the
-    /// in-surface path as their baseline.
+    /// Host popups in their own OS windows instead of the owner surface; headless tests set it false.
     /// </summary>
     internal static bool PreferNativePopups = true;
 
