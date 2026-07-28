@@ -189,7 +189,7 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
                 TEXT_CONTRAST,
                 clearTypeLevel,
                 pixelGeometry,
-                DWRITE_RENDERING_MODE.DEFAULT,
+                DWRITE_RENDERING_MODE.GDI_CLASSIC,
                 out nint tuned);
             return hr >= 0 ? tuned : 0;
         }
@@ -537,7 +537,7 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
     public IGraphicsContext CreateMeasurementContext(uint dpi)
     {
         EnsureInitialized();
-        var ctx = new Direct2DMeasurementContext(_dwriteFactory, TextFormatCache);
+        var ctx = new Direct2DMeasurementContext(_dwriteFactory, dpi, TextFormatCache);
         ctx.TextTracker = _textTracker;
         return ctx;
     }
