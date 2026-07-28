@@ -30,6 +30,9 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
     private bool _initialized;
     private bool _hasFactory1;
     private nint _defaultFixedStrokeStyle;
+    // Tuned IDWriteRenderingParams shared by every render target: the user's monitor calibration with
+    // the text contrast pinned (see TEXT_CONTRAST). 0 until EnsureInitialized runs.
+    private nint _textRenderingParams;
 
     private readonly TextResourceTracker _textTracker = new()
     {
@@ -89,6 +92,9 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
         ComHelpers.Release(_defaultFixedStrokeStyle);
         _defaultFixedStrokeStyle = 0;
 
+        ComHelpers.Release(_textRenderingParams);
+        _textRenderingParams = 0;
+
         _gpuDeviceState = GpuDeviceState.Disposed;
         ResetGpuDeviceChain();
 
@@ -136,6 +142,8 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
             throw new InvalidOperationException($"DWriteCreateFactory failed: 0x{hr:X8}");
         }
 
+        _textRenderingParams = BuildTunedTextRenderingParams((IDWriteFactory*)_dwriteFactory);
+
         if (_hasFactory1)
         {
             // NORMAL transform type: stroke width scales with the render target's transform
@@ -157,6 +165,42 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
 
         _initialized = true;
     }
+
+    // Chromium/Skia default (SK_GAMMA_CONTRAST); DirectWrite's grayscale default of 1.0 renders popups
+    // and cached bitmaps noticeably thicker than the window.
+    private const float TEXT_CONTRAST = 0.5f;
+
+    /// <summary>
+    /// Builds the text rendering params: the system defaults with the contrast pinned. 0 on failure.
+    /// </summary>
+    private static nint BuildTunedTextRenderingParams(IDWriteFactory* factory)
+    {
+        if (DWriteVTable.CreateRenderingParams(factory, out nint systemDefault) < 0 || systemDefault == 0)
+        {
+            return 0;
+        }
+
+        try
+        {
+            DWriteVTable.ReadRenderingParams(systemDefault, out float gamma, out float _, out float clearTypeLevel, out DWRITE_PIXEL_GEOMETRY pixelGeometry);
+            int hr = DWriteVTable.CreateCustomRenderingParams(
+                factory,
+                gamma,
+                TEXT_CONTRAST,
+                clearTypeLevel,
+                pixelGeometry,
+                DWRITE_RENDERING_MODE.DEFAULT,
+                out nint tuned);
+            return hr >= 0 ? tuned : 0;
+        }
+        finally
+        {
+            ComHelpers.Release(systemDefault);
+        }
+    }
+
+    /// <summary>The tuned text rendering params every render target draws text with; 0 if unavailable.</summary>
+    internal nint TextRenderingParams => _textRenderingParams;
 
     /// <summary>
     /// Returns the cached <c>ID2D1StrokeStyle*</c> for <paramref name="ss"/>, creating it on

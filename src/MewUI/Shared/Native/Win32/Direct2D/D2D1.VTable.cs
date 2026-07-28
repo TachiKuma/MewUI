@@ -354,6 +354,15 @@ internal static unsafe class D2D1VTable
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void SetTextRenderingParams(ID2D1RenderTarget* rt, nint textRenderingParams)
+    {
+        // d2d1.h: SetTextRenderingParams (index 36) follows Set/GetTextAntialiasMode (34/35).
+        // A null handle restores the render target's default params.
+        var fn = (delegate* unmanaged[Stdcall]<ID2D1RenderTarget*, nint, void>)(rt->lpVtbl[36]);
+        fn(rt, textRenderingParams);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void DrawText(ID2D1RenderTarget* rt, ReadOnlySpan<char> text, nint textFormat, in D2D1_RECT_F layoutRect, nint brush)
     {
         if (text.IsEmpty)
