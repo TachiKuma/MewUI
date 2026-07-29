@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Aprillz.MewUI.Rendering;
 
 namespace Aprillz.MewUI.Controls;
@@ -16,7 +15,6 @@ public abstract class PopupOwnerBase : Control, IPopupOwner
     private bool _closingPopup;
     private bool _popupBoundsDirty = true;
     private Window? _popupBoundsWindow;
-    private long _lastCloseTimestamp;
 
     public static readonly MewProperty<bool> IsDropDownOpenProperty =
         MewProperty<bool>.Register<PopupOwnerBase>(nameof(IsDropDownOpen), false,
@@ -222,16 +220,6 @@ public abstract class PopupOwnerBase : Control, IPopupOwner
 
         Focus();
 
-        // A pointer light-dismiss (policy close) can close the popup on the very press that then routes
-        // here; without this a plain toggle would immediately reopen it. Treat that press as the close.
-        if (!IsDropDownOpen && _lastCloseTimestamp != 0 &&
-            Stopwatch.GetElapsedTime(_lastCloseTimestamp).TotalMilliseconds < 150)
-        {
-            _lastCloseTimestamp = 0;
-            e.Handled = true;
-            return;
-        }
-
         var bounds = Bounds;
         // Use full arranged bounds for hit-testing. The header can be measured smaller than the final layout
         // (e.g. stretch in a panel), but the whole button face should toggle.
@@ -402,13 +390,6 @@ public abstract class PopupOwnerBase : Control, IPopupOwner
         finally { _closingPopup = false; }
         _lastPopupBounds = null;
         InvalidateVisual();
-
-        // A policy close is a pointer/focus light-dismiss; if that press was on this trigger, its
-        // OnMouseDown must not reopen the popup (see the guard there).
-        if (kind == PopupCloseKind.Policy)
-        {
-            _lastCloseTimestamp = Stopwatch.GetTimestamp();
-        }
 
         if (kind == PopupCloseKind.Lifecycle)
         {

@@ -3056,7 +3056,11 @@ public partial class Window : ContentControl, ILayoutRoundingHost
     internal Rect ShowPopup(UIElement owner, UIElement popup, Func<Window, Rect> measureBounds, bool sizeToContent = false, bool staysOpen = false)
         => _popupManager.ShowPopup(owner, popup, measureBounds, sizeToContent, staysOpen);
 
-    internal void RequestClosePopups(PopupCloseRequest request)
+    /// <summary>
+    /// Applies the close policy; true when the press itself closed a popup by landing on that popup's
+    /// trigger, in which case the caller must not route the press any further.
+    /// </summary>
+    internal bool RequestClosePopups(PopupCloseRequest request)
         => _popupManager.RequestClosePopups(request);
 
     /// <summary>

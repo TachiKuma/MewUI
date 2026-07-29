@@ -221,11 +221,16 @@ internal sealed class PopupManager
         }
     }
 
-    internal void RequestClosePopups(PopupCloseRequest request)
+    /// <summary>
+    /// Applies <paramref name="request"/>'s close policy. Returns true when a press closed a popup by
+    /// landing on that popup's own trigger: the press did the closing, so the caller must not also
+    /// route it (the trigger would reopen what it just closed).
+    /// </summary>
+    internal bool RequestClosePopups(PopupCloseRequest request)
     {
         if (_popups.Count == 0 || _isClosingPopups)
         {
-            return;
+            return false;
         }
 
         switch (request.TriggerKind)
@@ -233,11 +238,33 @@ internal sealed class PopupManager
             case PopupCloseRequest.Trigger.PointerDown:
             {
                 var leaf = request.PointerLeaf;
-                // Hit-test-invisible popups (e.g. ToolTip) are never "related" - always close on any click.
-                CloseTransientPopups(leaf == null
-                    ? null
-                    : entry => entry.Element.IsHitTestVisible && IsRelated(leaf, entry, applyContextMenuOwnerPolicy: true));
-                break;
+                if (leaf == null)
+                {
+                    CloseTransientPopups(shouldKeep: null);
+                    break;
+                }
+
+                bool pressedOwnTrigger = false;
+                CloseTransientPopups(entry =>
+                {
+                    // Hit-test-invisible popups (e.g. ToolTip) are never "related" - always close on any click.
+                    if (!entry.Element.IsHitTestVisible)
+                    {
+                        return false;
+                    }
+
+                    if (IsRelated(leaf, entry, applyContextMenuOwnerPolicy: true))
+                    {
+                        return true;
+                    }
+
+                    // Kept out by the toggle policy alone, so this press is on the trigger of the very
+                    // popup it is closing.
+                    pressedOwnTrigger |= IsRelated(leaf, entry, applyContextMenuOwnerPolicy: false);
+                    return false;
+                });
+
+                return pressedOwnTrigger;
             }
             case PopupCloseRequest.Trigger.FocusChanged:
             {
@@ -262,6 +289,8 @@ internal sealed class PopupManager
                 break;
             }
         }
+
+        return false;
     }
 
     /// <summary>
