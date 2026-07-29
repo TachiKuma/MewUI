@@ -365,7 +365,8 @@ public partial class Window : ContentControl, ILayoutRoundingHost
 
     /// <summary>
     /// Window-level overlay layer for elements positioned relative to the full window area.
-    /// Renders above adorners but below popups. Examples: toast, progress ring, dim background.
+    /// Renders above adorners and in-surface popups. Native popups use separate OS surfaces.
+    /// Examples: toast, progress ring, dim background.
     /// </summary>
     public OverlayLayer OverlayLayer { get; }
 
