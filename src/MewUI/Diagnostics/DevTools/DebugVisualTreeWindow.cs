@@ -33,7 +33,7 @@ internal sealed class DebugVisualTreeWindow : Window
         Title = "Live Visual Tree";
         WindowSize = WindowSize.Resizable(960, 720);
 
-        _selectedLabel = new TextBlock { Text = "Selected: (none)" };
+        _selectedLabel = new TextBlock { Text = "Selected: (none)", TextTrimming = TextTrimming.CharacterEllipsis };
         _modeLabel = new TextBlock { Text = "Mode: Follow/Peek" };
 
         _followFocus = new CheckBox { Content = new TextBlock { Text = "Follow Focus", VerticalTextAlignment = TextAlignment.Center }, IsChecked = true };
@@ -94,18 +94,18 @@ internal sealed class DebugVisualTreeWindow : Window
                     .Horizontal()
                     .Spacing(8)
                     .Children(refreshBtn, _goFocusButton, pickBtn, clearBtn),
-                new StackPanel()
+                new DockPanel()
                     .DockTop()
-                    .Horizontal()
                     .Spacing(12)
-                    .Children(_followFocus, _autoExpandFocus, _logicalMode),
+                    .Children(
+                        _modeLabel.DockRight().CenterVertical(),
+                        new StackPanel()
+                            .Horizontal()
+                            .Spacing(12)
+                            .Children(_followFocus, _autoExpandFocus, _logicalMode)),
                 new Border()
                     .DockTop()
-                    .Padding(8, 4)
-                    .Child(_modeLabel),
-                new Border()
-                    .DockTop()
-                    .Padding(8)
+                    .Padding(8, 2)
                     .Child(_selectedLabel),
                 new SplitPanel()
                     .Horizontal()
@@ -453,9 +453,9 @@ internal sealed class DebugVisualTreeWindow : Window
         {
             var logicalRoot = element.FindLogicalRoot();
             _selectedLabel.Text =
-                $"Selected: {element.GetType().Name} {FormatRect(GetElementRectInWindow(element))}\n" +
-                $"Visual: parent={element.Parent?.GetType().Name ?? "(none)"}  root={element.FindVisualRoot()?.GetType().Name ?? "(none)"}\n" +
-                $"Logical: parent={element.LogicalParent?.GetType().Name ?? "(none)"}  root={(ReferenceEquals(logicalRoot, element) ? "(self)" : logicalRoot.GetType().Name)}";
+                $"Selected: {element.GetType().Name} {FormatRect(GetElementRectInWindow(element))}   " +
+                $"visual parent={element.Parent?.GetType().Name ?? "(none)"} root={element.FindVisualRoot()?.GetType().Name ?? "(none)"}   " +
+                $"logical parent={element.LogicalParent?.GetType().Name ?? "(none)"} root={(ReferenceEquals(logicalRoot, element) ? "(self)" : logicalRoot.GetType().Name)}";
         }
 
         _tree.ScrollIntoView(index);
