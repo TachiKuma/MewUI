@@ -13,6 +13,7 @@ internal sealed class DebugVisualTreeWindow : Window
     private readonly CheckBox _followFocus;
     private readonly CheckBox _autoExpandFocus;
     private readonly CheckBox _logicalMode;
+    private readonly DebugPropertyPanel _propertyPanel;
     private Button? _goFocusButton;
 
     private readonly Dictionary<object, object?> _parentByKey = new();
@@ -30,7 +31,7 @@ internal sealed class DebugVisualTreeWindow : Window
         _target = target;
 
         Title = "Live Visual Tree";
-        WindowSize = WindowSize.Resizable(520, 720);
+        WindowSize = WindowSize.Resizable(960, 720);
 
         _selectedLabel = new TextBlock { Text = "Selected: (none)" };
         _modeLabel = new TextBlock { Text = "Mode: Follow/Peek" };
@@ -66,6 +67,8 @@ internal sealed class DebugVisualTreeWindow : Window
         _pickButton = pickBtn;
         pickBtn.Click += TogglePick;
 
+        _propertyPanel = new DebugPropertyPanel();
+
         var clearBtn = new Button().Content("Clear Selection");
         clearBtn.Click += () =>
         {
@@ -80,8 +83,8 @@ internal sealed class DebugVisualTreeWindow : Window
                 _items.SelectedIndex = -1;
             }
             _selectedLabel.Text = "Selected: (none)";
+            _propertyPanel.SetTarget(null);
         };
-
 
         Content = new DockPanel()
             .Spacing(8)
@@ -104,7 +107,14 @@ internal sealed class DebugVisualTreeWindow : Window
                     .DockTop()
                     .Padding(8)
                     .Child(_selectedLabel),
-                _tree
+                new SplitPanel()
+                    .Horizontal()
+                    .FirstLength(GridLength.Stars(1))
+                    .SecondLength(GridLength.Stars(1))
+                    .MinFirst(240)
+                    .MinSecond(280)
+                    .First(_tree)
+                    .Second(_propertyPanel)
             );
 
         PreviewKeyDown += e =>
@@ -112,6 +122,7 @@ internal sealed class DebugVisualTreeWindow : Window
             if (e.Key == Key.F5)
             {
                 Refresh();
+                _propertyPanel.Rebuild();
                 e.Handled = true;
             }
         };
@@ -169,6 +180,7 @@ internal sealed class DebugVisualTreeWindow : Window
                 _items.SelectedIndex = -1;
             }
             _selectedLabel.Text = "Selected: (none)";
+            _propertyPanel.SetTarget(null);
             return;
         }
 
@@ -200,6 +212,7 @@ internal sealed class DebugVisualTreeWindow : Window
         {
             _lastRebuildTick = now;
             Refresh(preserveExpansion: true, preserveSelection: true);
+            _propertyPanel.RefreshValues();
         }
 
         if (_followFocus.IsChecked == true && focusChanged)
@@ -424,6 +437,7 @@ internal sealed class DebugVisualTreeWindow : Window
     private void OnItemsSelectionChanged(int index)
     {
         var element = _items?.SelectedItem?.Element as UIElement;
+        _propertyPanel.SetTarget(element);
 
         if (_target.DebugInspectorOverlay != null)
         {
