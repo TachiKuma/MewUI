@@ -247,7 +247,7 @@ public abstract class Control : TextElement
     }
 
     private ControlTemplateInstance? _templateInstance;
-    private bool _templateThemeStale;
+    private bool _templateStale;
 
     /// <summary>
     /// Gets or sets the template that provides this control's visual tree.
@@ -265,9 +265,9 @@ public abstract class Control : TextElement
     /// </summary>
     protected bool ApplyTemplate()
     {
-        if (_templateThemeStale)
+        if (_templateStale)
         {
-            _templateThemeStale = false;
+            _templateStale = false;
             DetachTemplateInstance();
         }
 
@@ -783,11 +783,19 @@ public abstract class Control : TextElement
         // A template instance is an artifact of the theme it was built under (builds may bake
         // metrics/colors), so it is rebuilt lazily; deferring the detach keeps the theme
         // broadcast walk from mutating the tree it is traversing.
-        if (_templateInstance != null)
+        InvalidateTemplateInstance();
+    }
+
+    /// <summary>Marks the applied template instance for a lazy rebuild.</summary>
+    private void InvalidateTemplateInstance()
+    {
+        if (_templateInstance == null)
         {
-            _templateThemeStale = true;
-            InvalidateMeasure();
+            return;
         }
+
+        _templateStale = true;
+        InvalidateMeasure();
     }
 
     protected override void OnVisualRootChanged(Element? oldRoot, Element? newRoot)
@@ -882,6 +890,9 @@ public abstract class Control : TextElement
 
         _font?.Dispose();
         _font = null;
+
+        // Builds may bake device-pixel-snapped metrics, which the new scale invalidates.
+        InvalidateTemplateInstance();
     }
 
     protected Color PickAccentBorder(Theme theme, Color baseBorder, in VisualState state, double hoverMix = 0.6)
