@@ -206,15 +206,17 @@ public sealed class ContextMenu : Control, IPopupOwner
         window.FocusManager.SetFocus(this);
     }
 
+    // Whole device pixels, like ResolveSeparatorHeight: a row height that covers a fractional pixel
+    // puts successive row boundaries on half-pixels, so rows come out a pixel apart from each other
+    // and the last one stops short of the content box.
     private double ResolveItemHeight()
     {
-        if (!double.IsNaN(ItemHeight) && ItemHeight > 0)
-        {
-            return ItemHeight;
-        }
+        double height = !double.IsNaN(ItemHeight) && ItemHeight > 0
+            ? ItemHeight
+            : Math.Max(18, Theme.Metrics.BaseControlHeight - 2);
 
-
-        return Math.Max(18, Theme.Metrics.BaseControlHeight - 2);
+        double dpiScale = GetDpi() / 96.0;
+        return Math.Max(1, LayoutRounding.RoundToPixelInt(height, dpiScale)) / dpiScale;
     }
 
     protected override void OnThemeChanged(Theme oldTheme, Theme newTheme)
