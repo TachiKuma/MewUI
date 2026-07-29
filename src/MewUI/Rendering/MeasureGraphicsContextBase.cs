@@ -30,6 +30,8 @@ public abstract class MeasureGraphicsContextBase : IGraphicsContext
     public void Save() { }
     public void Restore() { }
     public void SetClip(Rect rect) { }
+    public void BeginOpaqueBackdrop() { }
+    public void EndOpaqueBackdrop() { }
     public void SetClipRoundedRect(Rect rect, double radiusX, double radiusY) { }
     public void SetClipPath(PathGeometry path) { }
     public void Translate(double dx, double dy) { }

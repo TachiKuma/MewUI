@@ -144,6 +144,7 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         _textPixelSnap = true;
         _transform = Matrix3x2.Identity;
         _clipBoundsWorld = null;
+        _opaqueBackdropLayers.Clear();
 
         if (_renderTarget != 0)
         {
@@ -1936,6 +1937,85 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         }
 
         DrawImageBitmapCore(image.GetOrCreateBitmap(_renderTarget, _renderTargetGeneration, _deviceContext), destRect, sourceRect);
+    }
+
+    // One entry per open scope so End undoes exactly what its Begin did; 0 means the scope pushed
+    // nothing (already opaque, already inside a layer, or the layer could not be created).
+    private readonly Stack<nint> _opaqueBackdropLayers = new();
+
+    public override void BeginOpaqueBackdrop()
+    {
+        // Nothing to add when the target is already opaque (ClearType is on anyway) or when an
+        // enclosing scope already put us inside such a layer.
+        if (_clearTypeEnabled || _renderTarget == 0 || _opaqueBackdropLayers.Count > 0)
+        {
+            _opaqueBackdropLayers.Push(0);
+            return;
+        }
+
+        if (D2D1VTable.CreateLayer((ID2D1RenderTarget*)_renderTarget, out nint layer) < 0 || layer == 0)
+        {
+            _opaqueBackdropLayers.Push(0);
+            return;
+        }
+
+        // The scope fills its box opaquely as its first act, so that fill lands inside the layer and
+        // the text after it has real pixels to blend subpixel coverage against, even though the target
+        // itself carries per-pixel alpha. Content bounds stay unbounded: the layer is here for the
+        // ClearType option, and clipping to the element box would shave pixel-snapped borders.
+        var contentBounds = new D2D1_RECT_F(
+            -UNBOUNDED_CLIP_EXTENT,
+            -UNBOUNDED_CLIP_EXTENT,
+            UNBOUNDED_CLIP_EXTENT,
+            UNBOUNDED_CLIP_EXTENT);
+
+        if (_deviceContext != 0)
+        {
+            var parameters1 = new D2D1_LAYER_PARAMETERS1(
+                contentBounds: contentBounds,
+                geometricMask: 0,
+                maskAntialiasMode: D2D1_ANTIALIAS_MODE.PER_PRIMITIVE,
+                maskTransform: D2D1_MATRIX_3X2_F.Identity,
+                opacity: 1.0f,
+                opacityBrush: 0,
+                layerOptions: D2D1_LAYER_OPTIONS1.INITIALIZE_FROM_BACKGROUND);
+
+            D2D1VTable.PushLayer((ID2D1DeviceContext*)_deviceContext, parameters1, layer);
+        }
+        else
+        {
+            var parameters = new D2D1_LAYER_PARAMETERS(
+                contentBounds: contentBounds,
+                geometricMask: 0,
+                maskAntialiasMode: D2D1_ANTIALIAS_MODE.PER_PRIMITIVE,
+                maskTransform: D2D1_MATRIX_3X2_F.Identity,
+                opacity: 1.0f,
+                opacityBrush: 0,
+                layerOptions: D2D1_LAYER_OPTIONS.INITIALIZE_FOR_CLEARTYPE);
+
+            D2D1VTable.PushLayer((ID2D1RenderTarget*)_renderTarget, parameters, layer);
+        }
+
+        D2D1VTable.SetTextAntialiasMode((ID2D1RenderTarget*)_renderTarget, D2D1_TEXT_ANTIALIAS_MODE.CLEARTYPE);
+        _opaqueBackdropLayers.Push(layer);
+    }
+
+    public override void EndOpaqueBackdrop()
+    {
+        if (_opaqueBackdropLayers.Count == 0)
+        {
+            return;
+        }
+
+        nint layer = _opaqueBackdropLayers.Pop();
+        if (layer == 0 || _renderTarget == 0)
+        {
+            return;
+        }
+
+        D2D1VTable.SetTextAntialiasMode((ID2D1RenderTarget*)_renderTarget, D2D1_TEXT_ANTIALIAS_MODE.GRAYSCALE);
+        D2D1VTable.PopLayer((ID2D1RenderTarget*)_renderTarget);
+        ComHelpers.Release(layer);
     }
 
     // Pure translation: the only case where a bitmap can be blitted 1:1 against the device grid.

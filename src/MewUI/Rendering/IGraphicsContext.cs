@@ -49,6 +49,17 @@ namespace Aprillz.MewUI.Rendering
         void SetClip(Rect rect);
 
         /// <summary>
+        /// Declares that the drawing up to the matching <see cref="EndOpaqueBackdrop"/> starts by
+        /// filling its box with an opaque colour, so text in it may use subpixel antialiasing.
+        /// </summary>
+        void BeginOpaqueBackdrop();
+
+        /// <summary>
+        /// Ends the innermost <see cref="BeginOpaqueBackdrop"/> scope.
+        /// </summary>
+        void EndOpaqueBackdrop();
+
+        /// <summary>
         /// Sets a rounded-rectangle clipping region.
         /// Backends may fall back to a rectangular clip if rounded clips are not supported.
         /// </summary>

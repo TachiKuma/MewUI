@@ -458,8 +458,28 @@ public abstract partial class UIElement : Element
             }
             else
             {
-                OnRender(context);
-                RenderSubtree(context);
+                // OnRender opens with an opaque fill, so everything after it - text above all - lands on
+                // pixels the backend knows, which is what subpixel antialiasing needs on a surface that
+                // carries per-pixel alpha (a popup). The scope has to start before OnRender: controls
+                // such as ContextMenu and ListBox draw their own text there rather than in the subtree.
+                if (this is Control { Background.A: 255 })
+                {
+                    context.BeginOpaqueBackdrop();
+                    try
+                    {
+                        OnRender(context);
+                        RenderSubtree(context);
+                    }
+                    finally
+                    {
+                        context.EndOpaqueBackdrop();
+                    }
+                }
+                else
+                {
+                    OnRender(context);
+                    RenderSubtree(context);
+                }
             }
         }
     }

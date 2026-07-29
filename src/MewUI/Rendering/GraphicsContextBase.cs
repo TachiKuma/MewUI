@@ -116,6 +116,16 @@ public abstract class GraphicsContextBase : IGraphicsContext
 
     #endregion
 
+    /// <summary>
+    /// Declares that the scope starts by filling its box opaquely; the default ignores it.
+    /// </summary>
+    public virtual void BeginOpaqueBackdrop() { }
+
+    /// <summary>
+    /// Ends the innermost <see cref="BeginOpaqueBackdrop"/> scope; the default ignores it.
+    /// </summary>
+    public virtual void EndOpaqueBackdrop() { }
+
     #region State Management (template methods - cull rect tracking)
 
     public void Save()
