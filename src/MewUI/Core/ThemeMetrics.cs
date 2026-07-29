@@ -39,7 +39,7 @@ public sealed record class ThemeMetrics
         ScrollBarThickness = 4,
         ScrollBarHitThickness = 10,
         ScrollBarMinThumbLength = 14,
-        ScrollWheelStep = 32,
+        ScrollWheelStep = 50,
         ScrollBarSmallChange = 24,
         ScrollBarLargeChange = 120
     };
