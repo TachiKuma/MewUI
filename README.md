@@ -355,6 +355,7 @@ Set `PreferNative` to `false` to use the managed dialog directly.
 - [Theme](docs/Theme.md)
 - [Application Lifecycle](docs/ApplicationLifecycle.md)
 - [Layout](docs/Layout.md)
+- [Window Visual Layers](docs/WindowLayers.md)
 - [RenderLoop](docs/RenderLoop.md)
 - [Hot Reload](docs/HotReload.md)
 - [Editor Preview](docs/Preview.md)
