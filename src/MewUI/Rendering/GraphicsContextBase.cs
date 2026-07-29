@@ -393,18 +393,9 @@ public abstract class GraphicsContextBase : IGraphicsContext
         _drawTextCount++;
         if (IsCulled(bounds)) return;
 
-        // Cap-height centering: shift text so the cap-height midpoint aligns with
-        // bounds center instead of the line-height midpoint.
-        if (verticalAlignment == TextAlignment.Center)
-        {
-            double lineHeight = font.Size + font.InternalLeading;
-            double leadingTrim = Math.Max(0, lineHeight / 2.0 - font.Descent - font.CapHeight / 2.0);
-            if (leadingTrim > 0)
-            {
-                bounds = new Rect(bounds.X, bounds.Y - leadingTrim, bounds.Width, bounds.Height);
-            }
-        }
-
+        // No vertical adjustment here: a centred DrawText must put ink exactly where a centred
+        // DrawTextLayout puts it, or a control that swaps between the two (an editor replacing its
+        // label) shifts its text.
         DrawTextCore(text, bounds, font, color, horizontalAlignment, verticalAlignment, wrapping, trimming);
     }
 
