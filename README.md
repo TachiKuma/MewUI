@@ -361,6 +361,7 @@ Set `PreferNative` to `false` to use the managed dialog directly.
 - [Editor Preview](docs/Preview.md)
 - [Custom Controls](docs/CustomControls.md)
 - [Control Template](docs/ControlTemplate.md)
+- [Localization](docs/Localization.md)
 
 ---
 ## 🤝 Community
