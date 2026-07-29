@@ -814,17 +814,17 @@ partial class Window
 #if DEBUG
             }
 
-            if (_target._debugInspectorOverlay == null)
+            if (_target.DebugInspectorOverlay == null)
             {
                 _target.ToggleDebugInspector();
             }
 
-            if (_target._debugInspectorOverlay == null)
+            if (_target.DebugInspectorOverlay == null)
             {
                 return false;
             }
 
-            _target._debugInspectorOverlay.HighlightedElement = element;
+            _target.DebugInspectorOverlay.HighlightedElement = element;
             _target.RequestRender();
             return true;
 #endif
