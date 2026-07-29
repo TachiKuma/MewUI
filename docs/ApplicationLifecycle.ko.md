@@ -146,6 +146,8 @@ ThemeVariant/Accent/ThemeSeed/ThemeMetrics 설정은 아래 문서를 참고한�
 
 - [Theme 문서](Theme.ko.md)
 
+기본 폰트는 플랫폼 패키지 등록 시점(`Win32Platform.Register()`, `UseWin32()` 및 X11/macOS 대응 API)에 확정된다. 이 시점은 `Application.Create()`와 창 생성보다 앞서므로, 그 이후에 `ThemeMetrics.Default.FontFamily`나 `ThemeManager.DefaultMetrics.FontFamily`를 읽으면 실제 적용될 폰트명을 얻는다. 폰트를 지정하지 않았을 때 시스템 UI 폰트를 따르는 규칙은 [Theme 문서](Theme.ko.md)를 참고한다.
+
 ---
 
 ## 3. Window 시작 흐름

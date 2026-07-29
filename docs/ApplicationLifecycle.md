@@ -147,6 +147,8 @@ For ThemeVariant/Accent/ThemeSeed/ThemeMetrics configuration, see:
 
 - [Theme documentation](Theme.md)
 
+The default font family is decided when the platform package registers (`Win32Platform.Register()`, `UseWin32()`, and their X11/macOS equivalents), which precedes `Application.Create()` and window construction. Reading `ThemeMetrics.Default.FontFamily` or `ThemeManager.DefaultMetrics.FontFamily` after that point reports the family that will actually be used. See [Theme documentation](Theme.md) for how an unspecified family follows the system UI font.
+
 ---
 
 ## 3. Window Startup Flow
