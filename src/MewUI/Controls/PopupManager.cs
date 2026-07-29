@@ -131,6 +131,13 @@ internal sealed class PopupManager
             _window.Activate();
         }
 
+        // An interactive popup supersedes the hover tooltip; leaving it up would also let its surface
+        // churn hover state against the popup's own (see the suppression in ShowToolTip).
+        if (popup.IsHitTestVisible)
+        {
+            CloseToolTip();
+        }
+
         // Replace if already present.
         for (int i = 0; i < _popups.Count; i++)
         {
@@ -441,10 +448,31 @@ internal sealed class PopupManager
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(content);
 
+        // Tooltips stay away while an interactive popup (menu, drop-down) is open: hover is not the
+        // user's focus then, and the tooltip surface appearing/disappearing under the pointer flips
+        // hover state against the popup surface, which reads as flicker.
+        if (HasInteractivePopup())
+        {
+            return;
+        }
+
         _toolTip ??= new ToolTip();
         _toolTip.Content = content;
         _toolTipOwner = owner;
         ShowPopup(owner, _toolTip, bounds);
+    }
+
+    private bool HasInteractivePopup()
+    {
+        for (int i = 0; i < _popups.Count; i++)
+        {
+            if (_popups[i].Element.IsHitTestVisible)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     internal void CloseToolTip(UIElement? owner = null)

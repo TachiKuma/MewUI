@@ -2177,6 +2177,14 @@ internal sealed class Win32WindowBackend : IWindowBackend
                     _ = User32.SendMessage(root, WindowMessages.WM_MOUSEMOVE, 0, (targetPt.y << 16) | (targetPt.x & 0xFFFF));
                     return 0;
                 }
+
+                // The pointer is over neither this surface nor a related one. Capture keeps every move
+                // here, and the owner suppresses its own leave tracking while we hold it, so nothing
+                // else will retire the owner's hover: do it here.
+                if (Window.Owner is Window ownerWindow)
+                {
+                    WindowInputRouter.UpdateMouseOver(ownerWindow, null);
+                }
             }
         }
 
@@ -2196,6 +2204,14 @@ internal sealed class Win32WindowBackend : IWindowBackend
     private void EnsureMouseLeaveTracking()
     {
         if (_isTrackingMouseLeave || Handle == 0)
+            return;
+
+        // While another surface holds capture, the moves arriving here are forwarded by that surface
+        // (a popup handing its owner the moves over it), not moves the system routed to us. The system
+        // still counts the pointer as away from this window, so a leave request fires back at once and
+        // ping-pongs against the next forwarded move. The capture holder drives hover in that mode.
+        nint capture = User32.GetCapture();
+        if (capture != 0 && capture != Handle)
             return;
 
         var tme = new TRACKMOUSEEVENT
@@ -2328,6 +2344,7 @@ internal sealed class Win32WindowBackend : IWindowBackend
     private nint HandleMouseLeave()
     {
         _isTrackingMouseLeave = false;
+
         WindowInputRouter.UpdateMouseOver(Window, null);
         return 0;
     }
