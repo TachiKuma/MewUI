@@ -11,7 +11,7 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposabl
     private readonly Func<TSource, TProp> _convert;
     private readonly Func<TProp, TSource>? _convertBack;
     private readonly TProp _fallbackValue;
-    private readonly BindingMode _mode;
+    private readonly BindingCapabilities _capabilities;
     private readonly Action? _onTargetChanged;
     private bool _updating;
     private bool _disposed;
@@ -31,20 +31,26 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposabl
         _convert = convert;
         _convertBack = convertBack;
         _fallbackValue = fallbackValue;
-        _mode = mode;
+        _capabilities = BindingCapabilities.FromMode(mode);
         _observer = path.Attach(root);
 
         try
         {
-            _observer.Changed += OnSourceChanged;
+            if (_capabilities.ObservesSourceChanges)
+            {
+                _observer.Changed += OnSourceChanged;
+            }
 
-            if (mode == BindingMode.TwoWay)
+            if (_capabilities.AcceptsTargetCommit)
             {
                 _onTargetChanged = OnTargetChanged;
                 target.AddPropertyBindingCallback(targetProperty.Id, _onTargetChanged);
             }
 
-            OnSourceChanged();
+            if (_capabilities.ProvidesTargetValue)
+            {
+                OnSourceChanged();
+            }
         }
         catch
         {
@@ -117,10 +123,13 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposabl
         }
 
         _disposed = true;
-        _observer.Changed -= OnSourceChanged;
+        if (_capabilities.ObservesSourceChanges)
+        {
+            _observer.Changed -= OnSourceChanged;
+        }
         _observer.Dispose();
 
-        if (_mode == BindingMode.TwoWay && _onTargetChanged != null)
+        if (_capabilities.AcceptsTargetCommit && _onTargetChanged != null)
         {
             _target.RemovePropertyBindingCallback(_targetProperty.Id, _onTargetChanged);
         }

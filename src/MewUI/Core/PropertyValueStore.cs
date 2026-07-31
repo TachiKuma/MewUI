@@ -419,6 +419,9 @@ internal sealed class PropertyValueStore
         return entry.Value is AnimatedEntry || entry.Source != ValueSource.Default;
     }
 
+    internal bool HasValue(int propertyId, ValueSource source)
+        => HasSlot(GetEntry(propertyId), source);
+
     /// <summary>
     /// Gets the current visual value (animated if running, otherwise the base value).
     /// Used by the animation system to capture the "from" value.

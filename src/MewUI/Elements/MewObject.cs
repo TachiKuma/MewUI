@@ -445,6 +445,9 @@ public abstract class MewObject : IPropertyOwner
     internal bool HasPropertyBinding(int propertyId)
         => _propertyBindings?.ContainsKey(propertyId) == true;
 
+    internal bool HasBindingTargetValue(int propertyId)
+        => _propertyStore?.HasValue(propertyId, ValueSource.Binding) == true;
+
     private void DisposeExistingBinding(int propertyId)
     {
         if (_propertyBindings?.TryGetValue(propertyId, out var old) == true)
