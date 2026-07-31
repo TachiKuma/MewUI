@@ -430,6 +430,21 @@ internal sealed class PropertyValueStore
     internal bool HasValue(int propertyId, ValueSource source)
         => HasSlot(GetEntry(propertyId), source);
 
+    internal object? GetSourceValue(MewProperty property, ValueSource source)
+    {
+        var entry = GetEntry(property.Id);
+        if (!HasSlot(entry, source))
+        {
+            throw new InvalidOperationException(
+                $"Property '{property.Name}' has no {source} value.");
+        }
+
+        object? rawValue = entry.Shadow != null
+            ? entry.Shadow.Get(source)
+            : entry.RawValue;
+        return rawValue == null ? null : CoerceCandidate(property, rawValue);
+    }
+
     /// <summary>
     /// Gets the current visual value (animated if running, otherwise the base value).
     /// Used by the animation system to capture the "from" value.

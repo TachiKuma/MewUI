@@ -14,7 +14,6 @@ internal sealed class MewPropertyBinding<TProp, TSource> : IPropertyBinding
     private readonly Func<TSource, TProp> _convert;
     private readonly Func<TProp, TSource>? _convertBack;
     private readonly BindingCapabilities _capabilities;
-    private readonly Action? _onPropertyChanged;
     private bool _updating;
 
     public BindingCapabilities Capabilities => _capabilities;
@@ -43,12 +42,10 @@ internal sealed class MewPropertyBinding<TProp, TSource> : IPropertyBinding
                 static binding => binding.OnSourceChanged());
         }
 
-        if (_capabilities.AcceptsTargetCommit && convertBack != null)
-        {
-            _onPropertyChanged = OnPropertyChanged;
-            owner.AddPropertyBindingCallback(property.Id, _onPropertyChanged);
-        }
+    }
 
+    public void Initialize()
+    {
         if (_capabilities.ProvidesTargetValue)
         {
             OnSourceChanged();
@@ -71,17 +68,6 @@ internal sealed class MewPropertyBinding<TProp, TSource> : IPropertyBinding
         finally { _updating = false; }
     }
 
-    private void OnPropertyChanged()
-    {
-        if (_updating || _convertBack == null) return;
-        _updating = true;
-        try
-        {
-            _source.Value = _convertBack(_owner.GetBindingValue(_property));
-        }
-        finally { _updating = false; }
-    }
-
     public void UpdateTargetValue(object? value)
     {
         if (_updating) return;
@@ -93,15 +79,27 @@ internal sealed class MewPropertyBinding<TProp, TSource> : IPropertyBinding
         finally { _updating = false; }
     }
 
+    public object? CommitTargetValue(object? value)
+    {
+        if (_convertBack == null)
+        {
+            return value;
+        }
+
+        _updating = true;
+        try
+        {
+            _source.Value = _convertBack((TProp)value!);
+            return _convert(_source.Value);
+        }
+        finally { _updating = false; }
+    }
+
     public void Dispose()
     {
         if (_capabilities.ObservesSourceChanges)
         {
             WeakEventManager.RemoveHandler(ObservableValueWeakEvents<TSource>.Changed, _source, this);
-        }
-        if (_capabilities.AcceptsTargetCommit && _onPropertyChanged != null)
-        {
-            _owner.RemovePropertyBindingCallback(_property.Id, _onPropertyChanged);
         }
     }
 }

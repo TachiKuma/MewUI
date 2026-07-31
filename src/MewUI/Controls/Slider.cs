@@ -256,7 +256,10 @@ public sealed class Slider : RangeBase
             return;
         }
 
-        Value = clamped;
+        if (fromInput)
+            CommitValue(clamped);
+        else
+            Value = clamped;
     }
 
     protected override void OnDispose()

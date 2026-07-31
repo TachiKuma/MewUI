@@ -12,7 +12,6 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IPropertyB
     private readonly Func<TProp, TSource>? _convertBack;
     private readonly TProp _fallbackValue;
     private readonly BindingCapabilities _capabilities;
-    private readonly Action? _onTargetChanged;
     private bool _updating;
     private bool _disposed;
 
@@ -43,21 +42,19 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IPropertyB
                 _observer.Changed += OnSourceChanged;
             }
 
-            if (_capabilities.AcceptsTargetCommit)
-            {
-                _onTargetChanged = OnTargetChanged;
-                target.AddPropertyBindingCallback(targetProperty.Id, _onTargetChanged);
-            }
-
-            if (_capabilities.ProvidesTargetValue)
-            {
-                OnSourceChanged();
-            }
         }
         catch
         {
             Dispose();
             throw;
+        }
+    }
+
+    public void Initialize()
+    {
+        if (_capabilities.ProvidesTargetValue)
+        {
+            OnSourceChanged();
         }
     }
 
@@ -87,36 +84,6 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IPropertyB
         }
     }
 
-    private void OnTargetChanged()
-    {
-        if (_updating || _disposed)
-        {
-            return;
-        }
-
-        _updating = true;
-        try
-        {
-            if (!_observer.IsAvailable || _convertBack == null)
-            {
-                _target.PropertyStore.ClearSource(_targetProperty.Id, ValueSource.Local);
-                return;
-            }
-
-            _observer.Write(_convertBack(_target.GetBindingValue(_targetProperty)));
-
-            // Refresh the Binding candidate before removing the transient Local candidate, so
-            // source normalization is revealed as one final target value.
-            var normalized = _convert(_observer.CurrentValue);
-            _target.UpdateBindingTarget(_targetProperty, normalized);
-            _target.PropertyStore.ClearSource(_targetProperty.Id, ValueSource.Local);
-        }
-        finally
-        {
-            _updating = false;
-        }
-    }
-
     public void UpdateTargetValue(object? value)
     {
         if (_updating || _disposed)
@@ -128,6 +95,25 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IPropertyB
         try
         {
             _target.UpdateBindingTarget(_targetProperty, (TProp)value!);
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
+
+    public object? CommitTargetValue(object? value)
+    {
+        if (_disposed || !_observer.IsAvailable || _convertBack == null)
+        {
+            return value;
+        }
+
+        _updating = true;
+        try
+        {
+            _observer.Write(_convertBack((TProp)value!));
+            return _convert(_observer.CurrentValue);
         }
         finally
         {
@@ -149,9 +135,5 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IPropertyB
         }
         _observer.Dispose();
 
-        if (_capabilities.AcceptsTargetCommit && _onTargetChanged != null)
-        {
-            _target.RemovePropertyBindingCallback(_targetProperty.Id, _onTargetChanged);
-        }
     }
 }

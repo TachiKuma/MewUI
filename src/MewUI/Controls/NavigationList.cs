@@ -44,8 +44,11 @@ public class NavigationList : ScrollableItemsBase, ISelector, IIndexedSelector
     public NavigationList()
     {
         _selection = new SelectionSync(() => _itemsSource,
-            value => SetValue(SelectedIndexProperty, value),
-            value => SetValue(SelectedItemProperty, value));
+            value => SetCurrentValue(SelectedIndexProperty, value),
+            value => SetCurrentValue(SelectedItemProperty, value),
+            null,
+            value => CommitTargetValue(SelectedIndexProperty, value),
+            value => CommitTargetValue(SelectedItemProperty, value));
 
         _itemTemplate = CreateDefaultItemTemplate();
 

@@ -212,8 +212,16 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
         _syncingSelection = true;
         try
         {
-            SetValue(SelectedNodeProperty, _selectedNode);
-            SetValue(SelectedItemProperty, _selectedItem ?? _selectedNode);
+            if (wasSyncing)
+            {
+                SetCurrentValue(SelectedNodeProperty, _selectedNode);
+                SetCurrentValue(SelectedItemProperty, _selectedItem ?? _selectedNode);
+            }
+            else
+            {
+                CommitTargetValue(SelectedNodeProperty, _selectedNode);
+                CommitTargetValue(SelectedItemProperty, _selectedItem ?? _selectedNode);
+            }
         }
         finally { _syncingSelection = wasSyncing; }
         RefreshSelectedItems();

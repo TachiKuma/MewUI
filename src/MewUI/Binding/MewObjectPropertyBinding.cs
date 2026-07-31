@@ -36,8 +36,13 @@ internal sealed class MewObjectPropertyBinding<T> : IPropertyBinding
         // forward currently occupies the source property id (another binding may share it).
         _forwardEntry = source.AddPropertyForward(sourceProperty.Id, target, targetProperty);
 
-        // Initial sync.
-        target.UpdateBindingTarget(targetProperty, source.GetBindingValue(sourceProperty));
+    }
+
+    public void Initialize()
+    {
+        _target.UpdateBindingTarget(
+            _targetProperty,
+            _source.GetBindingValue(_sourceProperty));
     }
 
     public void Dispose()
@@ -49,4 +54,6 @@ internal sealed class MewObjectPropertyBinding<T> : IPropertyBinding
     {
         _target.UpdateBindingTarget(_targetProperty, (T)value!);
     }
+
+    public object? CommitTargetValue(object? value) => value;
 }
