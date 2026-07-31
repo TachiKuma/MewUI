@@ -583,7 +583,7 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
             }
             else
             {
-                SelectedIndex = index;
+                CommitTargetValue(SelectedIndexProperty, index);
             }
 
             ItemActivated?.Invoke(index);
@@ -645,7 +645,7 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
             }
             else
             {
-                SelectedIndex = target;
+                CommitTargetValue(SelectedIndexProperty, target);
             }
 
             ScrollIntoView(target);
@@ -867,7 +867,7 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
             return false;
         }
 
-        SelectedIndex = target;
+        CommitTargetValue(SelectedIndexProperty, target);
         ScrollIntoView(target);
         _tabFocusHelper.Schedule(target, moveForward);
         return true;

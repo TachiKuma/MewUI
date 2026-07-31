@@ -395,7 +395,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
 
                 if (existing != null && existing != source && existing.IsChecked)
                 {
-                    existing.IsChecked = false;
+                    existing.CommitIsChecked(false);
                 }
 
                 return;
@@ -414,7 +414,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
 
             if (existingScope != null && existingScope != source && existingScope.IsChecked)
             {
-                existingScope.IsChecked = false;
+                existingScope.CommitIsChecked(false);
             }
         }
 

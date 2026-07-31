@@ -328,12 +328,12 @@ public sealed partial class ComboBox : DropDownBase, ISelector, IIndexedSelector
             return;
         }
 
-        SelectedIndex = _popupList.SelectedIndex;
+        CommitTargetValue(SelectedIndexProperty, _popupList.SelectedIndex);
     }
 
     private void OnPopupListItemActivated(int index)
     {
-        SelectedIndex = index;
+        CommitTargetValue(SelectedIndexProperty, index);
         IsDropDownOpen = false;
     }
 
@@ -384,11 +384,15 @@ public sealed partial class ComboBox : DropDownBase, ISelector, IIndexedSelector
             {
                 if (e.Key == Key.Down)
                 {
-                    SelectedIndex = Math.Min(count - 1, SelectedIndex < 0 ? 0 : SelectedIndex + 1);
+                    CommitTargetValue(
+                        SelectedIndexProperty,
+                        Math.Min(count - 1, SelectedIndex < 0 ? 0 : SelectedIndex + 1));
                 }
                 else
                 {
-                    SelectedIndex = Math.Max(0, SelectedIndex <= 0 ? 0 : SelectedIndex - 1);
+                    CommitTargetValue(
+                        SelectedIndexProperty,
+                        Math.Max(0, SelectedIndex <= 0 ? 0 : SelectedIndex - 1));
                 }
             }
 
@@ -430,7 +434,7 @@ public sealed partial class ComboBox : DropDownBase, ISelector, IIndexedSelector
         int next = Math.Clamp(SelectedIndex - notches, 0, count - 1);
         if (next != SelectedIndex)
         {
-            SelectedIndex = next;
+            CommitTargetValue(SelectedIndexProperty, next);
         }
 
         e.Handled = true;

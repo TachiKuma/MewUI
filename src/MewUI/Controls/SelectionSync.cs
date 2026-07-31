@@ -45,9 +45,12 @@ internal sealed class SelectionSync
     {
         if (_syncing) return;
         _syncing = true;
-        try { _view().SelectedIndex = index; }
+        try
+        {
+            _view().SelectedIndex = index;
+            SyncFromModel();
+        }
         finally { _syncing = false; }
-        SyncFromModel();
     }
 
     /// <summary>Pushes a selected-item set from the bindable property down to the model.</summary>
@@ -55,9 +58,12 @@ internal sealed class SelectionSync
     {
         if (_syncing) return;
         _syncing = true;
-        try { _view().SelectedItem = item; }
+        try
+        {
+            _view().SelectedItem = item;
+            SyncFromModel();
+        }
         finally { _syncing = false; }
-        SyncFromModel();
     }
 
     /// <summary>

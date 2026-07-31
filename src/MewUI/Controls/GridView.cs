@@ -234,7 +234,7 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
         }
         else
         {
-            SelectedIndex = rowIndex;
+            CommitTargetValue(SelectedIndexProperty, rowIndex);
         }
     }
 
@@ -295,7 +295,7 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
             }
             else
             {
-                SelectedIndex = target;
+                CommitTargetValue(SelectedIndexProperty, target);
             }
 
             Focus();
@@ -345,7 +345,7 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
 
         if (SelectedIndex != found)
         {
-            SelectedIndex = found;
+            CommitTargetValue(SelectedIndexProperty, found);
         }
         else
         {
@@ -473,7 +473,7 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
             return false;
         }
 
-        SelectedIndex = targetIndex;
+        CommitTargetValue(SelectedIndexProperty, targetIndex);
         ScrollIntoView(targetIndex);
         _tabFocusHelper.Schedule(targetIndex, moveForward);
         return true;
