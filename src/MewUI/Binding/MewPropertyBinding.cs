@@ -11,7 +11,7 @@ internal sealed class MewPropertyBinding<T> : IDisposable
     private readonly MewObject _owner;
     private readonly MewProperty<T> _property;
     private readonly ObservableValue<T> _source;
-    private readonly BindingMode _mode;
+    private readonly BindingCapabilities _capabilities;
     private readonly Action? _onPropertyChanged;
     private bool _updating;
 
@@ -24,22 +24,28 @@ internal sealed class MewPropertyBinding<T> : IDisposable
         _owner = owner;
         _property = property;
         _source = source;
-        _mode = mode;
+        _capabilities = BindingCapabilities.FromMode(mode);
 
-        WeakEventManager.AddHandler(
-            ObservableValueWeakEvents<T>.Changed,
-            source,
-            this,
-            static binding => binding.OnSourceChanged());
+        if (_capabilities.ObservesSourceChanges)
+        {
+            WeakEventManager.AddHandler(
+                ObservableValueWeakEvents<T>.Changed,
+                source,
+                this,
+                static binding => binding.OnSourceChanged());
+        }
 
-        if (mode == BindingMode.TwoWay)
+        if (_capabilities.AcceptsTargetCommit)
         {
             _onPropertyChanged = OnPropertyChanged;
             owner.AddPropertyBindingCallback(property.Id, _onPropertyChanged);
         }
 
         // Initial sync from source.
-        OnSourceChanged();
+        if (_capabilities.ProvidesTargetValue)
+        {
+            OnSourceChanged();
+        }
     }
 
     private void OnSourceChanged()
@@ -84,9 +90,12 @@ internal sealed class MewPropertyBinding<T> : IDisposable
 
     public void Dispose()
     {
-        WeakEventManager.RemoveHandler(ObservableValueWeakEvents<T>.Changed, _source, this);
+        if (_capabilities.ObservesSourceChanges)
+        {
+            WeakEventManager.RemoveHandler(ObservableValueWeakEvents<T>.Changed, _source, this);
+        }
 
-        if (_mode == BindingMode.TwoWay && _onPropertyChanged != null)
+        if (_capabilities.AcceptsTargetCommit && _onPropertyChanged != null)
         {
             _owner.RemovePropertyBindingCallback(_property.Id, _onPropertyChanged);
         }

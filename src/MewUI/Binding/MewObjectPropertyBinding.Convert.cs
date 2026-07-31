@@ -15,7 +15,7 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
     private readonly MewProperty<TSource> _sourceProperty;
     private readonly Func<TSource, TProp> _convert;
     private readonly Func<TProp, TSource>? _convertBack;
-    private readonly BindingMode _mode;
+    private readonly BindingCapabilities _capabilities;
     private readonly WeakEventKey<MewObject, Action> _sourceChangedEvent;
     private readonly Action? _onTargetChanged;
     private bool _updating;
@@ -35,28 +35,34 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
         _sourceProperty = sourceProperty;
         _convert = convert;
         _convertBack = convertBack;
-        _mode = mode;
+        _capabilities = BindingCapabilities.FromMode(mode);
         // Source → Target
         _sourceChangedEvent = new WeakEventKey<MewObject, Action>(
             (owner, handler) => owner.AddPropertyBindingCallback(sourceProperty.Id, handler),
             (owner, handler) => owner.RemovePropertyBindingCallback(sourceProperty.Id, handler),
             requireStaticAccessors: false);
 
-        WeakEventManager.AddHandler(
-            _sourceChangedEvent,
-            source,
-            this,
-            static binding => binding.OnSourceChanged());
+        if (_capabilities.ObservesSourceChanges)
+        {
+            WeakEventManager.AddHandler(
+                _sourceChangedEvent,
+                source,
+                this,
+                static binding => binding.OnSourceChanged());
+        }
 
         // Target → Source (TwoWay)
-        if (mode == BindingMode.TwoWay && convertBack != null)
+        if (_capabilities.AcceptsTargetCommit && convertBack != null)
         {
             _onTargetChanged = OnTargetChanged;
             target.AddPropertyBindingCallback(targetProperty.Id, _onTargetChanged);
         }
 
         // Initial sync
-        OnSourceChanged();
+        if (_capabilities.ProvidesTargetValue)
+        {
+            OnSourceChanged();
+        }
     }
 
     private void OnSourceChanged()
@@ -95,8 +101,11 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
 
     public void Dispose()
     {
-        WeakEventManager.RemoveHandler(_sourceChangedEvent, _source, this);
-        if (_mode == BindingMode.TwoWay && _onTargetChanged != null)
+        if (_capabilities.ObservesSourceChanges)
+        {
+            WeakEventManager.RemoveHandler(_sourceChangedEvent, _source, this);
+        }
+        if (_capabilities.AcceptsTargetCommit && _onTargetChanged != null)
         {
             _target.RemovePropertyBindingCallback(_targetProperty.Id, _onTargetChanged);
         }

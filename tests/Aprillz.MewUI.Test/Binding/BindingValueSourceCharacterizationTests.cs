@@ -7,6 +7,34 @@ namespace MewUI.Test.Binding;
 public sealed class BindingValueSourceCharacterizationTests
 {
     [TestMethod]
+    public void BindingModes_MapToIndependentCapabilities()
+    {
+        Assert.AreEqual(
+            new BindingCapabilities(true, true, false),
+            BindingCapabilities.FromMode(BindingMode.OneWay));
+        Assert.AreEqual(
+            new BindingCapabilities(true, true, true),
+            BindingCapabilities.FromMode(BindingMode.TwoWay));
+    }
+
+    [TestMethod]
+    public void RegisteredBindingAndBindingValueSlot_AreIndependent()
+    {
+        var source = new ObservableValue<int>(0);
+        var target = new Target();
+
+        target.SetBinding(Target.ValueProperty, source, BindingMode.OneWay);
+
+        Assert.IsTrue(target.HasPropertyBinding(Target.ValueProperty.Id));
+        Assert.IsFalse(target.HasBindingTargetValue(Target.ValueProperty.Id));
+
+        source.Value = 1;
+
+        Assert.IsTrue(target.HasBindingTargetValue(Target.ValueProperty.Id));
+        Assert.AreEqual(ValueSource.Binding, target.PropertyStore.GetSource(Target.ValueProperty.Id));
+    }
+
+    [TestMethod]
     public void BindingPushAndDirectWrite_UseDifferentSources()
     {
         var source = new ObservableValue<int>(1);
