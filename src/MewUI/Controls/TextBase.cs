@@ -1206,7 +1206,7 @@ public abstract partial class TextBase : Control, ITextCompositionClient, ITextI
         _syncingTextProperty = true;
         try
         {
-            SetValue(property, GetTextCore());
+            CommitTargetValue(property, GetTextCore());
         }
         finally
         {

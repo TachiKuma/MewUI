@@ -88,7 +88,7 @@ public sealed class FluentExtensionCoverageTests
     }
 
     [TestMethod]
-    public void ConvertedBinding_WithConvertBack_UpdatesBothDirections()
+    public void ConvertedBinding_DirectWriteReplacesBindingWithLocalValue()
     {
         var source = new ObservableValue<int>(12);
         var textBox = new TextBox()
@@ -100,7 +100,10 @@ public sealed class FluentExtensionCoverageTests
         Assert.AreEqual("24", textBox.Text);
 
         textBox.Text = "36";
-        Assert.AreEqual(36, source.Value);
+        Assert.AreEqual(24, source.Value);
+
+        source.Value = 48;
+        Assert.AreEqual("36", textBox.Text);
     }
 
     [TestMethod]

@@ -89,7 +89,13 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
     {
         bool wasSyncing = _syncingSelection;
         _syncingSelection = true;
-        try { SetValue(SelectedItemProperty, SelectedTab); }
+        try
+        {
+            if (wasSyncing)
+                SetCurrentValue(SelectedItemProperty, SelectedTab);
+            else
+                CommitTargetValue(SelectedItemProperty, SelectedTab);
+        }
         finally { _syncingSelection = wasSyncing; }
     }
 

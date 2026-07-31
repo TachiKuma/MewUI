@@ -10,7 +10,6 @@ public abstract class MewObject : IPropertyOwner
     private PropertyValueStore? _propertyStore;
     private Dictionary<int, IPropertyBinding>? _propertyBindings;
     private Dictionary<int, Action>? _propertyBindingCallbacks;
-    private int _bindingTargetUpdatePropertyId = -1;
     // Value is a PropertyForwardEntry for the common single-forward case, or a
     // List<PropertyForwardEntry> once a second forward is registered for the same source property.
     private Dictionary<int, object>? _propertyForwards;
@@ -210,10 +209,17 @@ public abstract class MewObject : IPropertyOwner
                 $"Use SetValue(MewPropertyKey<T>, T) with the registered key.");
         }
 
-        if (_bindingTargetUpdatePropertyId == property.Id)
-            PropertyStore.SetBinding(property, value);
-        else
-            PropertyStore.SetLocal(property, value);
+        bool hadBinding = HasPropertyBinding(property.Id);
+        if (hadBinding)
+        {
+            DisposeExistingBinding(property.Id);
+        }
+
+        PropertyStore.SetLocal(property, value);
+        if (hadBinding)
+        {
+            PropertyStore.ClearSource(property.Id, ValueSource.Binding);
+        }
     }
 
     /// <summary>
@@ -223,31 +229,13 @@ public abstract class MewObject : IPropertyOwner
     internal void UpdateBindingTarget<T>(MewProperty<T> property, T value)
     {
         ThrowIfReadOnly(property);
-        int previousPropertyId = _bindingTargetUpdatePropertyId;
-        _bindingTargetUpdatePropertyId = property.Id;
-        try
-        {
-            PropertyStore.SetBinding(property, value);
-        }
-        finally
-        {
-            _bindingTargetUpdatePropertyId = previousPropertyId;
-        }
+        PropertyStore.SetBinding(property, value);
     }
 
     internal void UpdateBindingTarget(MewProperty property, object? value)
     {
         ThrowIfReadOnly(property);
-        int previousPropertyId = _bindingTargetUpdatePropertyId;
-        _bindingTargetUpdatePropertyId = property.Id;
-        try
-        {
-            PropertyStore.SetBinding(property, value);
-        }
-        finally
-        {
-            _bindingTargetUpdatePropertyId = previousPropertyId;
-        }
+        PropertyStore.SetBinding(property, value);
     }
 
     /// <summary>
@@ -267,6 +255,34 @@ public abstract class MewObject : IPropertyOwner
         }
 
         PropertyStore.SetLocal(property, value);
+    }
+
+    /// <summary>
+    /// Commits a target value to a TwoWay binding. OneWay bindings retain the target candidate
+    /// without updating their source, and an unbound property receives a local value.
+    /// </summary>
+    protected void CommitTargetValue<T>(MewProperty<T> property, T value)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        ThrowIfReadOnly(property);
+
+        if (_propertyBindings == null ||
+            !_propertyBindings.TryGetValue(property.Id, out var binding) ||
+            !binding.Capabilities.ProvidesTargetValue)
+        {
+            PropertyStore.SetLocal(property, value);
+            return;
+        }
+
+        binding.UpdateTargetValue(value);
+        if (!binding.Capabilities.AcceptsTargetCommit)
+        {
+            return;
+        }
+
+        object? candidate = PropertyStore.GetSourceValue(property, ValueSource.Binding);
+        object? normalized = binding.CommitTargetValue(candidate);
+        binding.UpdateTargetValue(normalized);
     }
 
     /// <summary>
@@ -327,7 +343,7 @@ public abstract class MewObject : IPropertyOwner
 
         var resolvedMode = mode ?? (property.BindsTwoWayByDefault ? BindingMode.TwoWay : BindingMode.OneWay);
         var binding = new MewPropertyBinding<T>(this, property, source, resolvedMode);
-        StorePropertyBinding(property.Id, binding);
+        ActivatePropertyBinding(property.Id, binding);
     }
 
     /// <summary>
@@ -356,7 +372,7 @@ public abstract class MewObject : IPropertyOwner
 
         var binding = new MewPropertyBinding<TProp, TSource>(
             this, property, source, convert, convertBack, resolvedMode);
-        StorePropertyBinding(property.Id, binding);
+        ActivatePropertyBinding(property.Id, binding);
     }
 
     /// <summary>
@@ -397,7 +413,7 @@ public abstract class MewObject : IPropertyOwner
             static value => value,
             resolvedMode,
             fallbackValue);
-        StorePropertyBinding(property.Id, binding);
+        ActivatePropertyBinding(property.Id, binding);
     }
 
     /// <summary>
@@ -448,7 +464,7 @@ public abstract class MewObject : IPropertyOwner
             convertBack,
             resolvedMode,
             fallbackValue);
-        StorePropertyBinding(property.Id, binding);
+        ActivatePropertyBinding(property.Id, binding);
     }
 
     /// <summary>
@@ -491,6 +507,21 @@ public abstract class MewObject : IPropertyOwner
     {
         _propertyBindings ??= new Dictionary<int, IPropertyBinding>(capacity: 2);
         _propertyBindings[propertyId] = binding;
+    }
+
+    private void ActivatePropertyBinding(int propertyId, IPropertyBinding binding)
+    {
+        StorePropertyBinding(propertyId, binding);
+        try
+        {
+            binding.Initialize();
+        }
+        catch
+        {
+            DisposeExistingBinding(propertyId);
+            PropertyStore.ClearSource(propertyId, ValueSource.Binding);
+            throw;
+        }
     }
 
     private void PreparePropertyBinding(int propertyId)
@@ -581,7 +612,7 @@ public abstract class MewObject : IPropertyOwner
         PreparePropertyBinding(property.Id);
 
         var binding = new MewObjectPropertyBinding<T>(this, property, source, sourceProperty);
-        StorePropertyBinding(property.Id, binding);
+        ActivatePropertyBinding(property.Id, binding);
     }
 
     /// <summary>
@@ -612,7 +643,7 @@ public abstract class MewObject : IPropertyOwner
 
         var binding = new MewObjectPropertyBinding<TProp, TSource>(
             this, property, source, sourceProperty, convert, convertBack, resolvedMode);
-        StorePropertyBinding(property.Id, binding);
+        ActivatePropertyBinding(property.Id, binding);
     }
 
     /// <summary>

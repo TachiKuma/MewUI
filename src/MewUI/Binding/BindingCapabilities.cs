@@ -24,5 +24,9 @@ internal interface IPropertyBinding : IDisposable
 {
     BindingCapabilities Capabilities { get; }
 
+    void Initialize();
+
     void UpdateTargetValue(object? value);
+
+    object? CommitTargetValue(object? value);
 }

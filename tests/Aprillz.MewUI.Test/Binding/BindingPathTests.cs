@@ -237,7 +237,7 @@ public sealed class BindingPathTests
         var path = BindingPath.From<Root>().Then(static value => value.Number);
 
         target.SetBinding(TestObject.ValueProperty, root, path, mode: BindingMode.TwoWay);
-        target.Value = 6;
+        target.CommitValue(6);
 
         Assert.AreEqual(6, root.Number.Value);
     }
@@ -254,7 +254,7 @@ public sealed class BindingPathTests
         target.SetBinding(TestObject.ValueProperty, root, path, mode: BindingMode.TwoWay);
         var newLeaf = new Leaf(2);
         root.OptionalNode.Value = new Node(newLeaf);
-        target.Value = 5;
+        target.CommitValue(5);
 
         Assert.AreEqual(1, oldLeaf.Amount.Value);
         Assert.AreEqual(5, newLeaf.Amount.Value);
@@ -273,7 +273,7 @@ public sealed class BindingPathTests
             path,
             mode: BindingMode.TwoWay,
             fallbackValue: -1);
-        target.Value = 20;
+        target.CommitValue(20);
 
         var leaf = new Leaf(7);
         root.OptionalNode.Value = new Node(leaf);
@@ -294,7 +294,7 @@ public sealed class BindingPathTests
             .Then(Node.ValueProperty);
 
         target.SetBinding(TestObject.ValueProperty, root, path, mode: BindingMode.TwoWay);
-        target.Value = 11;
+        target.CommitValue(11);
 
         Assert.AreEqual(11, node.Value);
     }
@@ -311,7 +311,7 @@ public sealed class BindingPathTests
             .Then(Node.ClampedValueProperty);
 
         target.SetBinding(TestObject.ValueProperty, root, path, mode: BindingMode.TwoWay);
-        target.Value = 99;
+        target.CommitValue(99);
 
         Assert.AreEqual(10, node.ClampedValue);
         Assert.AreEqual(10, target.Value);
@@ -398,7 +398,7 @@ public sealed class BindingPathTests
             static value => value.ToString(),
             static value => int.Parse(value!),
             mode: BindingMode.TwoWay);
-        target.Text = "12";
+        target.CommitText("12");
 
         Assert.AreEqual(12, root.Number.Value);
     }
@@ -412,7 +412,7 @@ public sealed class BindingPathTests
         var path = BindingPath.From<Root>().Then(static value => value.ClampedNumber);
 
         target.SetBinding(TestObject.ValueProperty, root, path, mode: BindingMode.TwoWay);
-        target.Value = 99;
+        target.CommitValue(99);
 
         Assert.AreEqual(10, root.ClampedNumber.Value);
         Assert.AreEqual(10, target.Value);
@@ -648,6 +648,10 @@ public sealed class BindingPathTests
             get => GetValue(TextProperty);
             set => SetValue(TextProperty, value);
         }
+
+        public void CommitValue(int value) => CommitTargetValue(ValueProperty, value);
+
+        public void CommitText(string? value) => CommitTargetValue(TextProperty, value);
     }
 
     private sealed class ColorObject : MewObject

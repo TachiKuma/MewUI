@@ -46,16 +46,18 @@ public sealed class BindingValueSourceCharacterizationTests
         target.Value = 2;
 
         Assert.AreEqual(ValueSource.Local, target.PropertyStore.GetSource(Target.ValueProperty.Id));
+        Assert.IsFalse(target.HasPropertyBinding(Target.ValueProperty.Id));
+        Assert.IsFalse(target.HasBindingTargetValue(Target.ValueProperty.Id));
     }
 
     [TestMethod]
-    public void OneWayBinding_LocalOverrideHidesButDoesNotStaleBindingValue()
+    public void ClearLocalValue_RemovesOnlyLocalAndPreservesBinding()
     {
         var source = new ObservableValue<int>(1);
         var target = new Target();
         target.SetBinding(Target.ValueProperty, source, BindingMode.OneWay);
 
-        target.Value = 2;
+        target.PropertyStore.SetLocal(Target.ValueProperty, 2);
         Assert.AreEqual(2, target.Value);
 
         source.Value = 3;
@@ -63,6 +65,22 @@ public sealed class BindingValueSourceCharacterizationTests
 
         target.ClearLocalValue(Target.ValueProperty);
         Assert.AreEqual(3, target.Value, "clearing Local reveals the latest Binding candidate");
+        Assert.IsTrue(target.HasPropertyBinding(Target.ValueProperty.Id));
+    }
+
+    [TestMethod]
+    public void DirectWriteThenClearLocalValue_DoesNotRestoreBinding()
+    {
+        var source = new ObservableValue<int>(1);
+        var target = new Target();
+        target.SetBinding(Target.ValueProperty, source, BindingMode.OneWay);
+
+        target.Value = 2;
+        source.Value = 3;
+        target.ClearLocalValue(Target.ValueProperty);
+
+        Assert.AreEqual(0, target.Value);
+        Assert.IsFalse(target.HasPropertyBinding(Target.ValueProperty.Id));
     }
 
     [TestMethod]
@@ -125,7 +143,7 @@ public sealed class BindingValueSourceCharacterizationTests
     }
 
     [TestMethod]
-    public void ObservableTwoWayBinding_DirectWriteUpdatesSourceExactlyOnce()
+    public void ObservableTwoWayBinding_DirectWriteRemovesBindingWithoutUpdatingSource()
     {
         var source = new ObservableValue<int>(1);
         var sourceChangeCount = 0;
@@ -135,12 +153,14 @@ public sealed class BindingValueSourceCharacterizationTests
 
         target.Value = 2;
 
-        Assert.AreEqual(2, source.Value);
-        Assert.AreEqual(1, sourceChangeCount);
+        Assert.AreEqual(1, source.Value);
+        Assert.AreEqual(0, sourceChangeCount);
+        Assert.AreEqual(2, target.Value);
+        Assert.IsFalse(target.HasPropertyBinding(Target.ValueProperty.Id));
     }
 
     [TestMethod]
-    public void ObservableTwoWayBinding_EqualDirectWriteDoesNotUpdateSource()
+    public void ObservableTwoWayBinding_EqualDirectWriteStillRemovesBinding()
     {
         var source = new ObservableValue<int>(1);
         var sourceChangeCount = 0;
@@ -151,26 +171,25 @@ public sealed class BindingValueSourceCharacterizationTests
         target.Value = 1;
 
         Assert.AreEqual(0, sourceChangeCount);
+        Assert.IsFalse(target.HasPropertyBinding(Target.ValueProperty.Id));
     }
 
     [TestMethod]
-    public void ObservableTwoWayBinding_SourceCoercionDoesNotRoundTripToTargetDuringWriteBack()
+    public void ObservableTwoWayBinding_TargetCommitReadsBackNormalizedSource()
     {
         var source = new ObservableValue<int>(1, static value => Math.Clamp(value, 0, 10));
         var target = new Target();
         target.SetBinding(Target.ValueProperty, source, BindingMode.TwoWay);
 
-        target.Value = 99;
+        target.Commit(99);
 
         Assert.AreEqual(10, source.Value, "the source coerces the submitted target value");
-        Assert.AreEqual(
-            99,
-            target.Value,
-            "the current re-entrancy guard suppresses the normalized source push back to the target");
+        Assert.AreEqual(10, target.Value);
+        Assert.IsTrue(target.HasPropertyBinding(Target.ValueProperty.Id));
     }
 
     [TestMethod]
-    public void ConvertedObservableTwoWayBinding_SourceCoercionDoesNotRoundTripToTarget()
+    public void ConvertedObservableTwoWayBinding_TargetCommitReadsBackNormalizedSource()
     {
         var source = new ObservableValue<int>(1, static value => Math.Clamp(value, 0, 10));
         var target = new TextTarget();
@@ -181,13 +200,59 @@ public sealed class BindingValueSourceCharacterizationTests
             static value => int.Parse(value),
             BindingMode.TwoWay);
 
-        target.Text = "99";
+        target.Commit("99");
 
         Assert.AreEqual(10, source.Value);
-        Assert.AreEqual(
-            "99",
-            target.Text,
-            "the converted Observable binding has the same suppressed normalization round trip");
+        Assert.AreEqual("10", target.Text);
+    }
+
+    [TestMethod]
+    public void OneWayBinding_TargetCommitDoesNotUpdateSource()
+    {
+        var source = new ObservableValue<int>(1);
+        var target = new Target();
+        target.SetBinding(Target.ValueProperty, source, BindingMode.OneWay);
+
+        target.Commit(2);
+
+        Assert.AreEqual(1, source.Value);
+        Assert.AreEqual(2, target.Value);
+        Assert.IsTrue(target.HasPropertyBinding(Target.ValueProperty.Id));
+
+        source.Value = 3;
+
+        Assert.AreEqual(3, target.Value);
+    }
+
+    [TestMethod]
+    public void TriggerChanges_DoNotWriteTwoWaySource()
+    {
+        var source = new ObservableValue<int>(1);
+        var target = new Target();
+        target.SetBinding(Target.ValueProperty, source, BindingMode.TwoWay);
+
+        target.PropertyStore.SetTrigger(Target.ValueProperty, 9);
+        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.Trigger);
+
+        Assert.AreEqual(1, source.Value);
+    }
+
+    [TestMethod]
+    public void ShadowedTargetCommit_SubmitsBindingCandidate()
+    {
+        var source = new ObservableValue<int>(1);
+        var target = new Target();
+        target.SetBinding(Target.ValueProperty, source, BindingMode.TwoWay);
+        target.PropertyStore.SetTrigger(Target.ValueProperty, 9);
+
+        target.Commit(2);
+
+        Assert.AreEqual(2, source.Value);
+        Assert.AreEqual(9, target.Value);
+
+        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.Trigger);
+
+        Assert.AreEqual(2, target.Value);
     }
 
     [TestMethod]
@@ -214,6 +279,8 @@ public sealed class BindingValueSourceCharacterizationTests
             get => GetValue(ValueProperty);
             set => SetValue(ValueProperty, value);
         }
+
+        public void Commit(int value) => CommitTargetValue(ValueProperty, value);
     }
 
     private sealed class TextTarget : MewObject
@@ -226,5 +293,7 @@ public sealed class BindingValueSourceCharacterizationTests
             get => GetValue(TextProperty);
             set => SetValue(TextProperty, value);
         }
+
+        public void Commit(string value) => CommitTargetValue(TextProperty, value);
     }
 }

@@ -30,8 +30,11 @@ public sealed class SegmentedControl : SegmentedBase, ISelector, IIndexedSelecto
     public SegmentedControl() : base(SegmentSizing.Uniform)
     {
         _selection = new SelectionSync(() => Items,
-            value => SetValue(SelectedIndexProperty, value),
-            value => SetValue(SelectedItemProperty, value));
+            value => SetCurrentValue(SelectedIndexProperty, value),
+            value => SetCurrentValue(SelectedItemProperty, value),
+            null,
+            value => CommitTargetValue(SelectedIndexProperty, value),
+            value => CommitTargetValue(SelectedItemProperty, value));
     }
 
     /// <summary>Gets or sets the selected segment index (-1 means no selection).</summary>

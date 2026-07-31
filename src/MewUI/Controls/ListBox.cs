@@ -288,9 +288,11 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
     public ListBox()
     {
         _selection = new SelectionSync(() => _itemsSource,
-            value => SetValue(SelectedIndexProperty, value),
-            value => SetValue(SelectedItemProperty, value),
-            value => SetValue(SelectedItemsPropertyKey, value));
+            value => SetCurrentValue(SelectedIndexProperty, value),
+            value => SetCurrentValue(SelectedItemProperty, value),
+            value => SetValue(SelectedItemsPropertyKey, value),
+            value => CommitTargetValue(SelectedIndexProperty, value),
+            value => CommitTargetValue(SelectedItemProperty, value));
 
         // Same policy as TreeView: items wider than the viewport scroll horizontally
         // (the presenter reports its natural width as the scroll extent).
