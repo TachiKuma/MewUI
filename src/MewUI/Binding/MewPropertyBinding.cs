@@ -53,9 +53,9 @@ internal sealed class MewPropertyBinding<T> : IDisposable
         try
         {
             var value = _source.Value;
-            if (!EqualityComparer<T>.Default.Equals(_owner.PropertyStore.GetValue(_property), value))
+            if (!EqualityComparer<T>.Default.Equals(_owner.GetBindingValue(_property), value))
             {
-                _owner.PropertyStore.SetLocal(_property, value);
+                _owner.SetBindingValue(_property, value);
             }
         }
         finally
@@ -74,7 +74,7 @@ internal sealed class MewPropertyBinding<T> : IDisposable
         _updating = true;
         try
         {
-            _source.Value = _owner.PropertyStore.GetValue(_property);
+            _source.Value = _owner.GetBindingValue(_property);
         }
         finally
         {

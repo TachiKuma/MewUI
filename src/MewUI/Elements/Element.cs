@@ -141,15 +141,10 @@ public abstract class Element : MewObject
                     NotifyVisualRootChanged(oldRoot, newRoot);
                 }
 
-                // Attaching gives the subtree a new inherited context, and the epoch flush alone is
-                // lazy: it discards cached values but tells no one. Anything that has to be pushed
-                // rather than re-read - a binding sourced from an inherited property, layout that
-                // short-circuits on unchanged constraints - would keep whatever it captured while the
-                // subtree was detached, including values from before an ancestor changed.
-                if (value != null)
-                {
-                    RefreshInheritedSubtree();
-                }
+                // Both attach and detach change the subtree's inherited context. The epoch flush is
+                // lazy, so eagerly diff observed/cached inherited values for consumers that need a
+                // pushed update instead of a later property read.
+                RefreshInheritedSubtree();
             }
         }
     }
@@ -883,7 +878,7 @@ public abstract class Element : MewObject
     /// value from the parent chain and caches it, so a re-resolve during inherited-change propagation
     /// can read and forward the fresh value without knowing the property's static type.
     /// </summary>
-    internal object? ResolveInheritedValueBoxed(MewProperty property)
+    internal override object? ResolveInheritedValueBoxed(MewProperty property)
     {
         EnsureInheritedEpoch();
 
@@ -958,7 +953,7 @@ public abstract class Element : MewObject
                     continue;
                 }
 
-                object? newValue = element.ResolveInheritedValueBoxed(property);
+                object? newValue = element.GetBindingValue(property);
                 if (Equals(oldValues[i], newValue))
                 {
                     continue;

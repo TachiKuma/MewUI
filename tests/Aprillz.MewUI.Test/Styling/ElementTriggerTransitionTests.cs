@@ -169,22 +169,21 @@ public sealed class ElementTriggerTransitionTests
     }
 
     [TestMethod]
-    public void TriggerShadowedByABinding_IsPreserved_AndRevealedWhenLocalClears()
+    public void TriggerShadowsBinding_AndRevealsItsLatestValueWhenConditionLeaves()
     {
-        // The combination is allowed and fully defined by tier priority: the binding's Local value
-        // shadows the trigger value, which stays in its slot underneath.
+        // The combination is allowed and fully defined by tier priority: ElementTrigger sits above
+        // Binding, whose candidate continues to update underneath.
         var image = new Image { Triggers = [DimTrigger()] };
         image.Bind(UIElement.OpacityProperty, image, UIElement.IsEffectivelyEnabledProperty,
             (bool enabled) => enabled ? 1.0 : 0.7);
         var root = Parent(image);
 
         root.IsEnabled = false;
-        Assert.AreEqual(0.7, image.Opacity, "the binding's Local value shadows the trigger value");
+        Assert.AreEqual(0.5, image.Opacity, "the active trigger shadows Binding");
 
-        image.ClearBinding(UIElement.OpacityProperty);
-        image.PropertyStore.ClearLocal(UIElement.OpacityProperty);
+        root.IsEnabled = true;
 
-        Assert.AreEqual(0.5, image.Opacity, "clearing Local reveals the preserved trigger value");
+        Assert.AreEqual(1.0, image.Opacity, "leaving the trigger reveals the latest Binding value");
     }
 
     [TestMethod]

@@ -81,7 +81,7 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposabl
 
     private void OnTargetChanged()
     {
-        if (_updating || _disposed || !_observer.IsAvailable || _convertBack == null)
+        if (_updating || _disposed)
         {
             return;
         }
@@ -89,16 +89,19 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposabl
         _updating = true;
         try
         {
-            _observer.Write(_convertBack(_target.GetBindingValue(_targetProperty)));
-            if (_observer.IsAvailable)
+            if (!_observer.IsAvailable || _convertBack == null)
             {
-                var normalized = _convert(_observer.CurrentValue);
-                if (!EqualityComparer<TProp>.Default.Equals(
-                        _target.GetBindingValue(_targetProperty), normalized))
-                {
-                    _target.SetBindingValue(_targetProperty, normalized);
-                }
+                _target.PropertyStore.ClearSource(_targetProperty.Id, ValueSource.Local);
+                return;
             }
+
+            _observer.Write(_convertBack(_target.GetBindingValue(_targetProperty)));
+
+            // Refresh the Binding candidate before removing the transient Local candidate, so
+            // source normalization is revealed as one final target value.
+            var normalized = _convert(_observer.CurrentValue);
+            _target.SetBindingValue(_targetProperty, normalized);
+            _target.PropertyStore.ClearSource(_targetProperty.Id, ValueSource.Local);
         }
         finally
         {

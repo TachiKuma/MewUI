@@ -7,13 +7,13 @@ namespace MewUI.Test.Binding;
 public sealed class BindingValueSourceCharacterizationTests
 {
     [TestMethod]
-    public void BindingPushAndDirectWrite_CurrentlyUseTheSameLocalSource()
+    public void BindingPushAndDirectWrite_UseDifferentSources()
     {
         var source = new ObservableValue<int>(1);
         var target = new Target();
         target.SetBinding(Target.ValueProperty, source, BindingMode.OneWay);
 
-        Assert.AreEqual(ValueSource.Local, target.PropertyStore.GetSource(Target.ValueProperty.Id));
+        Assert.AreEqual(ValueSource.Binding, target.PropertyStore.GetSource(Target.ValueProperty.Id));
 
         target.Value = 2;
 
@@ -21,22 +21,24 @@ public sealed class BindingValueSourceCharacterizationTests
     }
 
     [TestMethod]
-    public void OneWayBinding_DirectLocalWriteIsOverwrittenByNextSourcePush()
+    public void OneWayBinding_LocalOverrideHidesButDoesNotStaleBindingValue()
     {
         var source = new ObservableValue<int>(1);
         var target = new Target();
         target.SetBinding(Target.ValueProperty, source, BindingMode.OneWay);
 
         target.Value = 2;
-        Assert.AreEqual(2, target.Value, "a direct write currently shares the Local slot");
+        Assert.AreEqual(2, target.Value);
 
         source.Value = 3;
+        Assert.AreEqual(2, target.Value, "Local remains the effective source");
 
-        Assert.AreEqual(3, target.Value, "the next binding push currently overwrites the direct write");
+        target.PropertyStore.ClearLocal(Target.ValueProperty);
+        Assert.AreEqual(3, target.Value, "clearing Local reveals the latest Binding candidate");
     }
 
     [TestMethod]
-    public void ObservableBinding_ClearBindingPreservesTheLastLocalValue()
+    public void ObservableBinding_ClearBindingRemovesItsValueSlot()
     {
         var source = new ObservableValue<int>(4);
         var target = new Target();
@@ -45,7 +47,7 @@ public sealed class BindingValueSourceCharacterizationTests
         target.ClearBinding(Target.ValueProperty);
         source.Value = 5;
 
-        Assert.AreEqual(4, target.Value);
+        Assert.AreEqual(0, target.Value);
     }
 
     [TestMethod]
