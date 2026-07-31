@@ -1,5 +1,3 @@
-using System.Numerics;
-
 namespace Aprillz.MewUI;
 
 /// <summary>
@@ -22,7 +20,8 @@ public sealed class StateTrigger
 
     /// <summary>
     /// Setter values to apply when this trigger matches.
-    /// May contain both <see cref="Setter"/> and <see cref="TargetSetter"/>.
+    /// May contain <see cref="Setter"/>, <see cref="UnsetSetter"/>, and
+    /// <see cref="TargetSetter"/> declarations.
     /// </summary>
     public required IReadOnlyList<SetterBase> Setters { get; init; }
 
@@ -31,13 +30,6 @@ public sealed class StateTrigger
     /// </summary>
     public bool Matches(VisualStateFlags flags)
         => (flags & Match) == Match && (flags & Exclude) == 0;
-
-    /// <summary>
-    /// Specificity - number of bits set in <see cref="Match"/>.
-    /// Higher specificity wins when multiple triggers match for the same property.
-    /// Ties are broken by declaration order (later wins).
-    /// </summary>
-    public int Specificity => BitOperations.PopCount((uint)Match);
 }
 
 /// <summary>
