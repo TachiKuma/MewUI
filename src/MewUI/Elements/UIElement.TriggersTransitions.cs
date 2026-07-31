@@ -13,8 +13,8 @@ public abstract partial class UIElement
     private ElementTrigger[]? _elementTriggers;
     // Condition property ids the evaluation callback is registered on, for symmetric removal.
     private List<int>? _observedTriggerConditionIds;
-    // Property ids currently holding a value applied by a matching trigger.
-    private List<int>? _appliedTriggerPropertyIds;
+    private Dictionary<int, ResolvedElementTriggerValue>? _appliedTriggerValues;
+    private Dictionary<int, ResolvedElementTriggerValue>? _nextTriggerValues;
     private Action? _evaluateTriggersCallback;
     private bool _evaluatingElementTriggers;
     private bool _elementTriggerReevalPending;
@@ -45,9 +45,8 @@ public abstract partial class UIElement
     /// value, its setters apply above style values; leaving the condition removes them, revealing
     /// whatever is underneath. Later triggers win for the same target property. The list is
     /// snapshotted and validated on assignment; to change the set, assign a new list.
-    /// On a <see cref="Control"/>, the style system's state triggers currently share the same value
-    /// slot, so a style whose triggers set the same property can overwrite these; prefer element
-    /// triggers on non-control elements until that separation lands.
+    /// Style state triggers remain in the Style slot, so these values keep their independent,
+    /// higher-priority ElementTrigger slot on controls as well as non-control elements.
     /// </summary>
     public IReadOnlyList<ElementTrigger>? Triggers
     {
@@ -57,14 +56,13 @@ public abstract partial class UIElement
             ElementTrigger[]? snapshot = value == null ? null : [.. value];
             ValidateElementTriggers(snapshot);
             DetachTriggerObservers();
-            ClearAppliedTriggerValues();
             _elementTriggers = snapshot;
             if (snapshot != null)
             {
                 PropertyStore.AnimateSetCallback ??= TryAnimateExternalSet;
                 AttachTriggerObservers();
-                EvaluateElementTriggers();
             }
+            EvaluateElementTriggers();
         }
     }
 
@@ -170,24 +168,6 @@ public abstract partial class UIElement
     }
 
     /// <summary>
-    /// Removes every trigger-applied value without animation. Used when the trigger list itself is
-    /// replaced: the old list's effects must not survive it.
-    /// </summary>
-    private void ClearAppliedTriggerValues()
-    {
-        if (_appliedTriggerPropertyIds == null)
-        {
-            return;
-        }
-
-        for (int i = 0; i < _appliedTriggerPropertyIds.Count; i++)
-        {
-            PropertyStore.ClearSource(_appliedTriggerPropertyIds[i], ValueSource.Trigger);
-        }
-        _appliedTriggerPropertyIds.Clear();
-    }
-
-    /// <summary>
     /// Re-applies the trigger set from current condition values. Runs when a condition property
     /// changes and when the theme changes (theme-resolver setters resolve against the new theme).
     /// In-list feedback is a configuration error (validated at assignment); reentry through
@@ -230,72 +210,71 @@ public abstract partial class UIElement
     private void EvaluateElementTriggersCore()
     {
         var triggers = _elementTriggers;
-        if (triggers == null && _appliedTriggerPropertyIds == null)
+        if (triggers == null && _appliedTriggerValues == null)
         {
             return;
         }
 
+        _nextTriggerValues ??= new Dictionary<int, ResolvedElementTriggerValue>(capacity: 2);
+        _nextTriggerValues.Clear();
+        var theme = (this as FrameworkElement)?.ThemeInternal;
+
         // Later matching triggers overwrite earlier ones per property: declaration order, no specificity.
-        Dictionary<int, SetterBase>? winners = null;
         if (triggers != null)
         {
             for (int i = 0; i < triggers.Length; i++)
             {
                 var trigger = triggers[i];
-                if (!trigger.Matches(PropertyStore.GetBoxedValue(trigger.Property)))
+                if (!trigger.Matches(GetBindingValue(trigger.Property)))
                 {
                     continue;
                 }
 
-                winners ??= new Dictionary<int, SetterBase>(capacity: 2);
                 for (int j = 0; j < trigger.Setters.Count; j++)
                 {
-                    winners[trigger.Setters[j].Property.Id] = trigger.Setters[j];
+                    var setter = trigger.Setters[j];
+                    if (setter.ThemeResolver != null && theme == null)
+                    {
+                        continue;
+                    }
+
+                    _nextTriggerValues[setter.Property.Id] =
+                        new ResolvedElementTriggerValue(setter.Property, setter.ResolveValue(theme!));
                 }
             }
         }
 
-        // Left by a condition: remove, animating the reveal when a transition is registered.
-        if (_appliedTriggerPropertyIds != null)
+        if (_appliedTriggerValues != null)
         {
-            for (int i = _appliedTriggerPropertyIds.Count - 1; i >= 0; i--)
+            foreach (var pair in _appliedTriggerValues)
             {
-                int propertyId = _appliedTriggerPropertyIds[i];
-                if (winners == null || !winners.ContainsKey(propertyId))
+                if (!_nextTriggerValues.ContainsKey(pair.Key))
                 {
-                    _appliedTriggerPropertyIds.RemoveAt(i);
-                    ClearTriggerValueAnimated(propertyId);
+                    ClearTriggerValueAnimated(pair.Key);
                 }
             }
         }
 
-        if (winners == null)
+        foreach (var pair in _nextTriggerValues)
         {
-            return;
-        }
-
-        var theme = (this as FrameworkElement)?.ThemeInternal;
-        _appliedTriggerPropertyIds ??= new List<int>(capacity: 2);
-        foreach (var pair in winners)
-        {
-            var setter = pair.Value;
-            if (setter.ThemeResolver != null && theme == null)
+            if (_appliedTriggerValues != null &&
+                _appliedTriggerValues.TryGetValue(pair.Key, out var oldValue) &&
+                Equals(oldValue.Value, pair.Value.Value))
             {
                 continue;
             }
 
-            object value = setter.ResolveValue(theme!);
-            if (!TryAnimateExternalSet(setter.Property, value, ValueSource.Trigger))
+            if (!TryAnimateExternalSet(pair.Value.Property, pair.Value.Value, ValueSource.Trigger))
             {
-                PropertyStore.SetValue(setter.Property, value, ValueSource.Trigger);
-            }
-
-            if (!_appliedTriggerPropertyIds.Contains(pair.Key))
-            {
-                _appliedTriggerPropertyIds.Add(pair.Key);
+                PropertyStore.SetValue(pair.Value.Property, pair.Value.Value, ValueSource.Trigger);
             }
         }
+
+        (_appliedTriggerValues, _nextTriggerValues) =
+            (_nextTriggerValues, _appliedTriggerValues);
     }
+
+    private readonly record struct ResolvedElementTriggerValue(MewProperty Property, object Value);
 
     private void ClearTriggerValueAnimated(int propertyId)
     {
@@ -307,13 +286,16 @@ public abstract partial class UIElement
             return;
         }
 
-        // The clear reveals the slot underneath; animate from what was showing to what emerged.
-        object? from = PropertyStore.GetCurrentVisualValue(propertyId) ?? PropertyStore.GetBoxedValue(property);
-        PropertyStore.ClearSource(propertyId, ValueSource.Trigger);
-        object to = PropertyStore.GetBoxedValue(property);
-        if (from != null)
+        object? from = PropertyStore.GetCurrentVisualValue(propertyId) ?? GetBindingValue(property);
+        var mutation = PropertyStore.ClearSource(propertyId, ValueSource.Trigger);
+        if (mutation.IsEffectiveChange && from != null && mutation.NewValue != null)
         {
-            Animator.AnimateFromTo(property, from, to, transition.Duration, transition.Easing);
+            Animator.AnimateFromTo(
+                property,
+                from,
+                mutation.NewValue,
+                transition.Duration,
+                transition.Easing);
         }
     }
 
@@ -331,22 +313,22 @@ public abstract partial class UIElement
             return false;
         }
 
-        if (!PropertyStore.HasTargetValue(property.Id))
+        object? from = PropertyStore.GetCurrentVisualValue(property.Id) ?? GetBindingValue(property);
+        var mutation = PropertyStore.SetValue(property, value, source);
+        if (!mutation.IsEffectiveChange)
         {
-            // No base slot yet, but the default it resolves to is what is on screen, so it is a
-            // legitimate from-value; the animator's own first-set rule would snap here.
-            object from = PropertyStore.GetBoxedValue(property);
-            if (Equals(from, value))
-            {
-                return false;
-            }
-
-            PropertyStore.SetValue(property, value, source);
-            Animator.AnimateFromTo(property, from, value, transition.Duration, transition.Easing);
             return true;
         }
 
-        Animator.Animate(property, value, transition.Duration, transition.Easing, source);
+        if (from != null && mutation.NewValue != null)
+        {
+            Animator.AnimateFromTo(
+                property,
+                from,
+                mutation.NewValue,
+                transition.Duration,
+                transition.Easing);
+        }
         return true;
     }
 

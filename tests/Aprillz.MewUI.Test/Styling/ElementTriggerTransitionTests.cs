@@ -89,6 +89,35 @@ public sealed class ElementTriggerTransitionTests
     }
 
     [TestMethod]
+    public void ReplacingTheTriggerList_ChangesAWinningPropertyOnce()
+    {
+        var element = new TrackingElement { Triggers = [DimTrigger()] };
+        var root = Parent(element);
+        root.IsEnabled = false;
+        Assert.AreEqual(0.5, element.Opacity);
+        element.ResetOpacityChanges();
+
+        element.Triggers = [DimTrigger(0.25)];
+
+        Assert.AreEqual(0.25, element.Opacity);
+        Assert.AreEqual(1, element.OpacityChanges, "the old winner is replaced without exposing the base value");
+    }
+
+    [TestMethod]
+    public void ReplacingTheTriggerList_WithTheSameWinnerDoesNotNotify()
+    {
+        var element = new TrackingElement { Triggers = [DimTrigger()] };
+        var root = Parent(element);
+        root.IsEnabled = false;
+        element.ResetOpacityChanges();
+
+        element.Triggers = [DimTrigger()];
+
+        Assert.AreEqual(0.5, element.Opacity);
+        Assert.AreEqual(0, element.OpacityChanges);
+    }
+
+    [TestMethod]
     public void TriggerValue_SitsBelowLocal()
     {
         var image = new Image { Triggers = [DimTrigger()] };
@@ -303,5 +332,21 @@ public sealed class ElementTriggerTransitionTests
         root.IsEnabled = false;
 
         Assert.AreEqual(0.5, text.Opacity);
+    }
+
+    private sealed class TrackingElement : FrameworkElement
+    {
+        public int OpacityChanges { get; private set; }
+
+        public void ResetOpacityChanges() => OpacityChanges = 0;
+
+        protected override void OnMewPropertyChanged(MewProperty property)
+        {
+            base.OnMewPropertyChanged(property);
+            if (property == OpacityProperty)
+            {
+                OpacityChanges++;
+            }
+        }
     }
 }
