@@ -95,6 +95,29 @@ public abstract class MewObject : IPropertyOwner
         => (_propertyForwards?.ContainsKey(propertyId) ?? false)
            || (_propertyBindingCallbacks?.ContainsKey(propertyId) ?? false);
 
+    /// <summary>Adds the ids of every property something is observing on this object.</summary>
+    internal void GetObservedPropertyIds(List<int> result)
+    {
+        if (_propertyForwards != null)
+        {
+            foreach (int id in _propertyForwards.Keys)
+            {
+                result.Add(id);
+            }
+        }
+
+        if (_propertyBindingCallbacks != null)
+        {
+            foreach (int id in _propertyBindingCallbacks.Keys)
+            {
+                if (!result.Contains(id))
+                {
+                    result.Add(id);
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// Fires observers (forwards/binding callbacks) for an inherited-value change that was resolved
     /// outside the normal SetValue path. Does not run OnMewPropertyChanged (the caller already

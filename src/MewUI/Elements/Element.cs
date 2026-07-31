@@ -140,6 +140,16 @@ public abstract class Element : MewObject
                 {
                     NotifyVisualRootChanged(oldRoot, newRoot);
                 }
+
+                // Attaching gives the subtree a new inherited context, and the epoch flush alone is
+                // lazy: it discards cached values but tells no one. Anything that has to be pushed
+                // rather than re-read - a binding sourced from an inherited property, layout that
+                // short-circuits on unchanged constraints - would keep whatever it captured while the
+                // subtree was detached, including values from before an ancestor changed.
+                if (value != null)
+                {
+                    RefreshInheritedSubtree();
+                }
             }
         }
     }
@@ -899,6 +909,7 @@ public abstract class Element : MewObject
     internal void RefreshInheritedSubtree()
     {
         List<int> inheritedIds = new();
+        List<int> observedIds = new();
         List<object?> oldValues = new();
 
         VisualTree.Visit(this, element =>
@@ -910,6 +921,21 @@ public abstract class Element : MewObject
 
             inheritedIds.Clear();
             element.PropertyStore.GetInheritedPropertyIds(inheritedIds);
+
+            // An inherited property nobody has resolved yet has no cached entry, but a binding
+            // sourced from it still captured the registered default when it was created; include
+            // whatever is observed so those bindings pick the value up on attach.
+            observedIds.Clear();
+            element.GetObservedPropertyIds(observedIds);
+            for (int i = 0; i < observedIds.Count; i++)
+            {
+                int id = observedIds[i];
+                if (!inheritedIds.Contains(id) && MewPropertyRegistry.GetProperty(id) is MewProperty observed && observed.Inherits)
+                {
+                    inheritedIds.Add(id);
+                }
+            }
+
             if (inheritedIds.Count == 0)
             {
                 return;

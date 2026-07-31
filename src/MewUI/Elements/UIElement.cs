@@ -133,9 +133,7 @@ public abstract partial class UIElement : Element
             MewPropertyOptions.None);
 
     /// <summary>
-    /// Re-resolves cached inherited values for the subtree when it is attached to a new parent,
-    /// so layout and observers react to values that changed with the chain. Detach keeps the
-    /// caches; the context-version epoch flushes them lazily on the next read.
+    /// Re-resolves the effective enabled state when the parent chain changes.
     /// </summary>
     protected override void OnParentChanged()
     {
@@ -143,11 +141,6 @@ public abstract partial class UIElement : Element
 
         // Both directions matter: attaching may inherit a disabled ancestor, detaching drops one.
         RefreshEnabledSubtree();
-
-        if (Parent != null)
-        {
-            RefreshInheritedSubtree();
-        }
     }
 
     /// <summary>
