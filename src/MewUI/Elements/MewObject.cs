@@ -8,7 +8,7 @@ namespace Aprillz.MewUI.Controls;
 public abstract class MewObject : IPropertyOwner
 {
     private PropertyValueStore? _propertyStore;
-    private Dictionary<int, IDisposable>? _propertyBindings;
+    private Dictionary<int, IPropertyBinding>? _propertyBindings;
     private Dictionary<int, Action>? _propertyBindingCallbacks;
     private int _bindingTargetUpdatePropertyId = -1;
     // Value is a PropertyForwardEntry for the common single-forward case, or a
@@ -217,10 +217,10 @@ public abstract class MewObject : IPropertyOwner
     }
 
     /// <summary>
-    /// Writes a local property value for the binding infrastructure without bypassing read-only,
-    /// validation, or coercion rules.
+    /// Updates a binding-owned target value without bypassing read-only, validation, or coercion
+    /// rules.
     /// </summary>
-    internal void SetBindingValue<T>(MewProperty<T> property, T value)
+    internal void UpdateBindingTarget<T>(MewProperty<T> property, T value)
     {
         ThrowIfReadOnly(property);
         int previousPropertyId = _bindingTargetUpdatePropertyId;
@@ -235,7 +235,7 @@ public abstract class MewObject : IPropertyOwner
         }
     }
 
-    internal void SetBindingValue(MewProperty property, object? value)
+    internal void UpdateBindingTarget(MewProperty property, object? value)
     {
         ThrowIfReadOnly(property);
         int previousPropertyId = _bindingTargetUpdatePropertyId;
@@ -248,6 +248,36 @@ public abstract class MewObject : IPropertyOwner
         {
             _bindingTargetUpdatePropertyId = previousPropertyId;
         }
+    }
+
+    /// <summary>
+    /// Changes the current target value without replacing a binding. A later binding update can
+    /// replace this value. When no binding supplies a target value, this sets a local value.
+    /// </summary>
+    public void SetCurrentValue<T>(MewProperty<T> property, T value)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        ThrowIfReadOnly(property);
+
+        if (_propertyBindings?.TryGetValue(property.Id, out var binding) == true &&
+            binding.Capabilities.ProvidesTargetValue)
+        {
+            binding.UpdateTargetValue(value);
+            return;
+        }
+
+        PropertyStore.SetLocal(property, value);
+    }
+
+    /// <summary>
+    /// Clears only the local value for a property. Attached bindings and their target values are
+    /// preserved.
+    /// </summary>
+    public void ClearLocalValue<T>(MewProperty<T> property)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        ThrowIfReadOnly(property);
+        PropertyStore.ClearLocalValue(property);
     }
 
     /// <summary>
@@ -457,9 +487,9 @@ public abstract class MewObject : IPropertyOwner
         }
     }
 
-    private void StorePropertyBinding(int propertyId, IDisposable binding)
+    private void StorePropertyBinding(int propertyId, IPropertyBinding binding)
     {
-        _propertyBindings ??= new Dictionary<int, IDisposable>(capacity: 2);
+        _propertyBindings ??= new Dictionary<int, IPropertyBinding>(capacity: 2);
         _propertyBindings[propertyId] = binding;
     }
 
@@ -538,9 +568,8 @@ public abstract class MewObject : IPropertyOwner
 
     /// <summary>
     /// Binds a <see cref="MewProperty{T}"/> on this object to a <see cref="MewProperty{T}"/> on a source object.
-    /// When the source property changes, this object's property is written as a local value,
-    /// overwriting any local value set on this object; to set a local value over a bound property,
-    /// clear the binding first. Replaces any existing binding for the same property.
+    /// When the source property changes, this object's binding value is updated without replacing
+    /// a local value. Replaces any existing binding for the same property.
     /// </summary>
     public void SetBinding<T>(MewProperty<T> property, MewObject source, MewProperty<T> sourceProperty)
     {
@@ -637,7 +666,7 @@ internal sealed class PropertyForwardEntry
     public void UpdateTarget(MewObject target, object? value)
     {
         if (TargetSource == ValueSource.Binding)
-            target.SetBindingValue(TargetProperty, value);
+            target.UpdateBindingTarget(TargetProperty, value);
         else
             target.PropertyStore.SetValue(TargetProperty, value, TargetSource);
     }

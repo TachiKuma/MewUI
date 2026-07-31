@@ -81,7 +81,7 @@ public sealed class PropertyMultiSlotTests
         owner.PropertyStore.SetLocal(Prop, 30);
         Assert.AreEqual(30, owner.Value);
 
-        owner.PropertyStore.ClearLocal(Prop);
+        owner.PropertyStore.ClearLocalValue(Prop);
         Assert.AreEqual(20, owner.Value, "clearing local reveals the trigger");
 
         owner.PropertyStore.ClearSource(Prop.Id, ValueSource.Trigger);
@@ -115,7 +115,7 @@ public sealed class PropertyMultiSlotTests
         Assert.IsNull(owner.PropertyStore.GetValue(strProp));
 
         // Clearing the local null reveals the preserved style value.
-        owner.PropertyStore.ClearLocal(strProp);
+        owner.PropertyStore.ClearLocalValue(strProp);
         Assert.AreEqual("styled", owner.PropertyStore.GetValue(strProp));
     }
 

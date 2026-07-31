@@ -6,7 +6,7 @@ namespace Aprillz.MewUI;
 /// Bridges a <see cref="MewProperty{T}"/> on a <see cref="MewObject"/> to an <see cref="ObservableValue{T}"/>.
 /// Handles cycle prevention automatically via a re-entrancy guard.
 /// </summary>
-internal sealed class MewPropertyBinding<T> : IDisposable
+internal sealed class MewPropertyBinding<T> : IPropertyBinding
 {
     private readonly MewObject _owner;
     private readonly MewProperty<T> _property;
@@ -14,6 +14,8 @@ internal sealed class MewPropertyBinding<T> : IDisposable
     private readonly BindingCapabilities _capabilities;
     private readonly Action? _onPropertyChanged;
     private bool _updating;
+
+    public BindingCapabilities Capabilities => _capabilities;
 
     public MewPropertyBinding(
         MewObject owner,
@@ -61,7 +63,7 @@ internal sealed class MewPropertyBinding<T> : IDisposable
             var value = _source.Value;
             if (!EqualityComparer<T>.Default.Equals(_owner.GetBindingValue(_property), value))
             {
-                _owner.SetBindingValue(_property, value);
+                _owner.UpdateBindingTarget(_property, value);
             }
         }
         finally
@@ -81,6 +83,24 @@ internal sealed class MewPropertyBinding<T> : IDisposable
         try
         {
             _source.Value = _owner.GetBindingValue(_property);
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
+
+    public void UpdateTargetValue(object? value)
+    {
+        if (_updating)
+        {
+            return;
+        }
+
+        _updating = true;
+        try
+        {
+            _owner.UpdateBindingTarget(_property, (T)value!);
         }
         finally
         {

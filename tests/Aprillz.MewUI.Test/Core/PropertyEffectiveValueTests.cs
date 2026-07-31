@@ -138,7 +138,7 @@ public sealed class PropertyEffectiveValueTests
         Assert.AreEqual(2, owner.Value);
 
         owner.Limit = 20;
-        owner.PropertyStore.ClearLocal(CoerceOwner.ValueProperty);
+        owner.PropertyStore.ClearLocalValue(CoerceOwner.ValueProperty);
 
         Assert.AreEqual(10, owner.Value);
         Assert.AreEqual(ValueSource.Style, owner.PropertyStore.GetSource(CoerceOwner.ValueProperty.Id));

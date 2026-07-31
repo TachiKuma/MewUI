@@ -78,7 +78,7 @@ public sealed class StyleResolverTests
         });
         Assert.AreEqual(50.0, control.Value);
 
-        control.PropertyStore.ClearLocal(ValueProperty);
+        control.PropertyStore.ClearLocalValue(ValueProperty);
 
         Assert.AreEqual(20.0, control.Value);
         Assert.AreEqual(ValueSource.Style, control.PropertyStore.GetSource(ValueProperty.Id));
