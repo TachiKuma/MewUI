@@ -126,6 +126,21 @@ public abstract class GraphicsContextBase : IGraphicsContext
     /// </summary>
     public virtual void EndOpaqueBackdrop() { }
 
+    /// <summary>
+    /// Multiplies the opacity of the scope. The default folds it into <see cref="GlobalAlpha"/>,
+    /// which every backend honours; override to composite the scope as one group instead.
+    /// </summary>
+    public virtual void BeginOpacity(double opacity)
+    {
+        Save();
+        GlobalAlpha *= (float)Math.Clamp(opacity, 0.0, 1.0);
+    }
+
+    /// <summary>
+    /// Ends the innermost <see cref="BeginOpacity"/> scope.
+    /// </summary>
+    public virtual void EndOpacity() => Restore();
+
     #region State Management (template methods - cull rect tracking)
 
     public void Save()
