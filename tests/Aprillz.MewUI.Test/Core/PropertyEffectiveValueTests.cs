@@ -116,6 +116,47 @@ public sealed class PropertyEffectiveValueTests
         Assert.AreEqual(0, owner.ChangeCount);
     }
 
+    [TestMethod]
+    public void CoerceValue_ReevaluatesThePreservedRawCandidate()
+    {
+        var owner = new CoerceOwner { Limit = 5 };
+        owner.Value = 10;
+        Assert.AreEqual(5, owner.Value);
+
+        owner.Limit = 20;
+        owner.RecoerceValue();
+
+        Assert.AreEqual(10, owner.Value);
+    }
+
+    [TestMethod]
+    public void ShadowedRawCandidate_IsCoercedWhenRevealed()
+    {
+        var owner = new CoerceOwner { Limit = 5 };
+        owner.PropertyStore.SetStyle(CoerceOwner.ValueProperty, 10);
+        owner.Value = 2;
+        Assert.AreEqual(2, owner.Value);
+
+        owner.Limit = 20;
+        owner.PropertyStore.ClearLocal(CoerceOwner.ValueProperty);
+
+        Assert.AreEqual(10, owner.Value);
+        Assert.AreEqual(ValueSource.Style, owner.PropertyStore.GetSource(CoerceOwner.ValueProperty.Id));
+    }
+
+    [TestMethod]
+    public void AnimationCandidate_IsCoercedWithoutReplacingTheRawBase()
+    {
+        var owner = new CoerceOwner { Limit = 5, Value = 3 };
+
+        owner.PropertyStore.SetAnimatedValue(CoerceOwner.ValueProperty.Id, 10);
+        Assert.AreEqual(5, owner.Value);
+
+        owner.PropertyStore.ClearAnimatedValue(CoerceOwner.ValueProperty.Id);
+
+        Assert.AreEqual(3, owner.Value);
+    }
+
     private static void AssertMutation(
         ValueMutationResult result,
         int oldValue,
@@ -156,5 +197,24 @@ public sealed class PropertyEffectiveValueTests
                 ChangeCount++;
             }
         }
+    }
+
+    private sealed class CoerceOwner : MewObject
+    {
+        public static readonly MewProperty<int> ValueProperty =
+            MewProperty<int>.Register<CoerceOwner>(
+                nameof(Value),
+                0,
+                coerce: static (owner, value) => Math.Min(value, owner.Limit));
+
+        public int Limit { get; set; }
+
+        public int Value
+        {
+            get => GetValue(ValueProperty);
+            set => SetValue(ValueProperty, value);
+        }
+
+        public void RecoerceValue() => CoerceValue(ValueProperty);
     }
 }

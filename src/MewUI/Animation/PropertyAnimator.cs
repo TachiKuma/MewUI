@@ -30,6 +30,7 @@ internal sealed class PropertyAnimator
     public void Animate(MewProperty property, object value, TimeSpan duration, Func<double, double> easing, ValueSource source = ValueSource.Trigger)
     {
         int id = property.Id;
+        object effectiveTarget = _store.CoerceValueCandidate(property, value);
 
         // First time this property is set - snap (no animation from default value)
         if (!_store.HasTargetValue(id))
@@ -40,7 +41,7 @@ internal sealed class PropertyAnimator
 
         // Capture the current visual appearance (animated overlay if running, otherwise target).
         object? currentVisual = _store.GetCurrentVisualValue(id);
-        if (Equals(currentVisual, value))
+        if (Equals(currentVisual, effectiveTarget))
         {
             // The visual already shows this value, so no visible animation is needed.
             _store.SetTargetDirect(property, value, source);
@@ -82,7 +83,7 @@ internal sealed class PropertyAnimator
         }
 
         state.FromValue = from;
-        state.TargetValue = value;
+        state.TargetValue = effectiveTarget;
         state.PropertyType = property.ValueType;
         // Resolved once per animation start instead of per tick, so OnTick never touches
         // TypeLerp's Dictionary<Type> for the fallback (non-fast-pathed) types.

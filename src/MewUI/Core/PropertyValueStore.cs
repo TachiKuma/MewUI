@@ -31,16 +31,18 @@ internal readonly record struct ValueMutationResult(
 internal sealed class AnimatedEntry
 {
     public required object BaseValue;
+    public object? BaseRawValue;
     public required object AnimatedValue;
     public ValueSource BaseSource;
 }
 
 /// <summary>
 /// Per-instance storage for <see cref="MewProperty{T}"/> values.
-/// Every source (Local, Trigger, Style, Inherited) is preserved simultaneously, so clearing a
+/// Every source (Local, Trigger, Binding, Style, Inherited) is preserved simultaneously, so clearing a
 /// higher-priority source reveals the preserved lower one without the caller re-deriving it.
-/// The common single-source case stays inline: <c>Value</c>/<c>Source</c> hold the effective base
-/// value and a <see cref="SlotSet"/> is allocated only when two or more sources coexist.
+/// The common single-source case stays inline: <c>RawValue</c>/<c>Value</c>/<c>Source</c> hold the
+/// selected raw candidate, effective base, and source. A <see cref="SlotSet"/> is allocated only
+/// when two or more sources coexist.
 /// Animation is handled via an <see cref="AnimatedEntry"/> wrapper (allocated only when animating).
 /// </summary>
 internal sealed class PropertyValueStore
@@ -132,7 +134,7 @@ internal sealed class PropertyValueStore
         // (they are unaffected). entry.Value is not a bool while animating, so that path is not
         // short-circuited here.
         var entry = GetEntry(property.Id);
-        if (entry.Source == ValueSource.Local && entry.Value is bool existing && existing == value)
+        if (entry.Source == ValueSource.Local && entry.RawValue is bool existing && existing == value)
             return;
 
         object boxed = Box(value);
@@ -151,7 +153,7 @@ internal sealed class PropertyValueStore
         // lower slots are unaffected, so this holds whether or not a shadow exists.
         var entry = GetEntry(property.Id);
         if (entry.Source == ValueSource.Local &&
-            entry.Value is T existing &&
+            entry.RawValue is T existing &&
             EqualityComparer<T>.Default.Equals(existing, value))
             return;
 
@@ -208,12 +210,6 @@ internal sealed class PropertyValueStore
     /// </summary>
     public ValueMutationResult SetValue(MewProperty property, object? value, ValueSource source)
     {
-        // Apply coerce callback (skipped for null: coercion callbacks assume a non-null value)
-        if (value != null && property.CoerceCallback != null && _ownerRef.TryGetTarget(out var coerceOwner))
-        {
-            value = property.CoerceCallback(coerceOwner, value);
-        }
-
         object? oldEffective = ResolveEffectiveValue(property);
         ValueSource oldSource = GetSource(property.Id);
         ref var entry = ref EnsureEntry(property.Id);
@@ -221,17 +217,13 @@ internal sealed class PropertyValueStore
         // No change - skip to avoid infinite invalidation loops (only when the effective source and
         // value already match and nothing is animating).
         if (entry.Value is not AnimatedEntry && entry.Shadow == null &&
-            entry.Source == source && Equals(entry.Value, value))
+            entry.Source == source && Equals(entry.RawValue, value))
             return new ValueMutationResult(oldEffective, oldEffective, oldSource, oldSource);
 
-        // Pre-commit veto: rejecting before the entry is written keeps the store and the
-        // side effects of changed callbacks consistent. Unlike coerce this also runs for null.
-        if (property.ValidateCallback != null && _ownerRef.TryGetTarget(out var validateOwner))
-        {
-            property.ValidateCallback(validateOwner, value);
-        }
+        // Reject the raw candidate before changing any source slot.
+        ValidateCandidate(property, value);
 
-        SetSlotValuePreservingShadowedAnimation(ref entry, property.Id, source, value);
+        SetSlotValuePreservingShadowedAnimation(ref entry, property, source, value);
 
         object? newEffective = ResolveEffectiveValue(property);
         ValueSource newSource = GetSource(property.Id);
@@ -258,7 +250,7 @@ internal sealed class PropertyValueStore
             return new ValueMutationResult(oldEffective, oldEffective, oldSource, oldSource);
 
         ref var entry = ref EnsureEntry(propertyId);
-        ClearSlotValuePreservingShadowedAnimation(ref entry, propertyId, source);
+        ClearSlotValuePreservingShadowedAnimation(ref entry, propertyId, property, source);
 
         if (property != null)
         {
@@ -316,7 +308,11 @@ internal sealed class PropertyValueStore
         // inheritance from the parent chain anyway.
         if (BaseSource(entry) > ValueSource.Inherited)
             return;
-        SetSlotValue(ref entry, ValueSource.Inherited, BoxCached(value));
+        SetSlotValuePreservingShadowedAnimation(
+            ref entry,
+            property,
+            ValueSource.Inherited,
+            BoxCached(value));
     }
 
     /// <summary>
@@ -328,7 +324,7 @@ internal sealed class PropertyValueStore
         ref var entry = ref EnsureEntry(property.Id);
         if (BaseSource(entry) > ValueSource.Inherited)
             return;
-        SetSlotValue(ref entry, ValueSource.Inherited, value);
+        SetSlotValuePreservingShadowedAnimation(ref entry, property, ValueSource.Inherited, value);
     }
 
     /// <summary>
@@ -342,7 +338,11 @@ internal sealed class PropertyValueStore
             return;
 
         ref var entry = ref EnsureEntry(propertyId);
-        ClearSlotValue(ref entry, ValueSource.Inherited);
+        ClearSlotValuePreservingShadowedAnimation(
+            ref entry,
+            propertyId,
+            MewPropertyRegistry.GetProperty(propertyId),
+            ValueSource.Inherited);
     }
 
     /// <summary>
@@ -356,7 +356,11 @@ internal sealed class PropertyValueStore
             for (int i = 0; i < _entries.Length; i++)
             {
                 if (HasSlot(_entries[i], ValueSource.Inherited))
-                    ClearSlotValue(ref _entries[i], ValueSource.Inherited);
+                    ClearSlotValuePreservingShadowedAnimation(
+                        ref _entries[i],
+                        i,
+                        MewPropertyRegistry.GetProperty(i),
+                        ValueSource.Inherited);
             }
             return;
         }
@@ -365,7 +369,11 @@ internal sealed class PropertyValueStore
         for (int i = 0; i < _sparseCount; i++)
         {
             if (HasSlot(_sparseEntries[i].Entry, ValueSource.Inherited))
-                ClearSlotValue(ref _sparseEntries[i].Entry, ValueSource.Inherited);
+                ClearSlotValuePreservingShadowedAnimation(
+                    ref _sparseEntries[i].Entry,
+                    _sparseEntries[i].PropertyId,
+                    MewPropertyRegistry.GetProperty(_sparseEntries[i].PropertyId),
+                    ValueSource.Inherited);
         }
     }
 
@@ -440,22 +448,22 @@ internal sealed class PropertyValueStore
     /// </summary>
     internal void SetTargetDirect(MewProperty property, object value, ValueSource? source = null)
     {
+        ValidateCandidate(property, value);
         ref var entry = ref EnsureEntry(property.Id);
         if (entry.Value is AnimatedEntry animated)
         {
-            animated.BaseValue = value;
-            if (source.HasValue)
-            {
-                // Update the base slot while the animation overlay is temporarily lifted, then
-                // restore the overlay over the recomputed base.
-                UnwrapAnimation(ref entry);
-                SetSlotValue(ref entry, source.Value, value);
-                RewrapAnimation(ref entry, animated);
-            }
+            // Update the raw base slot while the animation overlay is temporarily lifted, then
+            // restore the overlay over the recomputed effective base.
+            var targetSource = source ?? animated.BaseSource;
+            UnwrapAnimation(ref entry);
+            SetSlotValue(ref entry, targetSource, value);
+            ApplyCoercion(ref entry, property);
+            RewrapAnimation(ref entry, animated);
         }
         else
         {
             SetSlotValue(ref entry, source ?? entry.Source, value);
+            ApplyCoercion(ref entry, property);
         }
     }
 
@@ -468,6 +476,10 @@ internal sealed class PropertyValueStore
         ref var entry = ref EnsureEntry(propertyId);
         var property = MewPropertyRegistry.GetProperty(propertyId);
         var oldValue = property != null ? CaptureEffective(ref entry, property) : null;
+        if (property != null)
+        {
+            value = CoerceCandidate(property, value);
+        }
 
         if (entry.Value is AnimatedEntry animated)
         {
@@ -478,6 +490,7 @@ internal sealed class PropertyValueStore
             entry.Value = new AnimatedEntry
             {
                 BaseValue = entry.Value!,
+                BaseRawValue = entry.RawValue,
                 AnimatedValue = value,
                 BaseSource = entry.Source,
             };
@@ -503,6 +516,7 @@ internal sealed class PropertyValueStore
         var oldValue = property != null ? (object?)animated.AnimatedValue : null;
 
         entry.Value = animated.BaseValue;
+        entry.RawValue = animated.BaseRawValue;
         entry.Source = animated.BaseSource;
 
         if (property != null)
@@ -538,6 +552,68 @@ internal sealed class PropertyValueStore
     {
         if (_ownerRef.TryGetTarget(out var owner))
             owner.OnPropertyChanged(property, oldValue, newValue);
+    }
+
+    internal ValueMutationResult CoerceValue(MewProperty property)
+    {
+        object? oldEffective = ResolveEffectiveValue(property);
+        ValueSource oldSource = GetSource(property.Id);
+        ref var entry = ref EnsureEntry(property.Id);
+
+        if (entry.Value is AnimatedEntry animated)
+        {
+            UnwrapAnimation(ref entry);
+            ApplyCoercion(ref entry, property);
+            RewrapAnimation(ref entry, animated);
+        }
+        else
+        {
+            ApplyCoercion(ref entry, property);
+        }
+
+        object? newEffective = ResolveEffectiveValue(property);
+        ValueSource newSource = GetSource(property.Id);
+        if (!Equals(oldEffective, newEffective))
+        {
+            NotifyChanged(property, oldEffective, newEffective);
+        }
+
+        return new ValueMutationResult(oldEffective, newEffective, oldSource, newSource);
+    }
+
+    private void ApplyCoercion(ref Entry entry, MewProperty property)
+    {
+        if (entry.Source == ValueSource.Default)
+        {
+            entry.RawValue = null;
+            entry.Value = null;
+            return;
+        }
+
+        entry.Value = entry.RawValue == null
+            ? null
+            : CoerceCandidate(property, entry.RawValue);
+    }
+
+    private object CoerceCandidate(MewProperty property, object value)
+    {
+        if (property.CoerceCallback != null && _ownerRef.TryGetTarget(out var owner))
+        {
+            return property.CoerceCallback(owner, value);
+        }
+
+        return value;
+    }
+
+    internal object CoerceValueCandidate(MewProperty property, object value)
+        => CoerceCandidate(property, value);
+
+    private void ValidateCandidate(MewProperty property, object? value)
+    {
+        if (property.ValidateCallback != null && _ownerRef.TryGetTarget(out var owner))
+        {
+            property.ValidateCallback(owner, value);
+        }
     }
 
     private object? ResolveEffectiveValue(MewProperty property)
@@ -633,6 +709,7 @@ internal sealed class PropertyValueStore
         {
             if (entry.Source == ValueSource.Default || entry.Source == source)
             {
+                entry.RawValue = value;
                 entry.Value = value;
                 entry.Source = source;
                 return;
@@ -642,6 +719,7 @@ internal sealed class PropertyValueStore
             // replace it inline instead of allocating a shadow to preserve it.
             if (entry.Source == ValueSource.Inherited && source > ValueSource.Inherited)
             {
+                entry.RawValue = value;
                 entry.Value = value;
                 entry.Source = source;
                 return;
@@ -649,7 +727,7 @@ internal sealed class PropertyValueStore
 
             // A second, distinct slot appears: promote to a shadow set holding both.
             var shadow = new SlotSet();
-            shadow.Set(entry.Source, entry.Value);
+            shadow.Set(entry.Source, entry.RawValue);
             shadow.Set(source, value);
             entry.Shadow = shadow;
             RecomputeFromShadow(ref entry);
@@ -662,13 +740,14 @@ internal sealed class PropertyValueStore
 
     private void SetSlotValuePreservingShadowedAnimation(
         ref Entry entry,
-        int propertyId,
+        MewProperty property,
         ValueSource source,
         object? value)
     {
         if (entry.Value is not AnimatedEntry animated)
         {
             SetSlotValue(ref entry, source, value);
+            ApplyCoercion(ref entry, property);
             return;
         }
 
@@ -676,6 +755,7 @@ internal sealed class PropertyValueStore
         ValueSource oldBaseSource = animated.BaseSource;
         UnwrapAnimation(ref entry);
         SetSlotValue(ref entry, source, value);
+        ApplyCoercion(ref entry, property);
 
         if (entry.Source == oldBaseSource && Equals(entry.Value, oldBaseValue))
         {
@@ -683,7 +763,7 @@ internal sealed class PropertyValueStore
             return;
         }
 
-        StopAnimationCallback?.Invoke(propertyId);
+        StopAnimationCallback?.Invoke(property.Id);
     }
 
     // Unsets a source slot, revealing the next-highest set slot (or the default).
@@ -693,6 +773,7 @@ internal sealed class PropertyValueStore
         {
             if (entry.Source == source)
             {
+                entry.RawValue = null;
                 entry.Value = null;
                 entry.Source = ValueSource.Default;
             }
@@ -706,11 +787,14 @@ internal sealed class PropertyValueStore
     private void ClearSlotValuePreservingShadowedAnimation(
         ref Entry entry,
         int propertyId,
+        MewProperty? property,
         ValueSource source)
     {
         if (entry.Value is not AnimatedEntry animated)
         {
             ClearSlotValue(ref entry, source);
+            if (property != null)
+                ApplyCoercion(ref entry, property);
             return;
         }
 
@@ -718,6 +802,8 @@ internal sealed class PropertyValueStore
         ValueSource oldBaseSource = animated.BaseSource;
         UnwrapAnimation(ref entry);
         ClearSlotValue(ref entry, source);
+        if (property != null)
+            ApplyCoercion(ref entry, property);
 
         if (entry.Source == oldBaseSource && Equals(entry.Value, oldBaseValue))
         {
@@ -753,11 +839,13 @@ internal sealed class PropertyValueStore
         if (setCount <= 1)
         {
             entry.Shadow = null;
+            entry.RawValue = highestValue;
             entry.Value = highestValue;
             entry.Source = highest;
             return;
         }
 
+        entry.RawValue = highestValue;
         entry.Value = highestValue;
         entry.Source = highest;
     }
@@ -767,6 +855,7 @@ internal sealed class PropertyValueStore
         if (entry.Value is AnimatedEntry animated)
         {
             entry.Value = animated.BaseValue;
+            entry.RawValue = animated.BaseRawValue;
             entry.Source = animated.BaseSource;
         }
     }
@@ -775,6 +864,7 @@ internal sealed class PropertyValueStore
     {
         // After WriteSlot updated the base cache in Value/Source, restore the animation overlay.
         animated.BaseValue = entry.Value!;
+        animated.BaseRawValue = entry.RawValue;
         animated.BaseSource = entry.Source;
         entry.Value = animated;
     }
@@ -852,6 +942,7 @@ internal sealed class PropertyValueStore
     private struct Entry
     {
         public object? Value;       // effective base value, or AnimatedEntry when animating
+        public object? RawValue;    // selected source's uncoerced candidate
         public ValueSource Source;  // effective base source
         public SlotSet? Shadow;     // non-null only when two or more base sources are set at once
     }
