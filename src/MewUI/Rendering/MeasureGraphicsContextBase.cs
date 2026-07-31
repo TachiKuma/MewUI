@@ -40,6 +40,8 @@ public abstract class MeasureGraphicsContextBase : IGraphicsContext
     public void SetTransform(Matrix3x2 matrix) { }
     public Matrix3x2 GetTransform() => Matrix3x2.Identity;
     public void ResetTransform() { }
+    public void BeginOpacity(double opacity) { }
+    public void EndOpacity() { }
     public float GlobalAlpha { get; set; } = 1f;
     public bool TextPixelSnap { get; set; } = true;
     public void ResetClip() { }

@@ -60,6 +60,18 @@ namespace Aprillz.MewUI.Rendering
         void EndOpaqueBackdrop();
 
         /// <summary>
+        /// Multiplies the opacity of everything drawn up to the matching <see cref="EndOpacity"/>.
+        /// Backends that can composite the scope as one group do so; the rest multiply per primitive,
+        /// which differs only where the scope's drawing overlaps itself.
+        /// </summary>
+        void BeginOpacity(double opacity);
+
+        /// <summary>
+        /// Ends the innermost <see cref="BeginOpacity"/> scope.
+        /// </summary>
+        void EndOpacity();
+
+        /// <summary>
         /// Sets a rounded-rectangle clipping region.
         /// Backends may fall back to a rectangular clip if rounded clips are not supported.
         /// </summary>

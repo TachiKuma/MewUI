@@ -145,6 +145,7 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         _transform = Matrix3x2.Identity;
         _clipBoundsWorld = null;
         _opaqueBackdropLayers.Clear();
+        _opacityLayers.Clear();
 
         if (_renderTarget != 0)
         {
@@ -2016,6 +2017,86 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         }
 
         D2D1VTable.SetTextAntialiasMode((ID2D1RenderTarget*)_renderTarget, D2D1_TEXT_ANTIALIAS_MODE.GRAYSCALE);
+        D2D1VTable.PopLayer((ID2D1RenderTarget*)_renderTarget);
+        ComHelpers.Release(layer);
+    }
+
+    // One entry per open scope so End undoes exactly what its Begin did; 0 means no layer was
+    // pushed and the scope fell back to the base per-primitive multiply.
+    private readonly Stack<nint> _opacityLayers = new();
+
+    public override void BeginOpacity(double opacity)
+    {
+        if (_renderTarget == 0 ||
+            D2D1VTable.CreateLayer((ID2D1RenderTarget*)_renderTarget, out nint layer) < 0 ||
+            layer == 0)
+        {
+            base.BeginOpacity(opacity);
+            _opacityLayers.Push(0);
+            return;
+        }
+
+        // A layer composites the scope once, so drawing that overlaps itself fades as one group
+        // instead of darkening where it overlaps. Content bounds stay unbounded: clipping to the
+        // element box would shave pixel-snapped borders.
+        var contentBounds = new D2D1_RECT_F(
+            -UNBOUNDED_CLIP_EXTENT,
+            -UNBOUNDED_CLIP_EXTENT,
+            UNBOUNDED_CLIP_EXTENT,
+            UNBOUNDED_CLIP_EXTENT);
+
+        float layerOpacity = (float)Math.Clamp(opacity, 0.0, 1.0);
+
+        if (_deviceContext != 0)
+        {
+            var parameters1 = new D2D1_LAYER_PARAMETERS1(
+                contentBounds: contentBounds,
+                geometricMask: 0,
+                maskAntialiasMode: D2D1_ANTIALIAS_MODE.PER_PRIMITIVE,
+                maskTransform: D2D1_MATRIX_3X2_F.Identity,
+                opacity: layerOpacity,
+                opacityBrush: 0,
+                layerOptions: D2D1_LAYER_OPTIONS1.NONE);
+
+            D2D1VTable.PushLayer((ID2D1DeviceContext*)_deviceContext, parameters1, layer);
+        }
+        else
+        {
+            var parameters = new D2D1_LAYER_PARAMETERS(
+                contentBounds: contentBounds,
+                geometricMask: 0,
+                maskAntialiasMode: D2D1_ANTIALIAS_MODE.PER_PRIMITIVE,
+                maskTransform: D2D1_MATRIX_3X2_F.Identity,
+                opacity: layerOpacity,
+                opacityBrush: 0,
+                layerOptions: D2D1_LAYER_OPTIONS.NONE);
+
+            D2D1VTable.PushLayer((ID2D1RenderTarget*)_renderTarget, parameters, layer);
+        }
+
+        _opacityLayers.Push(layer);
+    }
+
+    public override void EndOpacity()
+    {
+        if (_opacityLayers.Count == 0)
+        {
+            return;
+        }
+
+        nint layer = _opacityLayers.Pop();
+        if (layer == 0)
+        {
+            base.EndOpacity();
+            return;
+        }
+
+        if (_renderTarget == 0)
+        {
+            ComHelpers.Release(layer);
+            return;
+        }
+
         D2D1VTable.PopLayer((ID2D1RenderTarget*)_renderTarget);
         ComHelpers.Release(layer);
     }

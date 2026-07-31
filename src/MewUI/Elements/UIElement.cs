@@ -66,6 +66,15 @@ public abstract partial class UIElement : Element
             MewPropertyOptions.AffectsVisualState).Property;
 
     /// <summary>
+    /// Opacity of the element and everything under it, from 0 (invisible) to 1 (opaque).
+    /// Does not affect layout or hit testing: a fully transparent element still occupies its box
+    /// and still takes the pointer.
+    /// </summary>
+    public static readonly MewProperty<double> OpacityProperty =
+        MewProperty<double>.Register<UIElement>(nameof(Opacity), 1.0,
+            MewPropertyOptions.AffectsRender);
+
+    /// <summary>
     /// Controls whether the element participates in hit testing.
     /// </summary>
     public static readonly MewProperty<bool> IsHitTestVisibleProperty =
@@ -297,6 +306,15 @@ public abstract partial class UIElement : Element
     public bool IsEffectivelyEnabled => GetValue(IsEffectivelyEnabledProperty);
 
     /// <summary>
+    /// Gets or sets the opacity of the element and its subtree, from 0 to 1.
+    /// </summary>
+    public double Opacity
+    {
+        get => GetValue(OpacityProperty);
+        set => SetValue(OpacityProperty, value);
+    }
+
+    /// <summary>
     /// Gets or sets whether the element participates in hit testing.
     /// </summary>
     public bool IsHitTestVisible
@@ -461,6 +479,12 @@ public abstract partial class UIElement : Element
             return;
         }
 
+        double opacity = Opacity;
+        if (opacity <= 0)
+        {
+            return;
+        }
+
         if (!SkipViewportCull && _cacheSnapshotDepth == 0 && this is not Window &&
             _renderCullViewport is Rect cullViewport && !cullViewport.IntersectsWith(Bounds))
         {
@@ -472,35 +496,56 @@ public abstract partial class UIElement : Element
 
         using (PerformanceProfiler.Instance.SampleElement(GetType(), ProfilerSampleCategory.Render, this))
         {
-            if (_hasBitmapCache)
+            // Outside the cache branch: the cached bitmap is the element's own pixels, so fading it
+            // here leaves the cache reusable while the opacity animates.
+            if (opacity < 1)
             {
-                RenderCached(context);
+                context.BeginOpacity(opacity);
+                try
+                {
+                    RenderVisual(context);
+                }
+                finally
+                {
+                    context.EndOpacity();
+                }
             }
             else
             {
-                // OnRender opens with an opaque fill, so everything after it - text above all - lands on
-                // pixels the backend knows, which is what subpixel antialiasing needs on a surface that
-                // carries per-pixel alpha (a popup). The scope has to start before OnRender: controls
-                // such as ContextMenu and ListBox draw their own text there rather than in the subtree.
-                if (this is Control { Background.A: 255 })
-                {
-                    context.BeginOpaqueBackdrop();
-                    try
-                    {
-                        OnRender(context);
-                        RenderSubtree(context);
-                    }
-                    finally
-                    {
-                        context.EndOpaqueBackdrop();
-                    }
-                }
-                else
-                {
-                    OnRender(context);
-                    RenderSubtree(context);
-                }
+                RenderVisual(context);
             }
+        }
+    }
+
+    private void RenderVisual(IGraphicsContext context)
+    {
+        if (_hasBitmapCache)
+        {
+            RenderCached(context);
+            return;
+        }
+
+        // OnRender opens with an opaque fill, so everything after it - text above all - lands on
+        // pixels the backend knows, which is what subpixel antialiasing needs on a surface that
+        // carries per-pixel alpha (a popup). The scope has to start before OnRender: controls
+        // such as ContextMenu and ListBox draw their own text there rather than in the subtree.
+        if (this is Control { Background.A: 255 })
+        {
+            context.BeginOpaqueBackdrop();
+            try
+            {
+                OnRender(context);
+                RenderSubtree(context);
+            }
+            finally
+            {
+                context.EndOpaqueBackdrop();
+            }
+        }
+        else
+        {
+            OnRender(context);
+            RenderSubtree(context);
         }
     }
 

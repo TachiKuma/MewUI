@@ -538,7 +538,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
     public static readonly MewProperty<WindowStartupLocation> StartupLocationProperty =
         MewProperty<WindowStartupLocation>.Register<Window>(nameof(StartupLocation), WindowStartupLocation.CenterScreen, MewPropertyOptions.None);
 
-    public static readonly MewProperty<double> OpacityProperty =
+    public new static readonly MewProperty<double> OpacityProperty =
         MewProperty<double>.Register<Window>(nameof(Opacity), 1.0, MewPropertyOptions.None,
             static (self, _, _) => self.OnOpacityChanged(),
             static (_, value) => Math.Clamp(value, 0.0, 1.0));
@@ -730,7 +730,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
     /// <summary>
     /// Gets or sets the window opacity (0..1).
     /// </summary>
-    public double Opacity
+    public new double Opacity
     {
         get => GetValue(OpacityProperty);
         set => SetValue(OpacityProperty, value);
