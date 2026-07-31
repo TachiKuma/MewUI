@@ -2,7 +2,7 @@ using Aprillz.MewUI.Controls;
 
 namespace Aprillz.MewUI;
 
-internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposable
+internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IPropertyBinding
     where TRoot : class
 {
     private readonly MewObject _target;
@@ -15,6 +15,8 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposabl
     private readonly Action? _onTargetChanged;
     private bool _updating;
     private bool _disposed;
+
+    public BindingCapabilities Capabilities => _capabilities;
 
     internal MewPropertyPathBinding(
         MewObject target,
@@ -76,7 +78,7 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposabl
             if (!EqualityComparer<TProp>.Default.Equals(
                     _target.GetBindingValue(_targetProperty), value))
             {
-                _target.SetBindingValue(_targetProperty, value);
+                _target.UpdateBindingTarget(_targetProperty, value);
             }
         }
         finally
@@ -106,8 +108,26 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IDisposabl
             // Refresh the Binding candidate before removing the transient Local candidate, so
             // source normalization is revealed as one final target value.
             var normalized = _convert(_observer.CurrentValue);
-            _target.SetBindingValue(_targetProperty, normalized);
+            _target.UpdateBindingTarget(_targetProperty, normalized);
             _target.PropertyStore.ClearSource(_targetProperty.Id, ValueSource.Local);
+        }
+        finally
+        {
+            _updating = false;
+        }
+    }
+
+    public void UpdateTargetValue(object? value)
+    {
+        if (_updating || _disposed)
+        {
+            return;
+        }
+
+        _updating = true;
+        try
+        {
+            _target.UpdateBindingTarget(_targetProperty, (TProp)value!);
         }
         finally
         {

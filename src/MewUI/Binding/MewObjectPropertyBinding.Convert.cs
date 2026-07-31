@@ -7,7 +7,7 @@ namespace Aprillz.MewUI;
 /// to a <see cref="MewProperty{TSource}"/> on a source <see cref="MewObject"/>
 /// with type conversion via convert/convertBack functions.
 /// </summary>
-internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
+internal sealed class MewObjectPropertyBinding<TProp, TSource> : IPropertyBinding
 {
     private readonly MewObject _target;
     private readonly MewProperty<TProp> _targetProperty;
@@ -19,6 +19,8 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
     private readonly WeakEventKey<MewObject, Action> _sourceChangedEvent;
     private readonly Action? _onTargetChanged;
     private bool _updating;
+
+    public BindingCapabilities Capabilities => _capabilities;
 
     public MewObjectPropertyBinding(
         MewObject target,
@@ -76,7 +78,7 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
             if (!EqualityComparer<TProp>.Default.Equals(
                     _target.GetBindingValue(_targetProperty), converted))
             {
-                _target.SetBindingValue(_targetProperty, converted);
+                _target.UpdateBindingTarget(_targetProperty, converted);
             }
         }
         finally { _updating = false; }
@@ -95,6 +97,17 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
             {
                 _source.PropertyStore.SetLocal(_sourceProperty, convertedBack);
             }
+        }
+        finally { _updating = false; }
+    }
+
+    public void UpdateTargetValue(object? value)
+    {
+        if (_updating) return;
+        _updating = true;
+        try
+        {
+            _target.UpdateBindingTarget(_targetProperty, (TProp)value!);
         }
         finally { _updating = false; }
     }

@@ -61,7 +61,7 @@ public sealed class BindingValueSourceCharacterizationTests
         source.Value = 3;
         Assert.AreEqual(2, target.Value, "Local remains the effective source");
 
-        target.PropertyStore.ClearLocal(Target.ValueProperty);
+        target.ClearLocalValue(Target.ValueProperty);
         Assert.AreEqual(3, target.Value, "clearing Local reveals the latest Binding candidate");
     }
 
@@ -92,6 +92,36 @@ public sealed class BindingValueSourceCharacterizationTests
 
         second.Value = 4;
         Assert.AreEqual(4, target.Value);
+    }
+
+    [TestMethod]
+    public void SetCurrentValue_WithBindingUpdatesTargetWithoutWritingSource()
+    {
+        var source = new ObservableValue<int>(1);
+        var target = new Target();
+        target.SetBinding(Target.ValueProperty, source, BindingMode.TwoWay);
+
+        target.SetCurrentValue(Target.ValueProperty, 2);
+
+        Assert.AreEqual(2, target.Value);
+        Assert.AreEqual(1, source.Value);
+        Assert.IsTrue(target.HasPropertyBinding(Target.ValueProperty.Id));
+        Assert.AreEqual(ValueSource.Binding, target.PropertyStore.GetSource(Target.ValueProperty.Id));
+
+        source.Value = 3;
+
+        Assert.AreEqual(3, target.Value);
+    }
+
+    [TestMethod]
+    public void SetCurrentValue_WithoutBindingSetsLocalValue()
+    {
+        var target = new Target();
+
+        target.SetCurrentValue(Target.ValueProperty, 2);
+
+        Assert.AreEqual(2, target.Value);
+        Assert.AreEqual(ValueSource.Local, target.PropertyStore.GetSource(Target.ValueProperty.Id));
     }
 
     [TestMethod]

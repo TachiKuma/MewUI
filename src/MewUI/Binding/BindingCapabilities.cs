@@ -19,3 +19,10 @@ internal readonly record struct BindingCapabilities(
             _ => throw new ArgumentOutOfRangeException(nameof(mode)),
         };
 }
+
+internal interface IPropertyBinding : IDisposable
+{
+    BindingCapabilities Capabilities { get; }
+
+    void UpdateTargetValue(object? value);
+}

@@ -526,7 +526,7 @@ internal sealed class PropertyValueStore
     /// <summary>
     /// Clears the local value for a property, allowing style/trigger/inherited to take effect.
     /// </summary>
-    public void ClearLocal(MewProperty property)
+    internal void ClearLocalValue(MewProperty property)
     {
         ClearSource(property.Id, ValueSource.Local);
     }
