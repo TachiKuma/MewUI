@@ -261,6 +261,12 @@ public abstract class FrameworkElement : UIElement, IDisposable
         OnThemeChanged(oldTheme, newTheme);
         InvokeThemeCallbacks(newTheme);
 
+        // Theme-resolver setters in active element triggers resolve against the new theme.
+        if (!ReferenceEquals(oldTheme, newTheme))
+        {
+            EvaluateElementTriggers();
+        }
+
         // Theme changes should cause a repaint even if no other input/layout happens.
         // This is especially important on platforms where theme notifications are not tied to OS paint messages.
         if (!ReferenceEquals(oldTheme, newTheme))

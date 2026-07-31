@@ -69,6 +69,11 @@ internal sealed class PropertyValueStore
     internal Action<int>? StopAnimationCallback;
     internal Action? StopAllAnimationsCallback;
 
+    // Owner hook for element transitions: an external write to a property with a registered
+    // transition is diverted to the animator, which owns the base-write itself. Returns true
+    // when the write was taken over. Null (the overwhelmingly common case) costs one check.
+    internal Func<MewProperty, object, ValueSource, bool>? AnimateSetCallback;
+
     public PropertyValueStore(IPropertyOwner owner)
     {
         _ownerRef = new WeakReference<IPropertyOwner>(owner);
@@ -120,7 +125,11 @@ internal sealed class PropertyValueStore
         if (entry.Source == ValueSource.Local && entry.Value is bool existing && existing == value)
             return;
 
-        SetValue(property, Box(value), ValueSource.Local);
+        object boxed = Box(value);
+        if (AnimateSetCallback?.Invoke(property, boxed, ValueSource.Local) == true)
+            return;
+
+        SetValue(property, boxed, ValueSource.Local);
     }
 
     /// <summary>
@@ -136,7 +145,11 @@ internal sealed class PropertyValueStore
             EqualityComparer<T>.Default.Equals(existing, value))
             return;
 
-        SetValue(property, BoxCached(value), ValueSource.Local);
+        object? boxed = BoxCached(value);
+        if (boxed != null && AnimateSetCallback?.Invoke(property, boxed, ValueSource.Local) == true)
+            return;
+
+        SetValue(property, boxed, ValueSource.Local);
     }
 
     /// <summary>
@@ -250,6 +263,9 @@ internal sealed class PropertyValueStore
     /// </summary>
     public void SetLocal(MewProperty property, object? value)
     {
+        if (value != null && AnimateSetCallback?.Invoke(property, value, ValueSource.Local) == true)
+            return;
+
         SetValue(property, value, ValueSource.Local);
     }
 
