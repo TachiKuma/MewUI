@@ -276,8 +276,7 @@ public abstract class MewObject : IPropertyOwner
     protected void CoerceValue<T>(MewProperty<T> property)
     {
         if (property.CoerceCallback == null) return;
-        var current = GetValue(property);
-        PropertyStore.SetValue(property, current!, PropertyStore.GetSource(property.Id));
+        PropertyStore.CoerceValue(property);
     }
 
     /// <summary>
