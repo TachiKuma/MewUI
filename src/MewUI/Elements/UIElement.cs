@@ -9,7 +9,6 @@ namespace Aprillz.MewUI.Controls;
 public abstract partial class UIElement : Element
 {
     private bool _suggestedIsEnabled = true;
-    private bool _suggestedIsEnabledInitialized;
     private bool _visualStateDirty;
 
     /// <summary>
@@ -25,6 +24,17 @@ public abstract partial class UIElement : Element
     public static readonly MewProperty<bool> IsEnabledProperty =
         MewProperty<bool>.Register<UIElement>(nameof(IsEnabled), true,
             MewPropertyOptions.AffectsRender | MewPropertyOptions.AffectsVisualState);
+
+    private static readonly MewPropertyKey<bool> IsEffectivelyEnabledPropertyKey =
+        MewProperty<bool>.RegisterReadOnly<UIElement>(nameof(IsEffectivelyEnabled), true,
+            MewPropertyOptions.AffectsRender | MewPropertyOptions.AffectsVisualState);
+
+    /// <summary>
+    /// Whether this element is enabled and so is every ancestor. Read-only; derived from
+    /// <see cref="IsEnabled"/> and the parent chain.
+    /// </summary>
+    public static readonly MewProperty<bool> IsEffectivelyEnabledProperty =
+        IsEffectivelyEnabledPropertyKey.Property;
 
     /// <summary>
     /// Whether the element has keyboard focus. Read-only; set by <see cref="Input.FocusManager"/>.
@@ -122,6 +132,9 @@ public abstract partial class UIElement : Element
     {
         base.OnParentChanged();
 
+        // Both directions matter: attaching may inherit a disabled ancestor, detaching drops one.
+        RefreshEnabledSubtree();
+
         if (Parent != null)
         {
             RefreshInheritedSubtree();
@@ -156,8 +169,11 @@ public abstract partial class UIElement : Element
         }
         else if (property == IsEnabledProperty)
         {
+            RefreshEnabledSubtree();
+        }
+        else if (property == IsEffectivelyEnabledProperty)
+        {
             OnEnabledChanged();
-            NotifyDescendantEnabledSuggestionChanged();
         }
         else if (property == IsFocusedProperty)
         {
@@ -274,7 +290,11 @@ public abstract partial class UIElement : Element
         set => SetValue(IsEnabledProperty, value);
     }
 
-    public bool IsEffectivelyEnabled => IsEnabled && GetSuggestedIsEnabled();
+    /// <summary>
+    /// Whether this element is enabled and so is every ancestor. Test this, not <see cref="IsEnabled"/>,
+    /// when deciding whether input applies or a disabled appearance should be drawn.
+    /// </summary>
+    public bool IsEffectivelyEnabled => GetValue(IsEffectivelyEnabledProperty);
 
     /// <summary>
     /// Gets or sets whether the element participates in hit testing.
@@ -678,28 +698,29 @@ public abstract partial class UIElement : Element
         return new Rect(tl.X, tl.Y, br.X - tl.X, br.Y - tl.Y);
     }
 
+    /// <summary>
+    /// Recomputes this element's own effective enabled state. Descendants are left untouched, so
+    /// callers that are not already walking the subtree must use <see cref="RefreshEnabledSubtree"/>.
+    /// </summary>
     internal void ReevaluateSuggestedIsEnabled()
     {
-        bool old = _suggestedIsEnabledInitialized ? _suggestedIsEnabled : true;
         _suggestedIsEnabled = ComputeIsEnabledSuggestionSafe();
-        _suggestedIsEnabledInitialized = true;
-
-        if (old != _suggestedIsEnabled)
-        {
-            OnEnabledChanged();
-            InvalidateVisual();
-            InvalidateVisualState();
-        }
+        SetValue(IsEffectivelyEnabledPropertyKey, IsEnabled && _suggestedIsEnabled);
     }
 
-    private bool GetSuggestedIsEnabled()
+    /// <summary>
+    /// Recomputes the effective enabled state of this element and every descendant.
+    /// </summary>
+    internal void RefreshEnabledSubtree()
     {
-        if (!_suggestedIsEnabledInitialized)
+        // Pre-order: a child reads its parent's effective value, so the parent must settle first.
+        VisualTree.Visit(this, static element =>
         {
-            _suggestedIsEnabled = ComputeIsEnabledSuggestionSafe();
-            _suggestedIsEnabledInitialized = true;
-        }
-        return _suggestedIsEnabled;
+            if (element is UIElement uiElement)
+            {
+                uiElement.ReevaluateSuggestedIsEnabled();
+            }
+        });
     }
 
     protected virtual bool ComputeIsEnabledSuggestion() => true;
@@ -721,22 +742,6 @@ public abstract partial class UIElement : Element
         }
 
         return true;
-    }
-
-    private void NotifyDescendantEnabledSuggestionChanged()
-    {
-        VisualTree.Visit(this, e =>
-        {
-            if (ReferenceEquals(e, this))
-            {
-                return;
-            }
-
-            if (e is UIElement u)
-            {
-                u.ReevaluateSuggestedIsEnabled();
-            }
-        });
     }
 
     internal void DisposeBindings()
@@ -857,12 +862,7 @@ public abstract partial class UIElement : Element
     {
         base.OnVisualRootChanged(oldRoot, newRoot);
 
-        if (newRoot != null)
-        {
-            // Re-evaluate enabled state - parent may already be disabled.
-            ReevaluateSuggestedIsEnabled();
-        }
-        else
+        if (newRoot == null)
         {
             // Stop property animations when detached from the visual tree.
             StopAllPropertyAnimations();

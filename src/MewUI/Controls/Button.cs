@@ -54,7 +54,7 @@ public partial class Button : Control, IVisualTreeHost
             if (field != value)
             {
                 field = value;
-                ReevaluateSuggestedIsEnabled();
+                RefreshEnabledSubtree();
             }
         }
     }
