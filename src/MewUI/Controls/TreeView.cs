@@ -60,7 +60,7 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
             // rather than leaving stale references to the previous source's item/node.
             _selectedNode = _itemsSource.SelectedItem as TreeViewNode;
             _selectedItem = _itemsSource.SelectedItem;
-            SyncSelectionProperties();
+            SyncSelectionProperties(commit: false);
 
             _presenter.ItemsSource = _itemsSource;
             _presenter.RecycleAll();
@@ -186,7 +186,7 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
         _syncingSelection = true;
         try { SetSelectedNodeCore(node); }
         finally { _syncingSelection = false; }
-        SyncSelectionProperties();
+        SyncSelectionProperties(commit: false);
     }
 
     private void OnSelectedItemPropertyChanged(object? item)
@@ -201,18 +201,18 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
                 _itemsSource.SelectedItem = item;
         }
         finally { _syncingSelection = false; }
-        SyncSelectionProperties();
+        SyncSelectionProperties(commit: false);
     }
 
     // Mirrors the model selection (_selectedNode/_selectedItem) into the bindable properties.
     // Guarded so the property change callbacks do not re-enter the model.
-    private void SyncSelectionProperties()
+    private void SyncSelectionProperties(bool commit)
     {
         bool wasSyncing = _syncingSelection;
         _syncingSelection = true;
         try
         {
-            if (wasSyncing)
+            if (!commit)
             {
                 SetCurrentValue(SelectedNodeProperty, _selectedNode);
                 SetCurrentValue(SelectedItemProperty, _selectedItem ?? _selectedNode);
@@ -487,7 +487,7 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
 
         _selectedNode = node;
         _selectedItem = item;
-        SyncSelectionProperties();
+        SyncSelectionProperties(commit: !_syncingSelection);
         InvalidateItemBindings();
 
         SelectedNodeChanged?.Invoke(node);

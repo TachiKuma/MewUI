@@ -8,6 +8,7 @@ namespace Aprillz.MewUI.Controls;
 public sealed class DatePicker : DropDownBase
 {
     private Calendar? _calendar;
+    private bool _syncingCalendar;
     private DateTime? _cachedHeaderDate;
     private string? _cachedHeaderFormat;
     private string? _cachedHeaderText;
@@ -60,7 +61,7 @@ public sealed class DatePicker : DropDownBase
     private void OnSelectedDatePropertyChanged(DateTime? oldValue, DateTime? newValue)
     {
         if (_calendar != null)
-            _calendar.SelectedDate = newValue;
+            SyncCalendarSelectedDate(newValue);
 
         SelectedDateChanged?.Invoke(newValue);
     }
@@ -75,7 +76,7 @@ public sealed class DatePicker : DropDownBase
 
         if (SelectedDate.HasValue)
         {
-            _calendar.SelectedDate = SelectedDate;
+            SyncCalendarSelectedDate(SelectedDate);
             _calendar.DisplayDate = SelectedDate.Value;
         }
 
@@ -102,7 +103,7 @@ public sealed class DatePicker : DropDownBase
             // Sync full state only when opening
             if (SelectedDate.HasValue)
             {
-                _calendar.SelectedDate = SelectedDate;
+                SyncCalendarSelectedDate(SelectedDate);
                 _calendar.DisplayDate = SelectedDate.Value;
             }
 
@@ -116,17 +117,40 @@ public sealed class DatePicker : DropDownBase
 
     private void OnCalendarSelectedDateChanged(DateTime? date)
     {
+        if (_syncingCalendar)
+        {
+            return;
+        }
+
         // Sync value during navigation (keyboard arrows) without closing popup.
         if (date.HasValue)
         {
-            SelectedDate = date;
+            CommitTargetValue(SelectedDateProperty, date);
+        }
+    }
+
+    private void SyncCalendarSelectedDate(DateTime? date)
+    {
+        if (_calendar == null)
+        {
+            return;
+        }
+
+        _syncingCalendar = true;
+        try
+        {
+            _calendar.SelectedDate = date;
+        }
+        finally
+        {
+            _syncingCalendar = false;
         }
     }
 
     private void OnCalendarDateActivated(DateTime date)
     {
         // Commit action (mouse click or Enter key) - close popup.
-        SelectedDate = date;
+        CommitTargetValue(SelectedDateProperty, date);
         IsDropDownOpen = false;
     }
 

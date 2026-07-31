@@ -86,20 +86,12 @@ internal sealed class MewPropertyPathBinding<TProp, TRoot, TSource> : IPropertyB
 
     public void UpdateTargetValue(object? value)
     {
-        if (_updating || _disposed)
+        if (_disposed)
         {
             return;
         }
 
-        _updating = true;
-        try
-        {
-            _target.UpdateBindingTarget(_targetProperty, (TProp)value!);
-        }
-        finally
-        {
-            _updating = false;
-        }
+        _target.UpdateBindingTarget(_targetProperty, (TProp)value!);
     }
 
     public object? CommitTargetValue(object? value)

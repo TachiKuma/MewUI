@@ -71,6 +71,10 @@ public sealed class SelectionBindingTests
         Assert.AreEqual(2, grid.SelectedIndex);
         Assert.AreEqual("c", grid.SelectedItem);
 
+        source.Value = 99;
+        Assert.AreEqual(2, grid.SelectedIndex);
+        Assert.AreEqual(99, source.Value, "a Binding push is not a target commit");
+
         // selection model -> source (the control's input path)
         grid.ItemsSource.SelectedIndex = 1;
         Assert.AreEqual(1, source.Value);
@@ -185,7 +189,7 @@ public sealed class SelectionBindingTests
         Assert.AreEqual("c", list.SelectedItem);
         Assert.AreEqual(2, list.SelectedIndex);
 
-        list.SelectedIndex = 0;
+        list.ItemsSource.SelectedIndex = 0;
         Assert.AreEqual("a", source.Value);
     }
 

@@ -70,20 +70,7 @@ internal sealed class MewPropertyBinding<T> : IPropertyBinding
 
     public void UpdateTargetValue(object? value)
     {
-        if (_updating)
-        {
-            return;
-        }
-
-        _updating = true;
-        try
-        {
-            _owner.UpdateBindingTarget(_property, (T)value!);
-        }
-        finally
-        {
-            _updating = false;
-        }
+        _owner.UpdateBindingTarget(_property, (T)value!);
     }
 
     public object? CommitTargetValue(object? value)

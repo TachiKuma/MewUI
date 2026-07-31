@@ -60,7 +60,7 @@ public sealed class SegmentedControl : SegmentedBase, ISelector, IIndexedSelecto
 
     protected override void OnSegmentClicked(int index)
     {
-        SelectedIndex = index;
+        CommitTargetValue(SelectedIndexProperty, index);
 
         if (FindVisualRoot() is Window window)
         {
@@ -161,7 +161,7 @@ public sealed class SegmentedControl : SegmentedBase, ISelector, IIndexedSelecto
 
             if (IsSegmentEnabled(i))
             {
-                SelectedIndex = i;
+                CommitTargetValue(SelectedIndexProperty, i);
                 return;
             }
         }
@@ -176,7 +176,7 @@ public sealed class SegmentedControl : SegmentedBase, ISelector, IIndexedSelecto
             {
                 if (IsSegmentEnabled(i))
                 {
-                    SelectedIndex = i;
+                    CommitTargetValue(SelectedIndexProperty, i);
                     return;
                 }
             }
@@ -187,7 +187,7 @@ public sealed class SegmentedControl : SegmentedBase, ISelector, IIndexedSelecto
             {
                 if (IsSegmentEnabled(i))
                 {
-                    SelectedIndex = i;
+                    CommitTargetValue(SelectedIndexProperty, i);
                     return;
                 }
             }

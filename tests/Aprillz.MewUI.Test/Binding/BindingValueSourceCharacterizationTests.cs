@@ -189,6 +189,22 @@ public sealed class BindingValueSourceCharacterizationTests
     }
 
     [TestMethod]
+    public void TargetCommit_SubmitsCoercedTargetValueExactlyOnce()
+    {
+        var source = new ObservableValue<int>(1);
+        var sourceChangeCount = 0;
+        source.Changed += () => sourceChangeCount++;
+        var target = new CoercedTarget();
+        target.SetBinding(CoercedTarget.ValueProperty, source, BindingMode.TwoWay);
+
+        target.Commit(99);
+
+        Assert.AreEqual(10, source.Value);
+        Assert.AreEqual(10, target.Value);
+        Assert.AreEqual(1, sourceChangeCount);
+    }
+
+    [TestMethod]
     public void ConvertedObservableTwoWayBinding_TargetCommitReadsBackNormalizedSource()
     {
         var source = new ObservableValue<int>(1, static value => Math.Clamp(value, 0, 10));
@@ -295,5 +311,18 @@ public sealed class BindingValueSourceCharacterizationTests
         }
 
         public void Commit(string value) => CommitTargetValue(TextProperty, value);
+    }
+
+    private sealed class CoercedTarget : MewObject
+    {
+        public static readonly MewProperty<int> ValueProperty =
+            MewProperty<int>.Register<CoercedTarget>(
+                nameof(Value),
+                0,
+                coerce: static (_, value) => Math.Clamp(value, 0, 10));
+
+        public int Value => GetValue(ValueProperty);
+
+        public void Commit(int value) => CommitTargetValue(ValueProperty, value);
     }
 }

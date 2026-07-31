@@ -468,8 +468,8 @@ public abstract class MewObject : IPropertyOwner
     }
 
     /// <summary>
-    /// Removes the binding currently attached to the specified property.
-    /// The property's current value is preserved.
+    /// Removes the binding and its target value from the specified property, revealing the next
+    /// lower value source.
     /// </summary>
     public void ClearBinding<T>(MewProperty<T> property)
     {

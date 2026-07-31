@@ -80,7 +80,7 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
     {
         if (_syncingSelection) return;
         _syncingSelection = true;
-        try { SelectedIndex = item is TabItem tab ? _tabs.IndexOf(tab) : -1; }
+        try { SetCurrentValue(SelectedIndexProperty, item is TabItem tab ? _tabs.IndexOf(tab) : -1); }
         finally { _syncingSelection = false; }
         SyncSelectedItemFromIndex();
     }
@@ -89,13 +89,17 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
     {
         bool wasSyncing = _syncingSelection;
         _syncingSelection = true;
-        try
-        {
-            if (wasSyncing)
-                SetCurrentValue(SelectedItemProperty, SelectedTab);
-            else
-                CommitTargetValue(SelectedItemProperty, SelectedTab);
-        }
+        try { SetCurrentValue(SelectedItemProperty, SelectedTab); }
+        finally { _syncingSelection = wasSyncing; }
+    }
+
+    private void CommitSelection(int index)
+    {
+        CommitTargetValue(SelectedIndexProperty, index);
+
+        bool wasSyncing = _syncingSelection;
+        _syncingSelection = true;
+        try { CommitTargetValue(SelectedItemProperty, SelectedTab); }
         finally { _syncingSelection = wasSyncing; }
     }
 
@@ -317,7 +321,7 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
         ClearHeaders();
         _lastTab = null;
         _lastContent = null;
-        SelectedIndex = -1;
+        CommitSelection(-1);
         InvalidateMeasure();
         InvalidateVisual();
     }
@@ -353,7 +357,7 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
             newSelected = oldSelected;
 
         RebuildHeaders();
-        SelectedIndex = newSelected;
+        CommitSelection(newSelected);
         EnsureValidSelection();
         InvalidateMeasure();
         InvalidateVisual();
@@ -646,7 +650,7 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
 
     private void SelectTabFromHeader(int index)
     {
-        SelectedIndex = index;
+        CommitSelection(index);
         var root = FindVisualRoot();
         if (root is Window window)
         {
@@ -866,7 +870,10 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
 
             int index = i;
             var tab = _tabs[i];
-            menu.AddItem(GetOverflowMenuText(tab, i), () => SelectedIndex = index, tab.IsEnabled);
+            menu.AddItem(
+                GetOverflowMenuText(tab, i),
+                () => CommitSelection(index),
+                tab.IsEnabled);
         }
 
         var buttonBounds = _overflowButton.Bounds;
@@ -892,13 +899,13 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
     {
         if (_tabs.Count == 0)
         {
-            SelectedIndex = -1;
+            CommitSelection(-1);
             return;
         }
 
         if (SelectedIndex < 0 || SelectedIndex >= _tabs.Count)
         {
-            SelectedIndex = 0;
+            CommitSelection(0);
         }
         else
         {
@@ -994,7 +1001,7 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
             i = (i - 1 + _tabs.Count) % _tabs.Count;
             if (_tabs[i].IsEnabled)
             {
-                SelectedIndex = i;
+                CommitSelection(i);
                 return;
             }
         }
@@ -1013,7 +1020,7 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
             i = (i + 1) % _tabs.Count;
             if (_tabs[i].IsEnabled)
             {
-                SelectedIndex = i;
+                CommitSelection(i);
                 return;
             }
         }

@@ -81,13 +81,7 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IPropertyBindin
 
     public void UpdateTargetValue(object? value)
     {
-        if (_updating) return;
-        _updating = true;
-        try
-        {
-            _target.UpdateBindingTarget(_targetProperty, (TProp)value!);
-        }
-        finally { _updating = false; }
+        _target.UpdateBindingTarget(_targetProperty, (TProp)value!);
     }
 
     public object? CommitTargetValue(object? value)
