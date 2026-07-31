@@ -37,8 +37,8 @@ public sealed class Style
     public IReadOnlyList<SetterBase> Setters { get; init; } = [];
 
     /// <summary>
-    /// Gets the state-conditional triggers. Evaluated per-property: highest
-    /// <see cref="StateTrigger.Specificity"/> wins; ties broken by later declaration.
+    /// Gets the state-conditional triggers. Matching triggers are evaluated in declaration order;
+    /// for each property, the last active declaration wins.
     /// </summary>
     public IReadOnlyList<StateTrigger> Triggers { get; init; } = [];
 
@@ -58,7 +58,7 @@ public sealed class Style
     /// </summary>
     public Transition? FindTransition(int propertyId)
     {
-        for (int i = 0; i < Transitions.Count; i++)
+        for (int i = Transitions.Count - 1; i >= 0; i--)
         {
             if (Transitions[i].Property.Id == propertyId)
                 return Transitions[i];
