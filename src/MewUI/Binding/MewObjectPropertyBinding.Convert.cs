@@ -65,12 +65,12 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
         _updating = true;
         try
         {
-            var sourceValue = _source.PropertyStore.GetValue(_sourceProperty);
+            var sourceValue = _source.GetBindingValue(_sourceProperty);
             var converted = _convert(sourceValue);
             if (!EqualityComparer<TProp>.Default.Equals(
-                    _target.PropertyStore.GetValue(_targetProperty), converted))
+                    _target.GetBindingValue(_targetProperty), converted))
             {
-                _target.PropertyStore.SetLocal(_targetProperty, converted);
+                _target.SetBindingValue(_targetProperty, converted);
             }
         }
         finally { _updating = false; }
@@ -82,10 +82,10 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IDisposable
         _updating = true;
         try
         {
-            var targetValue = _target.PropertyStore.GetValue(_targetProperty);
+            var targetValue = _target.GetBindingValue(_targetProperty);
             var convertedBack = _convertBack(targetValue);
             if (!EqualityComparer<TSource>.Default.Equals(
-                    _source.PropertyStore.GetValue(_sourceProperty), convertedBack))
+                    _source.GetBindingValue(_sourceProperty), convertedBack))
             {
                 _source.PropertyStore.SetLocal(_sourceProperty, convertedBack);
             }

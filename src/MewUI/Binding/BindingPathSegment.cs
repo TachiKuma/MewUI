@@ -120,5 +120,5 @@ internal sealed class MewPropertyBindingPathSegment<TOwner, TValue> : IBindingPa
         => WeakEventManager.RemoveHandler(_changedEvent, (TOwner)endpoint, subscription);
 
     public void Write(object endpoint, object? value)
-        => ((TOwner)endpoint).SetBindingValue(_property, (TValue)value!);
+        => ((TOwner)endpoint).PropertyStore.SetLocal(_property, (TValue)value!);
 }

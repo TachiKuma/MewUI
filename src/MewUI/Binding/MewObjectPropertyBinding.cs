@@ -33,7 +33,7 @@ internal sealed class MewObjectPropertyBinding<T> : IDisposable
         _forwardEntry = source.AddPropertyForward(sourceProperty.Id, target, targetProperty);
 
         // Initial sync.
-        target.PropertyStore.SetLocal(targetProperty, source.PropertyStore.GetBoxedValue(sourceProperty));
+        target.SetBindingValue(targetProperty, source.GetBindingValue(sourceProperty));
     }
 
     public void Dispose()
