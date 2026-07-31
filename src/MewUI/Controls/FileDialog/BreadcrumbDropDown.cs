@@ -70,7 +70,7 @@ internal sealed class BreadcrumbDropDown : PopupOwnerBase
 
     protected override UIElement CreatePopupContent()
     {
-        var list = new ListBox().Items(_subdirs.ToArray());
+        var list = new ListBox().Items(_subdirs.ToArray()).ZebraStriping(false);
         list.SelectionChanged += OnPopupSelectionChanged;
         return list;
     }
