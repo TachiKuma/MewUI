@@ -1,3 +1,5 @@
+using System.Runtime.ExceptionServices;
+
 namespace Aprillz.MewUI;
 
 /// <summary>
@@ -7,9 +9,26 @@ namespace Aprillz.MewUI;
 /// </summary>
 public sealed class StyleSheet
 {
+    private readonly object _sync = new();
     private readonly Dictionary<string, Style> _namedStyles = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Func<Style>> _namedStyleFactories = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ExceptionDispatchInfo> _factoryFailures = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _materializingNames = new(StringComparer.Ordinal);
     private List<(Type Type, Style Style)>? _typeRules;
+    private (Type Type, Style Style)[]? _frozenTypeRules;
+    private bool _isFrozen;
+
+    /// <summary>Gets whether this sheet has been frozen for live style lookup.</summary>
+    public bool IsFrozen
+    {
+        get
+        {
+            lock (_sync)
+            {
+                return _isFrozen;
+            }
+        }
+    }
 
     /// <summary>
     /// Defines a named style factory. The style is created on first lookup.
@@ -21,8 +40,13 @@ public sealed class StyleSheet
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(factory);
 
-        _namedStyles.Remove(name);
-        _namedStyleFactories[name] = factory;
+        lock (_sync)
+        {
+            ThrowIfFrozen();
+            _namedStyles.Remove(name);
+            _factoryFailures.Remove(name);
+            _namedStyleFactories[name] = factory;
+        }
     }
 
     /// <summary>
@@ -40,8 +64,40 @@ public sealed class StyleSheet
                 nameof(style));
         }
 
-        _typeRules ??= new();
-        _typeRules.Add((typeof(T), style));
+        lock (_sync)
+        {
+            ThrowIfFrozen();
+            _typeRules ??= new();
+            _typeRules.Add((typeof(T), style));
+        }
+    }
+
+    /// <summary>
+    /// Freezes this sheet for live use. Registered type styles and already-materialized named
+    /// styles are validated and snapshotted; named factories remain lazy.
+    /// </summary>
+    public void Freeze()
+    {
+        lock (_sync)
+        {
+            if (_isFrozen)
+            {
+                return;
+            }
+
+            foreach (var style in _namedStyles.Values)
+            {
+                style.Freeze();
+            }
+
+            _frozenTypeRules = _typeRules?.ToArray() ?? [];
+            for (int i = 0; i < _frozenTypeRules.Length; i++)
+            {
+                _frozenTypeRules[i].Style.Freeze();
+            }
+
+            _isFrozen = true;
+        }
     }
 
     /// <summary>
@@ -49,20 +105,53 @@ public sealed class StyleSheet
     /// </summary>
     public Style? Get(string name)
     {
-        if (_namedStyles.TryGetValue(name, out var style))
-        {
-            return style;
-        }
+        ArgumentNullException.ThrowIfNull(name);
 
-        if (!_namedStyleFactories.TryGetValue(name, out var factory))
+        lock (_sync)
         {
-            return null;
-        }
+            if (_namedStyles.TryGetValue(name, out var style))
+            {
+                return style;
+            }
 
-        style = factory();
-        _namedStyleFactories.Remove(name);
-        _namedStyles[name] = style;
-        return style;
+            if (_factoryFailures.TryGetValue(name, out var failure))
+            {
+                failure.Throw();
+            }
+
+            if (!_namedStyleFactories.TryGetValue(name, out var factory))
+            {
+                return null;
+            }
+
+            if (!_materializingNames.Add(name))
+            {
+                throw new InvalidOperationException(
+                    $"Named style factory '{name}' recursively requested itself while materializing.");
+            }
+
+            try
+            {
+                style = factory() ?? throw new InvalidOperationException(
+                    $"Named style factory '{name}' returned null.");
+                if (_isFrozen)
+                {
+                    style.Freeze();
+                }
+
+                _namedStyles[name] = style;
+                return style;
+            }
+            catch (Exception ex)
+            {
+                _factoryFailures[name] = ExceptionDispatchInfo.Capture(ex);
+                throw;
+            }
+            finally
+            {
+                _materializingNames.Remove(name);
+            }
+        }
     }
 
     /// <summary>
@@ -79,21 +168,60 @@ public sealed class StyleSheet
                 nameof(controlType));
         }
 
-        if (_typeRules == null) return null;
-
-        for (Type? candidate = controlType;
-             candidate != null && typeof(Controls.Control).IsAssignableFrom(candidate);
-             candidate = candidate.BaseType)
+        lock (_sync)
         {
-            for (int i = _typeRules.Count - 1; i >= 0; i--)
+            IReadOnlyList<(Type Type, Style Style)> rules = _isFrozen
+                ? _frozenTypeRules!
+                : _typeRules ?? [];
+
+            for (Type? candidate = controlType;
+                 candidate != null && typeof(Controls.Control).IsAssignableFrom(candidate);
+                 candidate = candidate.BaseType)
             {
-                if (_typeRules[i].Type == candidate)
+                for (int i = rules.Count - 1; i >= 0; i--)
                 {
-                    return _typeRules[i].Style;
+                    if (rules[i].Type == candidate)
+                    {
+                        return rules[i].Style;
+                    }
                 }
             }
-        }
 
-        return null;
+            return null;
+        }
+    }
+
+    internal Style? GetLive(string name)
+    {
+        Freeze();
+        return Get(name);
+    }
+
+    internal Style? GetLiveByType(Type controlType)
+    {
+        Freeze();
+        return GetByType(controlType);
+    }
+
+    /// <summary>
+    /// Drops only results that can be recreated from retained named factories. Immediate type
+    /// rules remain frozen and are refreshed by rebuilding and replacing their owning sheet.
+    /// </summary>
+    internal void InvalidateLazyCache()
+    {
+        lock (_sync)
+        {
+            _namedStyles.Clear();
+            _factoryFailures.Clear();
+        }
+    }
+
+    private void ThrowIfFrozen()
+    {
+        if (_isFrozen)
+        {
+            throw new InvalidOperationException(
+                "This StyleSheet is frozen. Build and assign a new StyleSheet to change live styles.");
+        }
     }
 }

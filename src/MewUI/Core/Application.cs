@@ -55,16 +55,38 @@ public sealed class Application
     /// </summary>
     public Theme Theme => _themeManager.CurrentTheme;
 
+    private StyleSheet _styleSheet = CreateDefaultStyleSheet();
+
     /// <summary>
-    /// Gets the application-level style sheet. Named styles defined here are available to all controls
-    /// as a fallback when no closer StyleSheet is found in the visual tree.
+    /// Gets or sets the application-level style sheet. Named styles defined here are available to all
+    /// controls as a fallback when no closer StyleSheet is found in the context chain. Replace the
+    /// instance with a fully configured sheet to change application styles after live lookup begins.
     /// </summary>
-    public StyleSheet StyleSheet { get; } = CreateDefaultStyleSheet();
+    public StyleSheet StyleSheet
+    {
+        get => _styleSheet;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (ReferenceEquals(_styleSheet, value))
+            {
+                return;
+            }
+
+            _styleSheet = value;
+            var windows = _runtime?.SnapshotWindows() ?? Array.Empty<Window>();
+            for (int i = 0; i < windows.Length; i++)
+            {
+                windows[i].RefreshStyles(scope: null, animate: true);
+            }
+        }
+    }
 
     private static StyleSheet CreateDefaultStyleSheet()
     {
         var sheet = new StyleSheet();
         BuiltInStyles.Register(sheet);
+        FileDialogStyles.Register(sheet);
         return sheet;
     }
 
@@ -323,6 +345,26 @@ public sealed class Application
         if (change.Changed)
         {
             ApplyThemeChange(change.OldTheme, change.NewTheme);
+        }
+    }
+
+    internal void InvalidateStyleCachesForHotReload()
+    {
+        _styleSheet.InvalidateLazyCache();
+
+        var windows = _runtime?.SnapshotWindows() ?? Array.Empty<Window>();
+        for (int i = 0; i < windows.Length; i++)
+        {
+            windows[i].InvalidateStyleSheetLazyCaches();
+        }
+    }
+
+    internal void RefreshStylesAfterHotReload()
+    {
+        var windows = _runtime?.SnapshotWindows() ?? Array.Empty<Window>();
+        for (int i = 0; i < windows.Length; i++)
+        {
+            windows[i].RefreshStyles(scope: null, animate: false);
         }
     }
 

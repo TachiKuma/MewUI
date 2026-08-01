@@ -6,6 +6,8 @@ namespace Aprillz.MewUI;
 /// </summary>
 public sealed class StateTrigger
 {
+    private IReadOnlyList<SetterBase>? _setters;
+
     /// <summary>
     /// Flags that must ALL be present for this trigger to match.
     /// Use <see cref="VisualStateFlags.None"/> when only <see cref="Exclude"/> matters.
@@ -23,13 +25,29 @@ public sealed class StateTrigger
     /// May contain <see cref="Setter"/>, <see cref="UnsetSetter"/>, and
     /// <see cref="TargetSetter"/> declarations.
     /// </summary>
-    public required IReadOnlyList<SetterBase> Setters { get; init; }
+    public required IReadOnlyList<SetterBase> Setters
+    {
+        get => _setters!;
+        init => _setters = value;
+    }
 
     /// <summary>
     /// Tests whether this trigger matches the given flags.
     /// </summary>
     public bool Matches(VisualStateFlags flags)
         => (flags & Match) == Match && (flags & Exclude) == 0;
+
+    internal SetterBase[] SnapshotSetters()
+    {
+        if (_setters == null)
+        {
+            throw new InvalidOperationException("StateTrigger.Setters cannot be null.");
+        }
+
+        var snapshot = _setters.ToArray();
+        _setters = snapshot;
+        return snapshot;
+    }
 }
 
 /// <summary>

@@ -66,6 +66,14 @@ internal sealed class PopupManager
         _nativeHost.NotifyDpiChanged(oldDpi, newDpi);
     }
 
+    internal void VisitAll(Action<Element> visitor)
+    {
+        for (int i = 0; i < _popups.Count; i++)
+        {
+            VisualTree.Visit(_popups[i].Element, visitor);
+        }
+    }
+
     internal void Dispose()
     {
         foreach (var entry in _popups)
