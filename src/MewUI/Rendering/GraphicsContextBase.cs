@@ -1,5 +1,6 @@
 using System.Numerics;
 using Aprillz.MewUI.Diagnostics;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering;
 
@@ -10,6 +11,8 @@ namespace Aprillz.MewUI.Rendering;
 /// </summary>
 public abstract class GraphicsContextBase : IGraphicsContext
 {
+    public virtual ITextRenderContext Text => TextServices.GetRenderContext(this);
+
     private static readonly EnvDebugLogger _stateLogger = new("MEWUI_GRAPHICS_DEBUG", "[GraphicsContextBase]");
     
     #region Viewport Culling
@@ -473,6 +476,7 @@ public abstract class GraphicsContextBase : IGraphicsContext
         if (_disposed) return;
         _disposed = true;
         if (IsActive) EndFrame();
+        TextServices.ReleaseRenderContext(this);
         OnDispose();
         _boxShadowStopsCache.Clear();
         CollectionPool.Return(_cullStack);

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Aprillz.MewUI.Platform;
 using Aprillz.MewUI.Rendering.Filters;
 using Aprillz.MewUI.Resources;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering.MewVG;
 
@@ -18,6 +19,8 @@ public sealed partial class MewVGWin32GraphicsFactory
     : IGraphicsFactory, IRenderDevice, IGpuInteropInvalidationSource, IWindowResourceReleaser, IWindowSurfacePresenter
 {
     public event EventHandler<GpuInteropInvalidatedEventArgs>? GpuInteropInvalidated;
+
+    public ITextEngine TextEngine => TextServices.GetEngine(this);
 
     internal void RaiseGpuInteropInvalidated(GpuInteropInvalidatedEventArgs e)
         => GpuInteropInvalidated?.Invoke(this, e);
@@ -230,6 +233,7 @@ public sealed partial class MewVGWin32GraphicsFactory
 
     public void Dispose()
     {
+        TextServices.ReleaseEngine(this);
         _renderResourceCache.Dispose();
 
         foreach (var (_, resources) in _windows)

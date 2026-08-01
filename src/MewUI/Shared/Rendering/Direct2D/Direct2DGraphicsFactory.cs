@@ -5,6 +5,7 @@ using Aprillz.MewUI.Native.DirectWrite;
 using Aprillz.MewUI.Platform;
 using Aprillz.MewUI.Platform.Win32;
 using Aprillz.MewUI.Resources;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering.Direct2D;
 
@@ -13,6 +14,8 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
     public const string BackendIdentifier = "Direct2D";
 
     public string Backend => BackendIdentifier;
+
+    public ITextEngine TextEngine => TextServices.GetEngine(this);
 
     public event EventHandler<GpuInteropInvalidatedEventArgs>? GpuInteropInvalidated;
 
@@ -63,6 +66,7 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
 
     public void Dispose()
     {
+        TextServices.ReleaseEngine(this);
         _renderResourceCache.Dispose();
         DisposeLayeredTargets();
 

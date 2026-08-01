@@ -6,6 +6,9 @@ namespace Aprillz.MewUI.Rendering;
 /// </summary>
 public sealed class TextLayout
 {
+    private Action<nint>? _releaseBackendHandle;
+    private nint _backendHandle;
+
     public required Size MeasuredSize { get; init; }
 
     public required Rect EffectiveBounds { get; set; }
@@ -15,5 +18,25 @@ public sealed class TextLayout
     public required double ContentHeight { get; init; }
 
     /// <summary>Backend-private native handle for rendering.</summary>
-    internal nint BackendHandle { get; set; }
+    internal nint BackendHandle => _backendHandle;
+
+    internal void AttachBackendHandle(nint handle, Action<nint> release)
+    {
+        ArgumentNullException.ThrowIfNull(release);
+        ReleaseBackendHandle();
+        _backendHandle = handle;
+        _releaseBackendHandle = release;
+    }
+
+    internal void ReleaseBackendHandle()
+    {
+        nint handle = Interlocked.Exchange(ref _backendHandle, 0);
+        var release = Interlocked.Exchange(ref _releaseBackendHandle, null);
+        if (handle != 0)
+        {
+            release?.Invoke(handle);
+        }
+    }
+
+    ~TextLayout() => ReleaseBackendHandle();
 }

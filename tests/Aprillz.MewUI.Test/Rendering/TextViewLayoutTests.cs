@@ -1,0 +1,319 @@
+using Aprillz.MewUI;
+using Aprillz.MewUI.Rendering.Gdi;
+using Aprillz.MewUI.Text;
+using System.Diagnostics;
+
+namespace MewUI.Test.Rendering;
+
+[TestClass]
+[DoNotParallelize]
+public sealed class TextViewLayoutTests
+{
+    [TestMethod]
+    public void SetViewport_MaterializesOnlyVisibleLogicalLines()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        string text = string.Join('\n', Enumerable.Range(0, 1000).Select(i => $"line {i}"));
+        var document = new TestReadOnlyDocument(text);
+        using var factory = new GdiGraphicsFactory();
+        using var view = CreateView(factory, document, width: 240);
+
+        view.SetViewport(new TextViewport(240, 100));
+
+        Assert.IsNotEmpty(view.MaterializedLines);
+        Assert.IsLessThan(20, view.MaterializedLines.Count);
+        Assert.AreEqual(0, view.MaterializedLines[0].LogicalLine.LineNumber);
+
+        view.SetViewport(new TextViewport(240, 100, VerticalOffset: view.ExtentHeight * 0.5));
+
+        Assert.IsNotEmpty(view.MaterializedLines);
+        Assert.IsLessThan(20, view.MaterializedLines.Count);
+        Assert.IsGreaterThan(0, view.MaterializedLines[0].LogicalLine.LineNumber);
+
+        Assert.IsGreaterThanOrEqualTo(1, factory.TextEngine.ManagedCache.Count);
+        view.Dispose();
+        Assert.AreEqual(0, factory.TextEngine.ManagedCache.Count);
+    }
+
+    [TestMethod]
+    public void LogicalLine_WrapsIntoVisualLines_AndHitMapsToDocumentOffset()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument("abcdefghijklmno\nsecond");
+        using var factory = new GdiGraphicsFactory();
+        using var view = CreateView(factory, document, width: 45);
+        view.SetViewport(new TextViewport(45, 200));
+
+        var first = view.MaterializedLines.Single(line => line.LogicalLine.LineNumber == 0);
+        Assert.IsGreaterThanOrEqualTo(2, first.VisualLines.Count);
+
+        var caret = first.GetCaretBounds(new CharacterHit(3, 0));
+        var hit = view.HitTest(new Point(caret.X, first.VisualLines[0].Bounds.Y + caret.Height * 0.5));
+
+        Assert.AreEqual(0, hit.LineNumber);
+        Assert.AreEqual(3, hit.DocumentOffset);
+    }
+
+    [TestMethod]
+    [Timeout(30_000, CooperativeCancellation = true)]
+    public void TenMegabyteWrappedLogicalLine_MaterializesOnlyViewportSlice()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument(new string('x', 10_000_000));
+        using var factory = new GdiGraphicsFactory();
+        using var view = CreateView(factory, document, width: 320);
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        var stopwatch = Stopwatch.StartNew();
+
+        view.SetViewport(new TextViewport(320, 80));
+        long initialMilliseconds = stopwatch.ElapsedMilliseconds;
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+
+        Assert.HasCount(1, view.MaterializedLines);
+        Assert.IsLessThan(64 * 1024, view.MaterializedLines[0].LogicalLine.Length,
+            "The wrapped view materialized the complete logical line instead of a viewport slice.");
+        Assert.IsLessThan(64 * 1024, document.MaxRequestedLength,
+            "The view requested the complete 10MB logical line from the document.");
+        Assert.IsGreaterThan(80, view.ExtentHeight);
+        Assert.IsLessThan(750L, initialMilliseconds,
+            $"10MB wrapped viewport initialization regressed to {initialMilliseconds}ms.");
+        Assert.IsLessThan(64L * 1024 * 1024, allocatedBytes,
+            $"10MB wrapped viewport allocated {allocatedBytes:N0} bytes, indicating whole-line materialization.");
+
+        double middleY = view.ExtentHeight * 0.5;
+        view.SetViewport(new TextViewport(320, 80, VerticalOffset: middleY));
+        var middle = view.MaterializedLines[0];
+        Assert.IsGreaterThan(1_000_000, middle.LogicalLine.Offset,
+            "Scrolling did not move the materialized slice into the logical line.");
+        var hit = view.HitTest(new Point(20, 40));
+        Assert.IsGreaterThan(1_000_000, hit.DocumentOffset);
+
+        stopwatch.Restart();
+        Rect endCaret = view.GetCaretBounds(document.TextLength);
+        Assert.IsLessThan(100L, stopwatch.ElapsedMilliseconds,
+            "End-caret lookup scanned the complete wrapped logical line.");
+        Assert.IsGreaterThan(middleY, endCaret.Y);
+    }
+
+    [TestMethod]
+    public void Invalidate_RebuildsChangedLineAndFollowingHeightMap()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument("short\ntail");
+        using var factory = new GdiGraphicsFactory();
+        using var view = CreateView(factory, document, width: 60);
+        view.SetViewport(new TextViewport(60, 300));
+        int beforeRows = view.MaterializedLines[0].VisualLines.Count;
+
+        document.SetText("a much longer first logical line that wraps\ntail");
+        view.Invalidate(new TextChange(0, 5, 41));
+
+        Assert.IsGreaterThan(beforeRows, view.MaterializedLines[0].VisualLines.Count);
+        Assert.AreEqual(1, document.Version);
+        Assert.AreEqual(document.GetLineByNumber(1).Offset, view.MaterializedLines[1].LogicalLine.Offset);
+    }
+
+    [TestMethod]
+    public void ExtensionPipeline_ProjectsClassifiesTransformsGeneratesAndCollectsAdornments()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument("abcXYZdef");
+        var extensions = new TextViewExtensionPipeline { Revision = 1 };
+        extensions.Projections.Add(new FoldingProjection());
+        extensions.Classifiers.Add(new PrefixClassifier());
+        extensions.Transformers.Add(new SuffixTransformer());
+        extensions.ElementGenerators.Add(new EllipsisInlineGenerator());
+        extensions.AdornmentProviders.Add(new MarkerAdornmentProvider());
+
+        using var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            document,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.NoWrap },
+            extensions,
+            dpi: 96);
+        view.SetViewport(new TextViewport(300, 100));
+
+        var line = view.MaterializedLines[0];
+        Assert.HasCount(1, line.PaintSpans);
+        Assert.HasCount(1, line.Adornments);
+
+        var projectedCaret = line.GetCaretBounds(new CharacterHit(4, 0));
+        var hit = view.HitTest(new Point(projectedCaret.X, projectedCaret.Y + projectedCaret.Height * 0.5));
+        Assert.AreEqual(6, hit.DocumentOffset,
+            "The projected offset after the folding placeholder must map back to the source suffix.");
+    }
+
+    private static TextViewLayout CreateView(GdiGraphicsFactory factory, IReadOnlyTextDocument document, double width)
+        => new(
+            factory.TextEngine,
+            document,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { MaxWidth = width, Wrapping = TextWrapping.Wrap },
+            dpi: 96);
+
+    private sealed class TestReadOnlyDocument : IReadOnlyTextDocument
+    {
+        private string _text;
+        private List<Line> _lines;
+
+        public TestReadOnlyDocument(string text)
+        {
+            _text = text;
+            _lines = ParseLines(text);
+        }
+
+        public int TextLength => _text.Length;
+        public long Version { get; private set; }
+        public int LineCount => _lines.Count;
+        public int MaxRequestedLength { get; private set; }
+
+        public char GetCharAt(int offset) => _text[offset];
+
+        public string GetText(int offset, int length)
+        {
+            MaxRequestedLength = Math.Max(MaxRequestedLength, length);
+            return _text.Substring(offset, length);
+        }
+
+        public IReadOnlyDocumentLine GetLineByNumber(int lineNumber) => _lines[lineNumber];
+
+        public IReadOnlyDocumentLine GetLineByOffset(int offset)
+        {
+            offset = Math.Clamp(offset, 0, _text.Length);
+            foreach (var line in _lines)
+            {
+                if (offset < line.Offset + line.TotalLength || line.LineNumber == _lines.Count - 1)
+                {
+                    return line;
+                }
+            }
+            return _lines[^1];
+        }
+
+        public int GetOffset(int line, int column)
+        {
+            var source = _lines[line];
+            return source.Offset + Math.Clamp(column, 0, source.Length);
+        }
+
+        public TextLocation GetLocation(int offset)
+        {
+            var line = (Line)GetLineByOffset(offset);
+            return new TextLocation(line.LineNumber, Math.Clamp(offset - line.Offset, 0, line.Length));
+        }
+
+        public void SetText(string text)
+        {
+            _text = text;
+            _lines = ParseLines(text);
+            Version++;
+        }
+
+        private static List<Line> ParseLines(string text)
+        {
+            var lines = new List<Line>();
+            int lineStart = 0;
+            int number = 0;
+            for (int i = 0; i < text.Length; i++)
+            {
+                if (text[i] is not ('\r' or '\n'))
+                {
+                    continue;
+                }
+                int delimiterLength = text[i] == '\r' && i + 1 < text.Length && text[i + 1] == '\n' ? 2 : 1;
+                lines.Add(new Line(number++, lineStart, i - lineStart, delimiterLength, text.Substring(i, delimiterLength)));
+                i += delimiterLength - 1;
+                lineStart = i + 1;
+            }
+            lines.Add(new Line(number, lineStart, text.Length - lineStart, 0, string.Empty));
+            return lines;
+        }
+
+        private sealed record Line(int LineNumber, int Offset, int Length, int NewLineLength, string Delimiter)
+            : IReadOnlyDocumentLine
+        {
+            public int TotalLength => Length + NewLineLength;
+        }
+    }
+
+    private sealed class PrefixClassifier : ITextClassifier
+    {
+        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
+            => output.Add(new TextPaintSpan(new TextRange(0, 3), Foreground: Color.Red));
+    }
+
+    private sealed class SuffixTransformer : ITextLineTransformer
+    {
+        public void Transform(
+            in TextLineTransformContext context,
+            IList<GeometryStyleRun> geometryRuns,
+            IList<InlineRun> inlines)
+            => geometryRuns.Add(new GeometryStyleRun(4, 3, new TextRunStyle("Segoe UI", 18, FontWeight.Bold)));
+    }
+
+    private sealed class EllipsisInlineGenerator : ITextElementGenerator
+    {
+        public void Generate(in TextElementContext context, IList<InlineRun> output)
+            => output.Add(new InlineRun(3, 1, new FixedInline()));
+    }
+
+    private sealed class FixedInline : IInlineTextObject
+    {
+        public InlineMetrics Measure() => new(20, 16, 12);
+        public void Draw(ITextRenderContext context, Point origin) { }
+    }
+
+    private sealed class MarkerAdornmentProvider : ITextAdornmentProvider
+    {
+        public void GetAdornments(in TextAdornmentContext context, IList<ITextAdornment> output)
+            => output.Add(new MarkerAdornment());
+    }
+
+    private sealed class MarkerAdornment : ITextAdornment
+    {
+        public TextAdornmentLayer Layer => TextAdornmentLayer.Foreground;
+        public void Draw(ITextRenderContext context, TextLineLayout line, Point origin) { }
+    }
+
+    private sealed class FoldingProjection : ITextProjection
+    {
+        public ProjectedText Project(in TextProjectionContext context)
+            => new("abc…def".AsMemory(), new FoldingOffsetMap());
+    }
+
+    private sealed class FoldingOffsetMap : ITextOffsetMap
+    {
+        public int MapToSource(int projectedOffset)
+            => projectedOffset <= 3 ? projectedOffset : projectedOffset + 2;
+
+        public int MapFromSource(int sourceOffset)
+            => sourceOffset <= 3 ? sourceOffset : sourceOffset < 6 ? 3 : sourceOffset - 2;
+    }
+}
