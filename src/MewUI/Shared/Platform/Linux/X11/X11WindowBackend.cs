@@ -981,9 +981,13 @@ internal sealed class X11WindowBackend : IWindowBackend
             return;
 
         var pos = new Point(dev.event_x / Window.DpiScale, dev.event_y / Window.DpiScale);
-        bool leftDown = (dev.mods.effective & (int)X11ModifierMask.Button1) != 0;
-        bool middleDown = (dev.mods.effective & (int)X11ModifierMask.Button2) != 0;
-        bool rightDown = (dev.mods.effective & (int)X11ModifierMask.Button3) != 0;
+        // XI2 keeps pointer buttons separate from keyboard modifiers. Reading Button1Mask from
+        // mods.effective made every XI_Motion look button-up, so controls that require a held
+        // button (ScrollBar, Slider, selection drags) discarded their captured moves while D&D,
+        // which consumes the move before MouseEventArgs is built, continued to work.
+        bool leftDown = XI2.IsButtonDown(dev.buttons, 1);
+        bool middleDown = XI2.IsButtonDown(dev.buttons, 2);
+        bool rightDown = XI2.IsButtonDown(dev.buttons, 3);
 
         WindowInputRouter.MouseMove(Window, pos, ClientToScreen(pos), leftDown: leftDown, rightDown: rightDown, middleDown: middleDown, modifiers: GetModifiers((uint)dev.mods.effective));
 
