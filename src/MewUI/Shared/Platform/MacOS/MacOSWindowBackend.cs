@@ -78,6 +78,8 @@ internal sealed class MacOSWindowBackend : IWindowBackend
 
     internal Window Window => _window;
 
+    internal long InputRoutingOrder { get; set; }
+
     internal bool AcceptsImeTextInput =>
         _imeHasMarkedText || (_imeMode != ImeMode.Disabled && _window.FocusManager.FocusedElement is ITextInputClient);
 
@@ -1353,14 +1355,55 @@ internal sealed class MacOSWindowBackend : IWindowBackend
         var screenPos = ClientToScreen(pos);
         _window.UpdateLastMousePosition(pos, screenPos);
 
+        if (IsReroutableMouseEvent(type))
+        {
+            var inputTarget = _host.ResolveMouseInputTarget(this, screenPos);
+            if (!ReferenceEquals(inputTarget, this))
+            {
+                _window.ClearMouseOverState();
+                inputTarget.ProcessReroutedMouseEvent(ev, type, screenPos);
+                return;
+            }
+        }
+
+        ProcessMouseOrKeyEvent(ev, type, pos, screenPos, client, eventWindowMatchesTarget: true);
+    }
+
+    private void ProcessReroutedMouseEvent(nint ev, int type, Point screenPos)
+    {
+        if (!_enabled)
+        {
+            _window.NotifyInputWhenDisabled();
+            return;
+        }
+
+        _ = UpdateClientSizeIfNeeded();
+        var client = _window.ClientSize;
+        var pos = ScreenToClient(screenPos);
+        _window.UpdateLastMousePosition(pos, screenPos);
+        ProcessMouseOrKeyEvent(ev, type, pos, screenPos, client, eventWindowMatchesTarget: false);
+    }
+
+    private void ProcessMouseOrKeyEvent(
+        nint ev,
+        int type,
+        Point pos,
+        Point screenPos,
+        Size client,
+        bool eventWindowMatchesTarget)
+    {
         switch (type)
         {
             // Mouse moved / dragged
             case 5:  // NSEventTypeMouseMoved
             case 6:  // NSEventTypeLeftMouseDragged
             case 7:  // NSEventTypeRightMouseDragged
+            case 8:  // NSEventTypeMouseEntered
             case 27: // NSEventTypeOtherMouseDragged
-                if (ShouldIgnoreMouseEvent(ev, pos, client, allowOutsideWhileCaptured: true))
+                if (ShouldIgnoreMouseEvent(
+                    ev, pos, client,
+                    allowOutsideWhileCaptured: true,
+                    eventWindowMatchesTarget))
                 {
                     return;
                 }
@@ -1397,7 +1440,10 @@ internal sealed class MacOSWindowBackend : IWindowBackend
                 break;
 
             case 22: // NSEventTypeScrollWheel
-                if (ShouldIgnoreMouseEvent(ev, pos, client, allowOutsideWhileCaptured: true))
+                if (ShouldIgnoreMouseEvent(
+                    ev, pos, client,
+                    allowOutsideWhileCaptured: true,
+                    eventWindowMatchesTarget))
                 {
                     return;
                 }
@@ -1414,12 +1460,48 @@ internal sealed class MacOSWindowBackend : IWindowBackend
         }
     }
 
-    private bool ShouldIgnoreMouseEvent(nint ev, Point pos, Size client, bool allowOutsideWhileCaptured)
+    private static bool IsReroutableMouseEvent(int type)
+        => type is 1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or 22 or 25 or 26 or 27;
+
+    internal bool IsInteractivePopupAt(MacOSWindowBackend eventTarget, Point screenPositionPx)
+    {
+        if (_window.Kind != Controls.WindowKind.Popup
+            || _window.IsInputTransparentSurface
+            || !_enabled
+            || _nsWindow == 0
+            || !MacOSInterop.IsWindowVisible(_nsWindow))
+        {
+            return false;
+        }
+
+        // A popup may geometrically overlap another MewUI top-level that is actually above it.
+        // Limit coordinate-based correction to the owner/popup family of the NSEvent target;
+        // AppKit remains authoritative between unrelated top-level windows.
+        var popupOwner = _window.Owner;
+        if (!ReferenceEquals(eventTarget, this)
+            && !ReferenceEquals(popupOwner, eventTarget.Window)
+            && !(eventTarget.Window.Kind == Controls.WindowKind.Popup
+                && ReferenceEquals(popupOwner, eventTarget.Window.Owner)))
+        {
+            return false;
+        }
+
+        var pos = ScreenToClient(screenPositionPx);
+        var client = _window.ClientSize;
+        return pos.X >= 0 && pos.Y >= 0 && pos.X < client.Width && pos.Y < client.Height;
+    }
+
+    private bool ShouldIgnoreMouseEvent(
+        nint ev,
+        Point pos,
+        Size client,
+        bool allowOutsideWhileCaptured,
+        bool eventWindowMatchesTarget)
     {
         var evWindow = MacOSInterop.GetEventWindow(ev);
         bool isCaptured = _window.HasMouseCapture || _leftDown || _rightDown || _middleDown;
 
-        if (evWindow != 0 && evWindow != _nsWindow && !isCaptured)
+        if (eventWindowMatchesTarget && evWindow != 0 && evWindow != _nsWindow && !isCaptured)
         {
             return true;
         }

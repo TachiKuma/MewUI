@@ -10,6 +10,7 @@ public sealed class MacOSPlatformHost : IPlatformHost
 
     private readonly Dictionary<nint, MacOSWindowBackend> _windows = new();
     private readonly List<MacOSWindowBackend> _renderBackends = new();
+    private long _nextInputRoutingOrder;
     private MacOSDispatcher? _dispatcher;
     private Application? _app;
     private bool _running;
@@ -107,7 +108,41 @@ public sealed class MacOSPlatformHost : IPlatformHost
     public int GetSystemMetricsForDpi(int nIndex, uint dpi) => 0;
 
     internal void RegisterWindow(nint handle, MacOSWindowBackend backend)
-        => _windows[handle] = backend;
+    {
+        backend.InputRoutingOrder = ++_nextInputRoutingOrder;
+        _windows[handle] = backend;
+    }
+
+    internal MacOSWindowBackend ResolveMouseInputTarget(
+        MacOSWindowBackend eventTarget,
+        Point screenPositionPx)
+    {
+        MacOSWindowBackend? capturedTarget = null;
+        MacOSWindowBackend? popupTarget = null;
+
+        foreach (var candidate in _windows.Values)
+        {
+            if (candidate.Window.HasMouseCapture
+                && (capturedTarget == null
+                    || candidate.InputRoutingOrder > capturedTarget.InputRoutingOrder))
+            {
+                capturedTarget = candidate;
+            }
+
+            if (candidate.IsInteractivePopupAt(eventTarget, screenPositionPx)
+                && (popupTarget == null
+                    || candidate.InputRoutingOrder > popupTarget.InputRoutingOrder))
+            {
+                popupTarget = candidate;
+            }
+        }
+
+        // AppKit has no SetCapture equivalent. Preserve MewUI capture first so a scrollbar receives
+        // its drag/up even when NSEvent.window changes to the key owner. Once managed capture ends,
+        // prefer the frontmost MewUI popup under the pointer: non-key borderless popups can otherwise
+        // leave subsequent mouseMoved events associated with their key owner.
+        return capturedTarget ?? popupTarget ?? eventTarget;
+    }
 
     internal void UnregisterWindow(nint handle)
     {
