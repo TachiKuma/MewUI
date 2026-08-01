@@ -263,8 +263,8 @@ public sealed class BindingValueSourceCharacterizationTests
         var target = new Target();
         target.SetBinding(Target.ValueProperty, source, BindingMode.TwoWay);
 
-        target.PropertyStore.SetTrigger(Target.ValueProperty, 9);
-        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.Trigger);
+        target.PropertyStore.SetElementTrigger(Target.ValueProperty, 9);
+        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.ElementTrigger);
 
         Assert.AreEqual(1, source.Value);
     }
@@ -275,14 +275,14 @@ public sealed class BindingValueSourceCharacterizationTests
         var source = new ObservableValue<int>(1);
         var target = new Target();
         target.SetBinding(Target.ValueProperty, source, BindingMode.TwoWay);
-        target.PropertyStore.SetTrigger(Target.ValueProperty, 9);
+        target.PropertyStore.SetElementTrigger(Target.ValueProperty, 9);
 
         target.Commit(2);
 
         Assert.AreEqual(2, source.Value);
         Assert.AreEqual(9, target.Value);
 
-        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.Trigger);
+        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.ElementTrigger);
 
         Assert.AreEqual(2, target.Value);
     }
@@ -293,10 +293,10 @@ public sealed class BindingValueSourceCharacterizationTests
         var source = new ObservableValue<int>(0);
         var target = new Target();
         target.SetBinding(Target.ValueProperty, source, BindingMode.OneWay);
-        target.PropertyStore.SetTrigger(Target.ValueProperty, 2);
+        target.PropertyStore.SetElementTrigger(Target.ValueProperty, 2);
 
         source.Value = 2;
-        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.Trigger);
+        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.ElementTrigger);
 
         Assert.AreEqual(2, target.Value);
         Assert.IsTrue(target.HasBindingTargetValue(Target.ValueProperty.Id));

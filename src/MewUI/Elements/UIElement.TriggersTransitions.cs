@@ -86,10 +86,10 @@ public abstract partial class UIElement
             for (int j = 0; j < trigger.Setters.Count; j++)
             {
                 var setter = trigger.Setters[j];
-                if (setter is UnsetSetter or TargetSetter)
+                if (setter is UnsetSetter)
                 {
                     throw new ArgumentException(
-                        $"Element triggers cannot contain {setter.GetType().Name}: there is no style candidate to unset and no template part to target.");
+                        $"Element triggers cannot contain {setter.GetType().Name}: there is no style candidate to unset.");
                 }
 
                 if (setter.ThemeResolver == null && !IsAssignableToProperty(setter.Property, setter.Value))
@@ -264,9 +264,9 @@ public abstract partial class UIElement
                 continue;
             }
 
-            if (!TryAnimateExternalSet(pair.Value.Property, pair.Value.Value, ValueSource.Trigger))
+            if (!TryAnimateExternalSet(pair.Value.Property, pair.Value.Value, ValueSource.ElementTrigger))
             {
-                PropertyStore.SetValue(pair.Value.Property, pair.Value.Value, ValueSource.Trigger);
+                PropertyStore.SetElementTrigger(pair.Value.Property, pair.Value.Value);
             }
         }
 
@@ -282,12 +282,12 @@ public abstract partial class UIElement
         var transition = FindElementTransition(propertyId);
         if (property == null || transition == null || Parent == null)
         {
-            PropertyStore.ClearSource(propertyId, ValueSource.Trigger);
+            PropertyStore.ClearSource(propertyId, ValueSource.ElementTrigger);
             return;
         }
 
         object? from = PropertyStore.GetCurrentVisualValue(propertyId) ?? GetBindingValue(property);
-        var mutation = PropertyStore.ClearSource(propertyId, ValueSource.Trigger);
+        var mutation = PropertyStore.ClearSource(propertyId, ValueSource.ElementTrigger);
         if (mutation.IsEffectiveChange && from != null && mutation.NewValue != null)
         {
             Animator.AnimateFromTo(

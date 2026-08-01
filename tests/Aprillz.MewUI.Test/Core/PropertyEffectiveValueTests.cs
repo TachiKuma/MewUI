@@ -17,16 +17,16 @@ public sealed class PropertyEffectiveValueTests
         var owner = new ValueOwner();
         owner.PropertyStore.SetStyle(ValueOwner.ValueProperty, 10);
         owner.PropertyStore.SetValue(ValueOwner.ValueProperty, 20, ValueSource.Binding);
-        owner.PropertyStore.SetTrigger(ValueOwner.ValueProperty, 30);
+        owner.PropertyStore.SetElementTrigger(ValueOwner.ValueProperty, 30);
         owner.PropertyStore.SetLocal(ValueOwner.ValueProperty, 40);
 
         Assert.AreEqual(40, owner.Value);
 
         var local = owner.PropertyStore.ClearSource(ValueOwner.ValueProperty.Id, ValueSource.Local);
-        AssertMutation(local, 40, 30, ValueSource.Local, ValueSource.Trigger);
+        AssertMutation(local, 40, 30, ValueSource.Local, ValueSource.ElementTrigger);
 
-        var trigger = owner.PropertyStore.ClearSource(ValueOwner.ValueProperty.Id, ValueSource.Trigger);
-        AssertMutation(trigger, 30, 20, ValueSource.Trigger, ValueSource.Binding);
+        var trigger = owner.PropertyStore.ClearSource(ValueOwner.ValueProperty.Id, ValueSource.ElementTrigger);
+        AssertMutation(trigger, 30, 20, ValueSource.ElementTrigger, ValueSource.Binding);
 
         var binding = owner.PropertyStore.ClearSource(ValueOwner.ValueProperty.Id, ValueSource.Binding);
         AssertMutation(binding, 20, 10, ValueSource.Binding, ValueSource.Style);

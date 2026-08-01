@@ -13,7 +13,7 @@ public sealed class PropertyValueTraceTests
         var target = new TraceTarget();
         target.SetBinding(TraceTarget.ValueProperty, source, BindingMode.OneWay);
         target.SetStyle(2);
-        target.SetTrigger(3);
+        target.SetElementTrigger(3);
         target.SetLocalWithoutReplacingBinding(4);
         target.SetAnimated(5);
 
@@ -24,7 +24,7 @@ public sealed class PropertyValueTraceTests
         Assert.AreEqual(ValueSource.Local, trace.EffectiveSource);
         Assert.IsTrue(trace.IsAnimated);
         AssertCandidate(trace, ValueSource.Local, 4, isWinner: true);
-        AssertCandidate(trace, ValueSource.Trigger, 3, isWinner: false);
+        AssertCandidate(trace, ValueSource.ElementTrigger, 3, isWinner: false);
         AssertCandidate(trace, ValueSource.Binding, 1, isWinner: false);
         AssertCandidate(trace, ValueSource.Style, 2, isWinner: false);
         Assert.IsFalse(trace.GetCandidate(ValueSource.Inherited).IsSet);
@@ -98,7 +98,7 @@ public sealed class PropertyValueTraceTests
 
         public void SetStyle(int value) => PropertyStore.SetStyle(ValueProperty, value);
 
-        public void SetTrigger(int value) => PropertyStore.SetTrigger(ValueProperty, value);
+        public void SetElementTrigger(int value) => PropertyStore.SetElementTrigger(ValueProperty, value);
 
         public void SetLocalWithoutReplacingBinding(int value) => PropertyStore.SetLocal(ValueProperty, value);
 

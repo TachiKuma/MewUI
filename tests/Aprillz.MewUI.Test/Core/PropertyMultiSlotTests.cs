@@ -53,10 +53,10 @@ public sealed class PropertyMultiSlotTests
     {
         var owner = new SlotOwner();
         owner.PropertyStore.SetStyle(Prop, 10);
-        owner.PropertyStore.SetTrigger(Prop, 20);
+        owner.PropertyStore.SetElementTrigger(Prop, 20);
         Assert.AreEqual(20, owner.Value);
 
-        owner.PropertyStore.ClearSource(Prop.Id, ValueSource.Trigger);
+        owner.PropertyStore.ClearSource(Prop.Id, ValueSource.ElementTrigger);
 
         Assert.AreEqual(10, owner.Value, "clearing the trigger must reveal the preserved style value, not the default");
     }
@@ -65,9 +65,9 @@ public sealed class PropertyMultiSlotTests
     public void ClearTrigger_WithNoStyle_FallsBackToDefault()
     {
         var owner = new SlotOwner();
-        owner.PropertyStore.SetTrigger(Prop, 20);
+        owner.PropertyStore.SetElementTrigger(Prop, 20);
 
-        owner.PropertyStore.ClearSource(Prop.Id, ValueSource.Trigger);
+        owner.PropertyStore.ClearSource(Prop.Id, ValueSource.ElementTrigger);
 
         Assert.AreEqual(0, owner.Value);
     }
@@ -77,14 +77,14 @@ public sealed class PropertyMultiSlotTests
     {
         var owner = new SlotOwner();
         owner.PropertyStore.SetStyle(Prop, 10);
-        owner.PropertyStore.SetTrigger(Prop, 20);
+        owner.PropertyStore.SetElementTrigger(Prop, 20);
         owner.PropertyStore.SetLocal(Prop, 30);
         Assert.AreEqual(30, owner.Value);
 
         owner.PropertyStore.ClearLocalValue(Prop);
         Assert.AreEqual(20, owner.Value, "clearing local reveals the trigger");
 
-        owner.PropertyStore.ClearSource(Prop.Id, ValueSource.Trigger);
+        owner.PropertyStore.ClearSource(Prop.Id, ValueSource.ElementTrigger);
         Assert.AreEqual(10, owner.Value, "clearing the trigger then reveals the style");
     }
 
@@ -93,11 +93,11 @@ public sealed class PropertyMultiSlotTests
     {
         var owner = new SlotOwner();
         owner.PropertyStore.SetStyle(Prop, 10);
-        owner.PropertyStore.SetTrigger(Prop, 20);
-        owner.PropertyStore.SetTrigger(Prop, 21); // update the trigger while style is shadowed
+        owner.PropertyStore.SetElementTrigger(Prop, 20);
+        owner.PropertyStore.SetElementTrigger(Prop, 21); // update the trigger while style is shadowed
         Assert.AreEqual(21, owner.Value);
 
-        owner.PropertyStore.ClearSource(Prop.Id, ValueSource.Trigger);
+        owner.PropertyStore.ClearSource(Prop.Id, ValueSource.ElementTrigger);
         Assert.AreEqual(10, owner.Value, "updating the trigger must not lose the shadowed style");
     }
 

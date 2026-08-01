@@ -71,7 +71,6 @@ public abstract class Control : TextElement
 
     private Style? _style;
     private string? _styleName;
-    private Dictionary<string, UIElement>? _parts;
 
     private PathGeometry? _sharedOuterPath;
     private PathGeometry? _sharedInnerPath;
@@ -185,21 +184,6 @@ public abstract class Control : TextElement
     /// and <see cref="Element.InvalidateVisual"/> via the property's AffectsVisualState/AffectsRender flags.
     /// </summary>
     protected void SetPressed(bool pressed) => SetValue(IsPressedPropertyKey, pressed);
-
-    /// <summary>
-    /// Registers a child element as a named part for TargetSetter resolution.
-    /// </summary>
-    protected void RegisterPart(string name, UIElement element)
-    {
-        _parts ??= new();
-        _parts[name] = element;
-    }
-
-    /// <summary>
-    /// Gets a registered named part. Returns null if not found.
-    /// </summary>
-    internal UIElement? GetPart(string name)
-        => _parts?.GetValueOrDefault(name);
 
     /// <summary>
     /// Computes the current visual state. Override to include control-specific state.
@@ -692,9 +676,8 @@ public abstract class Control : TextElement
 
         if (newRoot == null)
         {
-            // Detached from visual tree - release style and parts references.
+            // Detached from visual tree - release the resolved style reference.
             _style = null;
-            _parts?.Clear();
         }
         else
         {

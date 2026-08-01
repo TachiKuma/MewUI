@@ -22,8 +22,7 @@ public sealed class StateTrigger
 
     /// <summary>
     /// Setter values to apply when this trigger matches.
-    /// May contain <see cref="Setter"/>, <see cref="UnsetSetter"/>, and
-    /// <see cref="TargetSetter"/> declarations.
+    /// May contain <see cref="Setter"/> and <see cref="UnsetSetter"/> declarations.
     /// </summary>
     public required IReadOnlyList<SetterBase> Setters
     {

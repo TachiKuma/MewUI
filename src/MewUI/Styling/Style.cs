@@ -221,13 +221,7 @@ public sealed class Style
             var setter = setters[i] ?? throw new InvalidOperationException(
                 $"{location}[{i}] cannot be null.");
 
-            // TargetSetter addresses a template part whose CLR type is not known at style-freeze
-            // time. Its runtime validation remains at the part application boundary until the
-            // deprecated target-setter path is removed.
-            if (setter is not TargetSetter)
-            {
-                ValidatePropertyOwner(setter.Property, $"{location}[{i}]");
-            }
+            ValidatePropertyOwner(setter.Property, $"{location}[{i}]");
 
             if (setter is Setter && setter.ThemeResolver == null &&
                 !IsCompatibleValue(setter.Property.ValueType, setter.Value))
