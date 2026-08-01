@@ -13,7 +13,7 @@ namespace Aprillz.MewUI.Diagnostics;
 internal sealed class DebugPropertyPanel : UserControl
 {
     private const double NAME_COLUMN_WIDTH = 176.0;
-    private const double SOURCE_COLUMN_WIDTH = 64.0;
+    private const double SOURCE_COLUMN_WIDTH = 104.0;
     private const int MAX_VALUE_LENGTH = 120;
 
     private static readonly Dictionary<Type, PropertyEntry[]> _entryCache = new();
@@ -158,38 +158,47 @@ internal sealed class DebugPropertyPanel : UserControl
 
     private static PropertyValueInfo ReadMewValue(UIElement element, MewProperty property)
     {
-        var source = element.HasPropertyStore ? element.PropertyStore.GetSource(property.Id) : ValueSource.Default;
-
-        if (source != ValueSource.Default)
+        var trace = element.GetPropertyValueTrace(property);
+        string source = trace.IsAnimated
+            ? $"Animation/{trace.EffectiveSource}"
+            : trace.EffectiveSource.ToString();
+        if (trace.BindingState?.Error != null)
         {
-            return new PropertyValueInfo(FormatValue(element.PropertyStore.GetBoxedValue(property)), source.ToString(), isSet: true);
+            source += " !";
         }
 
-        // The store only caches an inherited value once it has been resolved, so an untouched
-        // element still has to walk the ancestor chain the way MewObject.GetValue does.
-        if (property.Inherits)
+        string value = FormatValue(trace.VisualValue);
+        if (trace.IsAnimated)
         {
-            var owner = FindInheritedOwner(element, property);
-            if (owner != null)
+            value += $"  [base {FormatValue(trace.BaseValue)}]";
+        }
+
+        var bindingCandidate = trace.GetCandidate(ValueSource.Binding);
+        if (bindingCandidate.IsSet && !bindingCandidate.IsWinner)
+        {
+            value += $"  [Binding raw {FormatValue(bindingCandidate.RawValue)} shadowed]";
+        }
+
+        if (trace.BindingState is { } bindingState)
+        {
+            if (bindingState.Error is { } error)
             {
-                return new PropertyValueInfo(FormatValue(owner.PropertyStore.GetBoxedValue(property)), "Inherited", isSet: true);
+                string last = bindingState.HasLastSuccessfulTargetValue
+                    ? FormatValue(bindingState.LastSuccessfulTargetValue)
+                    : "(none)";
+                value +=
+                    $"  [candidate {FormatValue(bindingState.CurrentCandidate)}; last {last}; " +
+                    $"{error.Status}/{error.Stage}]";
+            }
+            else if (!bindingCandidate.IsSet && bindingState.HasLastSuccessfulTargetValue)
+            {
+                value += $"  [Binding last {FormatValue(bindingState.LastSuccessfulTargetValue)}]";
             }
         }
 
-        return new PropertyValueInfo(FormatValue(property.GetBoxedDefaultForType(element.GetType())), "Default", isSet: false);
-    }
+        bool isSet = trace.BindingState != null || trace.HasNonDefaultCandidate;
 
-    private static Element? FindInheritedOwner(UIElement element, MewProperty property)
-    {
-        for (Element? ancestor = element.Parent; ancestor != null; ancestor = ancestor.Parent)
-        {
-            if (ancestor.HasPropertyStore && ancestor.PropertyStore.HasOwnValue(property.Id))
-            {
-                return ancestor;
-            }
-        }
-
-        return null;
+        return new PropertyValueInfo(Truncate(value), source, isSet);
     }
 
     private static string FormatValue(object? value)
