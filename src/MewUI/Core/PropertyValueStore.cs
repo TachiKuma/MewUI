@@ -478,6 +478,63 @@ internal sealed class PropertyValueStore
         return entry.Value;
     }
 
+    internal PropertyValueTrace GetValueTrace(MewProperty property, BindingStateSnapshot? bindingState)
+    {
+        var entry = GetEntry(property.Id);
+        bool isAnimated = entry.Value is AnimatedEntry;
+        object? baseValue = entry.Value is AnimatedEntry animated
+            ? animated.BaseValue
+            : entry.Value;
+        object? visualValue = entry.Value is AnimatedEntry currentAnimation
+            ? currentAnimation.AnimatedValue
+            : entry.Value;
+        if (entry.Source == ValueSource.Default)
+        {
+            baseValue = property.GetBoxedDefaultForType(_ownerType);
+            if (!isAnimated)
+            {
+                visualValue = baseValue;
+            }
+        }
+
+        var defaultCandidate = new PropertyValueCandidateTrace(
+            ValueSource.Default,
+            true,
+            entry.Source == ValueSource.Default,
+            property.GetBoxedDefaultForType(_ownerType));
+
+        return new PropertyValueTrace(
+            property,
+            baseValue,
+            visualValue,
+            entry.Source,
+            isAnimated,
+            CreateCandidateTrace(entry, ValueSource.Local),
+            CreateCandidateTrace(entry, ValueSource.Trigger),
+            CreateCandidateTrace(entry, ValueSource.Binding),
+            CreateCandidateTrace(entry, ValueSource.Style),
+            CreateCandidateTrace(entry, ValueSource.Inherited),
+            defaultCandidate,
+            bindingState);
+    }
+
+    private static PropertyValueCandidateTrace CreateCandidateTrace(
+        in Entry entry,
+        ValueSource source)
+    {
+        bool isSet = HasSlot(entry, source);
+        object? rawValue = !isSet
+            ? null
+            : entry.Shadow != null
+                ? entry.Shadow.Get(source)
+                : entry.RawValue;
+        return new PropertyValueCandidateTrace(
+            source,
+            isSet,
+            isSet && entry.Source == source,
+            rawValue);
+    }
+
     /// <summary>
     /// Sets the underlying base value without stopping animations or notifying.
     /// Used by <see cref="Animation.PropertyAnimator"/> when starting a new animation.

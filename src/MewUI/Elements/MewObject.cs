@@ -219,6 +219,7 @@ public abstract class MewObject : IPropertyOwner
         }
 
         PropertyStore.ValidateValueCandidate(property, value);
+        BindingDiagnostics.ReportDirectWrite(this, property);
         DisposeExistingBinding(property.Id);
         PropertyStore.SetLocalPrevalidated(property, value);
         PropertyStore.ClearSource(property.Id, ValueSource.Binding);
@@ -417,6 +418,10 @@ public abstract class MewObject : IPropertyOwner
     {
         ArgumentNullException.ThrowIfNull(property);
         ThrowIfReadOnly(property);
+        if (PropertyStore.HasValue(property.Id, ValueSource.Local))
+        {
+            BindingDiagnostics.ReportLocalClear(this, property);
+        }
         PropertyStore.ClearLocalValue(property);
     }
 
@@ -598,6 +603,10 @@ public abstract class MewObject : IPropertyOwner
     public void ClearBinding<T>(MewProperty<T> property)
     {
         ArgumentNullException.ThrowIfNull(property);
+        if (HasPropertyBinding(property.Id) || HasBindingTargetValue(property.Id))
+        {
+            BindingDiagnostics.ReportBindingClear(this, property);
+        }
         DisposeExistingBinding(property.Id);
         PropertyStore.ClearSource(property.Id, ValueSource.Binding);
     }
@@ -630,6 +639,16 @@ public abstract class MewObject : IPropertyOwner
             state.HasLastSuccessfulTargetValue,
             state.LastSuccessfulTargetValue,
             state.Error);
+    }
+
+    internal PropertyValueTrace GetPropertyValueTrace(MewProperty property)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+
+        // Resolve inherited values through the same context path as GetValue before taking the
+        // slot snapshot. This materializes the current Inherited candidate when one exists.
+        _ = GetBindingValue(property);
+        return PropertyStore.GetValueTrace(property, GetBindingState(property.Id));
     }
 
     internal void AddBindingErrorChangedCallback(int propertyId, Action<BindingError?> callback)
@@ -787,6 +806,20 @@ public abstract class MewObject : IPropertyOwner
 
     private void PreparePropertyBinding(int propertyId)
     {
+        var property = MewPropertyRegistry.GetProperty(propertyId);
+        if (property != null)
+        {
+            if (HasPropertyBinding(propertyId))
+            {
+                BindingDiagnostics.ReportBindingReplacement(this, property);
+            }
+
+            if (PropertyStore.HasValue(propertyId, ValueSource.Local))
+            {
+                BindingDiagnostics.ReportLocalReplacement(this, property);
+            }
+        }
+
         DisposeExistingBinding(propertyId);
         PropertyStore.ClearSource(propertyId, ValueSource.Local);
     }
