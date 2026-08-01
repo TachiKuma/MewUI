@@ -40,9 +40,25 @@ internal sealed class MewObjectPropertyBinding<T> : IPropertyBinding
 
     public void Initialize()
     {
-        _target.UpdateBindingTarget(
+        T sourceValue;
+        try
+        {
+            sourceValue = _source.GetBindingValue(_sourceProperty);
+        }
+        catch (Exception ex)
+        {
+            _target.ReportBindingError(
+                _targetProperty,
+                null,
+                BindingStatus.BindingError,
+                BindingErrorStage.SourceReadBack,
+                ex);
+            return;
+        }
+
+        _target.ApplyBindingTargetValue(
             _targetProperty,
-            _source.GetBindingValue(_sourceProperty));
+            sourceValue);
     }
 
     public void Dispose()
@@ -55,5 +71,6 @@ internal sealed class MewObjectPropertyBinding<T> : IPropertyBinding
         _target.UpdateBindingTarget(_targetProperty, (T)value!);
     }
 
-    public object? CommitTargetValue(object? value) => value;
+    public BindingCommitResult CommitTargetValue(object? value)
+        => BindingCommitResult.Success(value);
 }

@@ -68,13 +68,39 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IPropertyBindin
         _updating = true;
         try
         {
-            var sourceValue = _source.GetBindingValue(_sourceProperty);
-            var converted = _convert(sourceValue);
-            if (!EqualityComparer<TProp>.Default.Equals(
-                    _target.GetBindingValue(_targetProperty), converted))
+            TSource sourceValue = default!;
+            TProp converted;
+            try
             {
-                _target.UpdateBindingTarget(_targetProperty, converted);
+                sourceValue = _source.GetBindingValue(_sourceProperty);
             }
+            catch (Exception ex)
+            {
+                _target.ReportBindingError(
+                    _targetProperty,
+                    sourceValue,
+                    BindingStatus.BindingError,
+                    BindingErrorStage.SourceReadBack,
+                    ex);
+                return;
+            }
+
+            try
+            {
+                converted = _convert(sourceValue);
+            }
+            catch (Exception ex)
+            {
+                _target.ReportBindingError(
+                    _targetProperty,
+                    sourceValue,
+                    BindingStatus.BindingError,
+                    BindingErrorStage.Convert,
+                    ex);
+                return;
+            }
+
+            _target.ApplyBindingTargetValue(_targetProperty, converted);
         }
         finally { _updating = false; }
     }
@@ -84,18 +110,64 @@ internal sealed class MewObjectPropertyBinding<TProp, TSource> : IPropertyBindin
         _target.UpdateBindingTarget(_targetProperty, (TProp)value!);
     }
 
-    public object? CommitTargetValue(object? value)
+    public BindingCommitResult CommitTargetValue(object? value)
     {
         if (_convertBack == null)
         {
-            return value;
+            return BindingCommitResult.Success(value);
         }
 
         _updating = true;
         try
         {
-            _source.PropertyStore.SetLocal(_sourceProperty, _convertBack((TProp)value!));
-            return _convert(_source.GetBindingValue(_sourceProperty));
+            TSource sourceCandidate;
+            try
+            {
+                sourceCandidate = _convertBack((TProp)value!);
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.ValidationError,
+                    BindingErrorStage.ConvertBack,
+                    ex);
+            }
+
+            try
+            {
+                _source.PropertyStore.ValidateValueCandidate(_sourceProperty, sourceCandidate);
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.ValidationError,
+                    BindingErrorStage.SourceValidation,
+                    ex);
+            }
+
+            try
+            {
+                _source.PropertyStore.SetLocalPrevalidated(_sourceProperty, sourceCandidate);
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.BindingError,
+                    BindingErrorStage.SourceWrite,
+                    ex);
+            }
+
+            try
+            {
+                return BindingCommitResult.Success(_convert(_source.GetBindingValue(_sourceProperty)));
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.BindingError,
+                    BindingErrorStage.Consistency,
+                    ex);
+            }
         }
         finally { _updating = false; }
     }

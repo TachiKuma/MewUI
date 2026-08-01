@@ -175,6 +175,22 @@ public sealed class BindingValueSourceCharacterizationTests
     }
 
     [TestMethod]
+    public void RejectedDirectWrite_DoesNotRemoveTheBinding()
+    {
+        var source = new ObservableValue<int>(1);
+        var target = new ValidatedTarget();
+        target.SetBinding(ValidatedTarget.ValueProperty, source, BindingMode.OneWay);
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => target.Value = -1);
+
+        Assert.IsTrue(target.HasPropertyBinding(ValidatedTarget.ValueProperty.Id));
+        Assert.AreEqual(1, target.Value);
+
+        source.Value = 2;
+        Assert.AreEqual(2, target.Value);
+    }
+
+    [TestMethod]
     public void ObservableTwoWayBinding_TargetCommitReadsBackNormalizedSource()
     {
         var source = new ObservableValue<int>(1, static value => Math.Clamp(value, 0, 10));
@@ -272,6 +288,21 @@ public sealed class BindingValueSourceCharacterizationTests
     }
 
     [TestMethod]
+    public void ShadowedSourcePush_RefreshesBindingCandidateEvenWhenEffectiveValueMatches()
+    {
+        var source = new ObservableValue<int>(0);
+        var target = new Target();
+        target.SetBinding(Target.ValueProperty, source, BindingMode.OneWay);
+        target.PropertyStore.SetTrigger(Target.ValueProperty, 2);
+
+        source.Value = 2;
+        target.PropertyStore.ClearSource(Target.ValueProperty.Id, ValueSource.Trigger);
+
+        Assert.AreEqual(2, target.Value);
+        Assert.IsTrue(target.HasBindingTargetValue(Target.ValueProperty.Id));
+    }
+
+    [TestMethod]
     public void ClearObservableTwoWayBinding_RemovesWriteBackCallback()
     {
         var source = new ObservableValue<int>(1);
@@ -324,5 +355,26 @@ public sealed class BindingValueSourceCharacterizationTests
         public int Value => GetValue(ValueProperty);
 
         public void Commit(int value) => CommitTargetValue(ValueProperty, value);
+    }
+
+    private sealed class ValidatedTarget : MewObject
+    {
+        public static readonly MewProperty<int> ValueProperty =
+            MewProperty<int>.Register<ValidatedTarget>(
+                nameof(Value),
+                0,
+                validate: static (_, value) =>
+                {
+                    if (value < 0)
+                    {
+                        throw new ArgumentOutOfRangeException(nameof(value));
+                    }
+                });
+
+        public int Value
+        {
+            get => GetValue(ValueProperty);
+            set => SetValue(ValueProperty, value);
+        }
     }
 }

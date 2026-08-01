@@ -28,5 +28,5 @@ internal interface IPropertyBinding : IDisposable
 
     void UpdateTargetValue(object? value);
 
-    object? CommitTargetValue(object? value);
+    BindingCommitResult CommitTargetValue(object? value);
 }
