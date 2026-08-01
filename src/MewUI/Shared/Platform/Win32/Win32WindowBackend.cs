@@ -2154,36 +2154,50 @@ internal sealed class Win32WindowBackend : IWindowBackend
         {
             int xPx = (short)(lParam.ToInt64() & 0xFFFF);
             int yPx = (short)((lParam.ToInt64() >> 16) & 0xFFFF);
-            if (User32.GetClientRect(Handle, out var popupClient)
-                && (xPx < 0 || yPx < 0 || xPx >= popupClient.Width || yPx >= popupClient.Height))
+            if (User32.GetClientRect(Handle, out var popupClient))
             {
-                // Capture keeps delivering moves to this surface after the pointer has left it.
-                // Clear its hover chain before forwarding; the later WM_MOUSELEAVE is asynchronous
-                // and may not arrive until after the pointer has already entered another surface.
-                WindowInputRouter.UpdateMouseOver(Window, null);
-
-                const uint GA_ROOT = 2;
-                var screenPt = new POINT(xPx, yPx);
-                User32.ClientToScreen(Handle, ref screenPt);
-                nint hit = User32.WindowFromPoint(screenPt);
-                nint root = hit == 0 ? 0 : User32.GetAncestor(hit, GA_ROOT);
-                if (root != 0 && root != Handle && Window.IsPopupInputForwardTarget(root))
+                bool outside = xPx < 0 || yPx < 0 || xPx >= popupClient.Width || yPx >= popupClient.Height;
+                if (!outside)
                 {
-                    var targetPt = screenPt;
-                    User32.ScreenToClient(root, ref targetPt);
-                    // Keep forwarding synchronous. Posted WM_MOUSEMOVE messages are not coalesced
-                    // with the platform's input messages, so rapid movement can build an unbounded
-                    // owner-window backlog that delays the following click while the popup has capture.
-                    _ = User32.SendMessage(root, WindowMessages.WM_MOUSEMOVE, 0, (targetPt.y << 16) | (targetPt.x & 0xFFFF));
-                    return 0;
+                    // Owner moves forwarded while this popup holds capture deliberately skip
+                    // TrackMouseEvent: the native pointer is not really over the owner, so leave
+                    // tracking would fire immediately and ping-pong. Retire that forwarded hover
+                    // explicitly when the pointer comes back into the popup.
+                    if (Window.Owner is Window ownerWindow)
+                    {
+                        WindowInputRouter.UpdateMouseOver(ownerWindow, null);
+                    }
                 }
-
-                // The pointer is over neither this surface nor a related one. Capture keeps every move
-                // here, and the owner suppresses its own leave tracking while we hold it, so nothing
-                // else will retire the owner's hover: do it here.
-                if (Window.Owner is Window ownerWindow)
+                else
                 {
-                    WindowInputRouter.UpdateMouseOver(ownerWindow, null);
+                    // Capture keeps delivering moves to this surface after the pointer has left it.
+                    // Clear its hover chain before forwarding; the later WM_MOUSELEAVE is asynchronous
+                    // and may not arrive until after the pointer has already entered another surface.
+                    WindowInputRouter.UpdateMouseOver(Window, null);
+
+                    const uint GA_ROOT = 2;
+                    var screenPt = new POINT(xPx, yPx);
+                    User32.ClientToScreen(Handle, ref screenPt);
+                    nint hit = User32.WindowFromPoint(screenPt);
+                    nint root = hit == 0 ? 0 : User32.GetAncestor(hit, GA_ROOT);
+                    if (root != 0 && root != Handle && Window.IsPopupInputForwardTarget(root))
+                    {
+                        var targetPt = screenPt;
+                        User32.ScreenToClient(root, ref targetPt);
+                        // Keep forwarding synchronous. Posted WM_MOUSEMOVE messages are not coalesced
+                        // with the platform's input messages, so rapid movement can build an unbounded
+                        // owner-window backlog that delays the following click while the popup has capture.
+                        _ = User32.SendMessage(root, WindowMessages.WM_MOUSEMOVE, 0, (targetPt.y << 16) | (targetPt.x & 0xFFFF));
+                        return 0;
+                    }
+
+                    // The pointer is over neither this surface nor a related one. Capture keeps every move
+                    // here, and the owner suppresses its own leave tracking while we hold it, so nothing
+                    // else will retire the owner's hover: do it here.
+                    if (Window.Owner is Window ownerWindow)
+                    {
+                        WindowInputRouter.UpdateMouseOver(ownerWindow, null);
+                    }
                 }
             }
         }
