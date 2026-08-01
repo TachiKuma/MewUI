@@ -70,6 +70,7 @@ public static class DefaultStyles
             [typeof(Slider)] = CreateSliderStyle,
             [typeof(ItemsControl)] = CreateItemsControlStyle,
             [typeof(ScrollableItemsBase)] = CreateScrollableItemsBaseStyle,
+            [typeof(ListBox)] = CreateListBoxStyle,
             [typeof(TreeView)] = CreateTreeViewStyle,
             [typeof(GridView)] = CreateGridViewStyle,
             [typeof(NavigationView)] = CreateNavigationViewStyle,
@@ -199,6 +200,13 @@ public static class DefaultStyles
 
     private static Style CreateScrollableItemsBaseStyle()
         => CreateControlBasedStyle(typeof(ScrollableItemsBase));
+
+    private static Style CreateListBoxStyle() =>
+        new(typeof(ListBox))
+        {
+            BasedOn = GetStyle(typeof(ScrollableItemsBase)),
+            Triggers = [CreateValidationBorderTrigger()],
+        };
 
     private static Style CreateTreeViewStyle()
         => CreateControlBasedStyle(typeof(TreeView));
@@ -571,6 +579,7 @@ public static class DefaultStyles
                     Match = VisualStateFlags.Focused,
                     Setters = [Setter.Create(Control.BorderBrushProperty, t => t.Palette.Accent)],
                 },
+                CreateValidationBorderTrigger(),
             ],
         };
 

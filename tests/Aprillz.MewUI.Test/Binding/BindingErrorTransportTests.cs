@@ -356,6 +356,44 @@ public sealed class BindingErrorTransportTests
     }
 
     [TestMethod]
+    public void ListBoxRenderer_PreservesValidationBorderWhileFocused()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        var source = new ObservableValue<int>(-1);
+        var target = new ListBox();
+        target.ResolveAndApplyStyle();
+        target.SetBinding(ListBox.SelectedIndexProperty, source, BindingMode.TwoWay);
+
+        ReportValidationError(target, ListBox.SelectedIndexProperty, 2);
+
+        AssertFocusedValidationBorderIsRendered(target, mayRenderNestedBorders: true);
+    }
+
+    [TestMethod]
+    public void SegmentedControlRenderer_PreservesValidationBorderWhileFocused()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        var source = new ObservableValue<int>(-1);
+        var target = new SegmentedControl();
+        target.ResolveAndApplyStyle();
+        target.SetBinding(SegmentedControl.SelectedIndexProperty, source, BindingMode.TwoWay);
+
+        ReportValidationError(target, SegmentedControl.SelectedIndexProperty, 2);
+
+        AssertFocusedValidationBorderIsRendered(target);
+    }
+
+    [TestMethod]
     public void ValidationStateProperties_CannotBeWrittenByStyleOrElementTrigger()
     {
         var style = new Style(typeof(ValidationControl))
@@ -377,7 +415,9 @@ public sealed class BindingErrorTransportTests
         StringAssert.Contains(triggerException.Message, "read-only property");
     }
 
-    private static void AssertFocusedValidationBorderIsRendered(Control target)
+    private static void AssertFocusedValidationBorderIsRendered(
+        Control target,
+        bool mayRenderNestedBorders = false)
     {
         target.SetFocused(true);
         target.ResolveVisualStateInternal(snap: true);
@@ -389,7 +429,14 @@ public sealed class BindingErrorTransportTests
 
         Assert.IsTrue(target.HasValidationError);
         Assert.AreEqual(target.ThemeInternal.Palette.Error, target.BorderBrush);
-        Assert.AreEqual(target.ThemeInternal.Palette.Error, context.BorderColor);
+        if (mayRenderNestedBorders)
+        {
+            CollectionAssert.Contains(context.BorderColors, target.ThemeInternal.Palette.Error);
+        }
+        else
+        {
+            Assert.AreEqual(target.ThemeInternal.Palette.Error, context.BorderColor);
+        }
     }
 
     private static void ReportValidationError<T>(Control target, MewProperty<T> property, T candidate)
@@ -403,6 +450,8 @@ public sealed class BindingErrorTransportTests
     private sealed class BorderRecordingContext : MeasureGraphicsContextBase, IGraphicsContext
     {
         public Color? BorderColor { get; private set; }
+
+        public List<Color> BorderColors { get; } = [];
 
         public override double DpiScale => 1;
 
@@ -425,14 +474,20 @@ public sealed class BindingErrorTransportTests
             Color color,
             double thickness,
             bool strokeInset)
-            => BorderColor = color;
+        {
+            BorderColor = color;
+            BorderColors.Add(color);
+        }
 
         void IGraphicsContext.DrawRectangle(
             Rect rect,
             Color color,
             double thickness,
             bool strokeInset)
-            => BorderColor = color;
+        {
+            BorderColor = color;
+            BorderColors.Add(color);
+        }
     }
 
     private sealed class IntTarget : MewObject
