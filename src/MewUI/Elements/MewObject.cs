@@ -764,11 +764,19 @@ public abstract class MewObject : IPropertyOwner
 
     private void NotifyBindingErrorChanged(int propertyId, BindingError? error)
     {
+        OnBindingErrorChanged(propertyId, error);
+
         if (_bindingErrorChangedCallbacks?.TryGetValue(propertyId, out var callback) == true)
         {
             callback(error);
         }
     }
+
+    /// <summary>
+    /// Allows framework types to project per-property binding failures into a higher-level state.
+    /// </summary>
+    internal virtual void OnBindingErrorChanged(int propertyId, BindingError? error)
+    { }
 
     private void DisposeExistingBinding(int propertyId)
     {

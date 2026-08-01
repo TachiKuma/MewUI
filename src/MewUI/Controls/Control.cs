@@ -53,6 +53,30 @@ public abstract class Control : TextElement
     /// </summary>
     public static readonly MewProperty<bool> IsPressedProperty = IsPressedPropertyKey.Property;
 
+    private static readonly IReadOnlyList<ValidationError> EMPTY_VALIDATION_ERRORS =
+        Array.Empty<ValidationError>();
+
+    private static readonly MewPropertyKey<bool> HasValidationErrorPropertyKey =
+        MewProperty<bool>.RegisterReadOnly<Control>(nameof(HasValidationError), false,
+            MewPropertyOptions.AffectsVisualState);
+
+    /// <summary>
+    /// Gets whether any binding on this control currently has an error.
+    /// </summary>
+    public static readonly MewProperty<bool> HasValidationErrorProperty =
+        HasValidationErrorPropertyKey.Property;
+
+    private static readonly MewPropertyKey<IReadOnlyList<ValidationError>> ValidationErrorsPropertyKey =
+        MewProperty<IReadOnlyList<ValidationError>>.RegisterReadOnly<Control>(
+            nameof(ValidationErrors),
+            EMPTY_VALIDATION_ERRORS);
+
+    /// <summary>
+    /// Gets an immutable snapshot of the current per-property binding errors on this control.
+    /// </summary>
+    public static readonly MewProperty<IReadOnlyList<ValidationError>> ValidationErrorsProperty =
+        ValidationErrorsPropertyKey.Property;
+
     #endregion
 
     private IFont? _font;
@@ -71,6 +95,7 @@ public abstract class Control : TextElement
 
     private Style? _style;
     private string? _styleName;
+    private Dictionary<int, ValidationError>? _validationErrors;
 
     private PathGeometry? _sharedOuterPath;
     private PathGeometry? _sharedInnerPath;
@@ -157,6 +182,16 @@ public abstract class Control : TextElement
     public bool IsPressed => GetValue(IsPressedProperty);
 
     /// <summary>
+    /// Gets whether any binding on this control currently has an error.
+    /// </summary>
+    public bool HasValidationError => GetValue(HasValidationErrorProperty);
+
+    /// <summary>
+    /// Gets an immutable snapshot of the current per-property binding errors on this control.
+    /// </summary>
+    public IReadOnlyList<ValidationError> ValidationErrors => GetValue(ValidationErrorsProperty);
+
+    /// <summary>
     /// Named style key. Resolved from the nearest StyleSheet up the tree.
     /// Higher priority than StyleSheet type rules and Theme style.
     /// </summary>
@@ -192,6 +227,11 @@ public abstract class Control : TextElement
     protected virtual VisualState ComputeVisualState()
     {
         var f = VisualStateFlags.None;
+        if (HasValidationError)
+        {
+            f |= VisualStateFlags.Invalid;
+        }
+
         var enabled = IsEffectivelyEnabled;
         if (enabled)
         {
@@ -201,6 +241,54 @@ public abstract class Control : TextElement
             if (IsPressed) f |= VisualStateFlags.Pressed;
         }
         return new VisualState { Flags = f };
+    }
+
+    internal override void OnBindingErrorChanged(int propertyId, BindingError? error)
+    {
+        bool changed;
+        if (error == null)
+        {
+            changed = _validationErrors?.Remove(propertyId) == true;
+        }
+        else
+        {
+            var property = MewPropertyRegistry.GetProperty(propertyId);
+            if (property == null)
+            {
+                return;
+            }
+
+            var validationError = new ValidationError(property, error.Message);
+            _validationErrors ??= new Dictionary<int, ValidationError>(capacity: 2);
+            changed = !_validationErrors.TryGetValue(propertyId, out var previous) ||
+                previous != validationError;
+            _validationErrors[propertyId] = validationError;
+        }
+
+        if (!changed)
+        {
+            return;
+        }
+
+        IReadOnlyList<ValidationError> snapshot;
+        if (_validationErrors == null || _validationErrors.Count == 0)
+        {
+            snapshot = EMPTY_VALIDATION_ERRORS;
+        }
+        else
+        {
+            var entries = _validationErrors.ToArray();
+            Array.Sort(entries, static (left, right) => left.Key.CompareTo(right.Key));
+            var errors = new ValidationError[entries.Length];
+            for (int i = 0; i < entries.Length; i++)
+            {
+                errors[i] = entries[i].Value;
+            }
+            snapshot = Array.AsReadOnly(errors);
+        }
+
+        SetValue(ValidationErrorsPropertyKey, snapshot);
+        SetValue(HasValidationErrorPropertyKey, snapshot.Count != 0);
     }
 
     /// <summary>

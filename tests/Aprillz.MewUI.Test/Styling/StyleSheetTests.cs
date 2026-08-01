@@ -321,6 +321,53 @@ public sealed class StyleSheetTests
         }
     }
 
+    [TestMethod]
+    public void InputDefaults_EndWithValidationBorderTrigger()
+    {
+        Type[] inputTypes =
+        [
+            typeof(CheckBox),
+            typeof(RadioButton),
+            typeof(ToggleButton),
+            typeof(ToggleSwitch),
+            typeof(NumericUpDown),
+            typeof(Slider),
+            typeof(Calendar),
+            typeof(TextBase),
+            typeof(DropDownBase),
+        ];
+
+        foreach (var type in inputTypes)
+        {
+            var style = Style.ForType(type);
+            Assert.IsNotNull(style);
+            var trigger = style.Triggers[^1];
+            Assert.AreEqual(VisualStateFlags.Invalid, trigger.Match, type.Name);
+            Assert.AreEqual(VisualStateFlags.None, trigger.Exclude, type.Name);
+            Assert.HasCount(1, trigger.Setters, type.Name);
+            Assert.AreSame(Control.BorderBrushProperty, trigger.Setters[0].Property, type.Name);
+        }
+    }
+
+    [TestMethod]
+    public void Palette_UsesSeedErrorColorOrCrimsonDefault()
+    {
+        var error = Color.FromRgb(12, 34, 56);
+        var palette = new Palette(
+            ThemeSeed.DefaultLight with { Error = error },
+            Color.FromRgb(1, 2, 3));
+        var defaultLight = new Palette(
+            ThemeSeed.DefaultLight with { Error = null },
+            Color.FromRgb(1, 2, 3));
+        var defaultDark = new Palette(
+            ThemeSeed.DefaultDark with { Error = null },
+            Color.FromRgb(1, 2, 3));
+
+        Assert.AreEqual(error, palette.Error);
+        Assert.AreEqual(Color.FromRgb(220, 20, 60), defaultLight.Error);
+        Assert.AreEqual(Color.FromRgb(220, 20, 60), defaultDark.Error);
+    }
+
     private class LookupBase : Control
     {
     }

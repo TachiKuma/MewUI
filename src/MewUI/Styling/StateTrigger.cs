@@ -82,5 +82,9 @@ public enum VisualStateFlags : uint
     /// <summary>Input is read-only.</summary>
     ReadOnly = 1 << 8,
 
-    // Bits 9–31: reserved for future framework extension
+    // Tier 4 - semantic state projected from framework services
+    /// <summary>One or more bindings on the control currently have an error.</summary>
+    Invalid = 1 << 9,
+
+    // Bits 10-31: reserved for future framework extension
 }
