@@ -4,10 +4,8 @@ using Aprillz.MewUI.Controls;
 namespace MewUI.Test.Core;
 
 /// <summary>
-/// Characterizes the multi-slot store's defining behavior (subplan 06-B): a cleared source reveals
-/// the preserved lower-priority slot instead of dropping to the default, so the control layer no
-/// longer has to re-derive it. The single-slot store lost the shadowed value on overwrite; these
-/// tests would fail against it.
+/// Characterizes the multi-slot store's defining behavior: clearing a source reveals the preserved
+/// lower-priority slot instead of requiring the control layer to re-derive it.
 /// </summary>
 [TestClass]
 public sealed class PropertyMultiSlotTests
