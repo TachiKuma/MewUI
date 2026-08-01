@@ -4,6 +4,8 @@ using Aprillz.MewUI.Input;
 
 namespace MewUI.Test.Markup;
 
+#pragma warning disable CS0618 // Legacy fluent API remains covered for compatibility.
+
 [TestClass]
 public sealed class FluentExtensionCoverageTests
 {
@@ -138,3 +140,5 @@ public sealed class FluentExtensionCoverageTests
         _ = new ProgressRing().BindIsActive(source, value => value > 0);
     }
 }
+
+#pragma warning restore CS0618

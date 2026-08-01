@@ -6,6 +6,7 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// A multi-line text input control with thin scrollbars.
 /// </summary>
+[Obsolete("Use NewMultiLineTextBox. MultiLineTextBox remains as a legacy compatibility control.")]
 public sealed class MultiLineTextBox : TextBase
     , IVisualTreeHost
 {
