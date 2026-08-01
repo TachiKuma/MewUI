@@ -128,6 +128,7 @@ public static class DefaultStyles
     private static Style CreateControlBasedStyle(Type targetType, params SetterBase[] extraSetters) =>
         new(targetType)
         {
+            BasedOn = GetStyle(typeof(Control)),
             Transitions = ColorTransitions,
             Setters =
             [
@@ -163,43 +164,29 @@ public static class DefaultStyles
 
     private static Style CreateCheckBoxStyle()
         => CreateControlBasedStyle(typeof(CheckBox),
-            Setter.Create(Control.PaddingProperty, new Thickness(4, 2, 4, 2)),
-            Setter.Create(Control.CornerRadiusProperty, t => t.Metrics.ControlCornerRadius),
-            Setter.Create(Control.BorderThicknessProperty, t => t.Metrics.ControlBorderThickness));
+            Setter.Create(Control.PaddingProperty, new Thickness(4, 2, 4, 2)));
 
     private static Style CreateRadioButtonStyle()
         => CreateControlBasedStyle(typeof(RadioButton),
-            Setter.Create(Control.PaddingProperty, new Thickness(4, 2, 4, 2)),
-            Setter.Create(Control.CornerRadiusProperty, t => t.Metrics.ControlCornerRadius),
-            Setter.Create(Control.BorderThicknessProperty, t => t.Metrics.ControlBorderThickness));
+            Setter.Create(Control.PaddingProperty, new Thickness(4, 2, 4, 2)));
 
     private static Style CreateNumericUpDownStyle()
         => CreateControlBasedStyle(typeof(NumericUpDown),
             Setter.Create(Control.PaddingProperty, new Thickness(4, 2, 4, 2)),
             Setter.Create(FrameworkElement.MinHeightProperty, t => t.Metrics.BaseControlHeight),
-            Setter.Create(Control.CornerRadiusProperty, t => t.Metrics.ControlCornerRadius),
-            Setter.Create(Control.BorderThicknessProperty, t => t.Metrics.ControlBorderThickness),
             Setter.Create(Control.TemplateProperty, (ControlTemplate?)NumericUpDownTemplate.Instance));
 
     private static Style CreateItemsControlStyle()
-        => CreateControlBasedStyle(typeof(ItemsControl),
-            Setter.Create(Control.CornerRadiusProperty, t => t.Metrics.ControlCornerRadius),
-            Setter.Create(Control.BorderThicknessProperty, t => t.Metrics.ControlBorderThickness));
+        => CreateControlBasedStyle(typeof(ItemsControl));
 
     private static Style CreateScrollableItemsBaseStyle()
-        => CreateControlBasedStyle(typeof(ScrollableItemsBase),
-            Setter.Create(Control.CornerRadiusProperty, t => t.Metrics.ControlCornerRadius),
-            Setter.Create(Control.BorderThicknessProperty, t => t.Metrics.ControlBorderThickness));
+        => CreateControlBasedStyle(typeof(ScrollableItemsBase));
 
     private static Style CreateTreeViewStyle()
-        => CreateControlBasedStyle(typeof(TreeView),
-            Setter.Create(Control.CornerRadiusProperty, t => t.Metrics.ControlCornerRadius),
-            Setter.Create(Control.BorderThicknessProperty, t => t.Metrics.ControlBorderThickness));
+        => CreateControlBasedStyle(typeof(TreeView));
 
     private static Style CreateGridViewStyle()
-        => CreateControlBasedStyle(typeof(GridView),
-            Setter.Create(Control.CornerRadiusProperty, t => t.Metrics.ControlCornerRadius),
-            Setter.Create(Control.BorderThicknessProperty, t => t.Metrics.ControlBorderThickness));
+        => CreateControlBasedStyle(typeof(GridView));
 
     private static Style CreateNavigationViewStyle() =>
         new(typeof(NavigationView))

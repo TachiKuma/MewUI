@@ -257,6 +257,70 @@ public sealed class StyleSheetTests
         StringAssert.Contains(exception.Message, typeof(LookupBase).FullName!);
     }
 
+    [TestMethod]
+    public void DeriveFromDefault_UsesExactDefaultWhenRegistered()
+    {
+        var style = Style.DeriveFromDefault<Button>(
+            setters: [Setter.Create(Control.BorderThicknessProperty, 0.0)]);
+
+        Assert.AreEqual(typeof(Button), style.TargetType);
+        Assert.AreSame(Style.ForType<Button>(), style.BasedOn);
+        Assert.HasCount(1, style.Setters);
+    }
+
+    [TestMethod]
+    public void DeriveFromDefault_UsesNearestControlBaseForCustomControl()
+    {
+        var style = Style.DeriveFromDefault<LookupDerived>();
+
+        Assert.AreEqual(typeof(LookupDerived), style.TargetType);
+        Assert.AreSame(Style.ForType<Control>(), style.BasedOn);
+        Assert.IsEmpty(style.Setters);
+        Assert.IsEmpty(style.Triggers);
+        Assert.IsEmpty(style.Transitions);
+    }
+
+    [TestMethod]
+    public void FrameworkNamedStyles_UseExplicitNearestDefaultBases()
+    {
+        var sheet = new StyleSheet();
+        BuiltInStyles.Register(sheet);
+        FileDialogStyles.Register(sheet);
+
+        Assert.AreEqual(typeof(Button), sheet.Get(BuiltInStyles.FlatButton)!.BasedOn!.TargetType);
+        Assert.AreEqual(typeof(ScrollableItemsBase), sheet.Get(BuiltInStyles.ComboBoxPopup)!.BasedOn!.TargetType);
+        Assert.AreEqual(typeof(Calendar), sheet.Get(BuiltInStyles.DatePickerPopup)!.BasedOn!.TargetType);
+        Assert.AreEqual(typeof(TextBase), sheet.Get(FileDialogStyles.NullTextBox)!.BasedOn!.TargetType);
+    }
+
+    [TestMethod]
+    public void ControlBasedDefaults_ShareTheTriggerlessControlBase()
+    {
+        var controlBase = Style.ForType<Control>();
+        Type[] derivedTypes =
+        [
+            typeof(CheckBox),
+            typeof(RadioButton),
+            typeof(NumericUpDown),
+            typeof(ItemsControl),
+            typeof(ScrollableItemsBase),
+            typeof(TreeView),
+            typeof(GridView),
+        ];
+
+        foreach (var type in derivedTypes)
+        {
+            var style = Style.ForType(type);
+            Assert.IsNotNull(style);
+            Assert.AreSame(controlBase, style.BasedOn, type.Name);
+            Assert.IsFalse(
+                style.Setters.Any(setter =>
+                    setter.Property == Control.CornerRadiusProperty ||
+                    setter.Property == Control.BorderThicknessProperty),
+                $"{type.Name} should inherit shared chrome metrics instead of redeclaring them.");
+        }
+    }
+
     private class LookupBase : Control
     {
     }
