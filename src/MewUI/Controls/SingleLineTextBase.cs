@@ -71,8 +71,8 @@ public abstract class SingleLineTextBase : TextBase
         double chromeW = Padding.HorizontalThickness + borderInset * 2;
         double chromeH = Padding.VerticalThickness + borderInset * 2;
 
-        double desiredW = Math.Max(16, sampleWidth + chromeW + 4);
-        double desiredH = Math.Max(lineHeight + chromeH + 4, MinHeight > 0 ? MinHeight : 0);
+        double desiredW = sampleWidth + chromeW;
+        double desiredH = lineHeight + chromeH;
 
         return new Size(desiredW, desiredH);
     }
