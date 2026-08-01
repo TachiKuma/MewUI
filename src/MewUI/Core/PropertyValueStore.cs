@@ -209,6 +209,13 @@ internal sealed class PropertyValueStore
     /// Stops any running animation on this property.
     /// </summary>
     public ValueMutationResult SetValue(MewProperty property, object? value, ValueSource source)
+        => SetValueCore(property, value, source, validateCandidate: true);
+
+    private ValueMutationResult SetValueCore(
+        MewProperty property,
+        object? value,
+        ValueSource source,
+        bool validateCandidate)
     {
         object? oldEffective = ResolveEffectiveValue(property);
         ValueSource oldSource = GetSource(property.Id);
@@ -221,7 +228,10 @@ internal sealed class PropertyValueStore
             return new ValueMutationResult(oldEffective, oldEffective, oldSource, oldSource);
 
         // Reject the raw candidate before changing any source slot.
-        ValidateCandidate(property, value);
+        if (validateCandidate)
+        {
+            ValidateCandidate(property, value);
+        }
 
         SetSlotValuePreservingShadowedAnimation(ref entry, property, source, value);
 
@@ -285,6 +295,17 @@ internal sealed class PropertyValueStore
             return;
 
         SetValue(property, value, ValueSource.Local);
+    }
+
+    internal void ValidateValueCandidate(MewProperty property, object? value)
+        => ValidateCandidate(property, value);
+
+    internal void SetLocalPrevalidated(MewProperty property, object? value)
+    {
+        if (value != null && AnimateSetCallback?.Invoke(property, value, ValueSource.Local) == true)
+            return;
+
+        SetValueCore(property, value, ValueSource.Local, validateCandidate: false);
     }
 
     /// <summary>

@@ -58,12 +58,39 @@ internal sealed class MewPropertyBinding<TProp, TSource> : IPropertyBinding
         _updating = true;
         try
         {
-            var converted = _convert(_source.Value);
-            if (!EqualityComparer<TProp>.Default.Equals(
-                    _owner.GetBindingValue(_property), converted))
+            TSource sourceValue = default!;
+            TProp converted;
+            try
             {
-                _owner.UpdateBindingTarget(_property, converted);
+                sourceValue = _source.Value;
             }
+            catch (Exception ex)
+            {
+                _owner.ReportBindingError(
+                    _property,
+                    sourceValue,
+                    BindingStatus.BindingError,
+                    BindingErrorStage.SourceReadBack,
+                    ex);
+                return;
+            }
+
+            try
+            {
+                converted = _convert(sourceValue);
+            }
+            catch (Exception ex)
+            {
+                _owner.ReportBindingError(
+                    _property,
+                    sourceValue,
+                    BindingStatus.BindingError,
+                    BindingErrorStage.Convert,
+                    ex);
+                return;
+            }
+
+            _owner.ApplyBindingTargetValue(_property, converted);
         }
         finally { _updating = false; }
     }
@@ -73,18 +100,52 @@ internal sealed class MewPropertyBinding<TProp, TSource> : IPropertyBinding
         _owner.UpdateBindingTarget(_property, (TProp)value!);
     }
 
-    public object? CommitTargetValue(object? value)
+    public BindingCommitResult CommitTargetValue(object? value)
     {
         if (_convertBack == null)
         {
-            return value;
+            return BindingCommitResult.Success(value);
         }
 
         _updating = true;
         try
         {
-            _source.Value = _convertBack((TProp)value!);
-            return _convert(_source.Value);
+            TSource sourceCandidate;
+            try
+            {
+                sourceCandidate = _convertBack((TProp)value!);
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.ValidationError,
+                    BindingErrorStage.ConvertBack,
+                    ex);
+            }
+
+            try
+            {
+                _source.Value = sourceCandidate;
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.BindingError,
+                    BindingErrorStage.SourceWrite,
+                    ex);
+            }
+
+            try
+            {
+                return BindingCommitResult.Success(_convert(_source.Value));
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.BindingError,
+                    BindingErrorStage.Consistency,
+                    ex);
+            }
         }
         finally { _updating = false; }
     }

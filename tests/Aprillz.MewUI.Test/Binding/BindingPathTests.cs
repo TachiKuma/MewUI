@@ -483,7 +483,7 @@ public sealed class BindingPathTests
     }
 
     [TestMethod]
-    public void ConverterFailure_LeavesTargetUnchangedAndPropagates()
+    public void ConverterFailure_LeavesTargetUnchangedAndRecordsBindingError()
     {
         var root = new Root();
         root.Number.Value = 1;
@@ -499,8 +499,43 @@ public sealed class BindingPathTests
                 : value.ToString(),
             mode: BindingMode.OneWay);
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => root.Number.Value = 2);
+        root.Number.Value = 2;
+
         Assert.AreEqual("1", target.Text);
+        BindingStateSnapshot state = target.GetState(TestObject.TextProperty);
+        Assert.AreEqual(2, state.CurrentCandidate);
+        Assert.AreEqual("1", state.LastSuccessfulTargetValue);
+        Assert.AreEqual(BindingErrorStage.Convert, state.Error?.Stage);
+    }
+
+    [TestMethod]
+    public void ReattachReadFailure_RecordsErrorAndRecoversOnLaterSourceChange()
+    {
+        var root = new Root(new Node { Value = 1 });
+        var target = new TestObject();
+        bool fail = false;
+        Func<Node, int> getter = value => fail
+            ? throw new InvalidOperationException("path read failed")
+            : value.Value;
+        var path = BindingPath
+            .From<Root>()
+            .Then(static value => value.RequiredNode)
+            .Then(getter);
+        target.SetBinding(TestObject.ValueProperty, root, path, mode: BindingMode.OneWay);
+
+        fail = true;
+        root.RequiredNode.Value = new Node { Value = 2 };
+
+        Assert.AreEqual(1, target.Value);
+        BindingStateSnapshot failed = target.GetState(TestObject.ValueProperty);
+        Assert.AreEqual(1, failed.LastSuccessfulTargetValue);
+        Assert.AreEqual(BindingErrorStage.SourceReadBack, failed.Error?.Stage);
+
+        fail = false;
+        root.RequiredNode.Value = new Node { Value = 3 };
+
+        Assert.AreEqual(3, target.Value);
+        Assert.IsNull(target.GetState(TestObject.ValueProperty).Error);
     }
 
     private static BindingPath<Root, int> CreateAmountPath()
@@ -652,6 +687,9 @@ public sealed class BindingPathTests
         public void CommitValue(int value) => CommitTargetValue(ValueProperty, value);
 
         public void CommitText(string? value) => CommitTargetValue(TextProperty, value);
+
+        public BindingStateSnapshot GetState(MewProperty property)
+            => GetBindingState(property.Id)!.Value;
     }
 
     private sealed class ColorObject : MewObject

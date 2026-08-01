@@ -57,10 +57,7 @@ internal sealed class MewPropertyBinding<T> : IPropertyBinding
         try
         {
             var value = _source.Value;
-            if (!EqualityComparer<T>.Default.Equals(_owner.GetBindingValue(_property), value))
-            {
-                _owner.UpdateBindingTarget(_property, value);
-            }
+            _owner.ApplyBindingTargetValue(_property, value);
         }
         finally
         {
@@ -73,13 +70,34 @@ internal sealed class MewPropertyBinding<T> : IPropertyBinding
         _owner.UpdateBindingTarget(_property, (T)value!);
     }
 
-    public object? CommitTargetValue(object? value)
+    public BindingCommitResult CommitTargetValue(object? value)
     {
         _updating = true;
         try
         {
-            _source.Value = (T)value!;
-            return _source.Value;
+            try
+            {
+                _source.Value = (T)value!;
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.BindingError,
+                    BindingErrorStage.SourceWrite,
+                    ex);
+            }
+
+            try
+            {
+                return BindingCommitResult.Success(_source.Value);
+            }
+            catch (Exception ex)
+            {
+                return BindingCommitResult.Failure(
+                    BindingStatus.BindingError,
+                    BindingErrorStage.Consistency,
+                    ex);
+            }
         }
         finally
         {
