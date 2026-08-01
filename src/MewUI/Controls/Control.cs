@@ -237,7 +237,11 @@ public abstract class Control : TextElement
         {
             f |= VisualStateFlags.Enabled;
             if (IsMouseOver || IsMouseCaptured) f |= VisualStateFlags.Hot;
-            if (IsFocused || IsFocusWithin) f |= VisualStateFlags.Focused;
+            if ((IsFocused || IsFocusWithin) &&
+                (FindVisualRoot() is not Window window || window.IsActive))
+            {
+                f |= VisualStateFlags.Focused;
+            }
             if (IsPressed) f |= VisualStateFlags.Pressed;
         }
         return new VisualState { Flags = f };
