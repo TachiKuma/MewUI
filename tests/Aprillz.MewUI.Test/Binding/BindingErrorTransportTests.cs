@@ -216,51 +216,47 @@ public sealed class BindingErrorTransportTests
     }
 
     [TestMethod]
-    public void ControlValidationState_AggregatesErrorsAndProjectsInvalidFlag()
+    public void ControlValidationState_ProjectsOnlyValidationErrors()
     {
-        var first = new ObservableValue<int>(1);
-        var second = new ObservableValue<int>(1);
+        var first = new ObservableValue<string>("first");
+        var second = new ObservableValue<string>("second");
         var target = new ValidationControl();
-        target.SetBinding(
-            ValidationControl.FirstProperty,
-            first,
-            static value => value == 2
-                ? throw new InvalidOperationException("first conversion failed")
-                : value.ToString(),
-            mode: BindingMode.OneWay);
-        target.SetBinding(
-            ValidationControl.SecondProperty,
-            second,
-            static value => value == 2
-                ? throw new InvalidOperationException("second conversion failed")
-                : value.ToString(),
-            mode: BindingMode.OneWay);
+        target.SetBinding(ValidationControl.FirstProperty, first, BindingMode.TwoWay);
+        target.SetBinding(ValidationControl.SecondProperty, second, BindingMode.TwoWay);
 
-        first.Value = 2;
-        second.Value = 2;
+        target.ReportBindingError(
+            ValidationControl.FirstProperty,
+            "invalid first",
+            BindingStatus.ValidationError,
+            BindingErrorStage.ConvertBack,
+            new FormatException("first validation failed"));
+        target.ReportBindingError(
+            ValidationControl.SecondProperty,
+            "unavailable second",
+            BindingStatus.BindingError,
+            BindingErrorStage.SourceReadBack,
+            new InvalidOperationException("second binding failed"));
 
         Assert.IsTrue(target.HasValidationError);
-        Assert.HasCount(2, target.ValidationErrors);
+        Assert.HasCount(1, target.ValidationErrors);
         Assert.AreSame(ValidationControl.FirstProperty, target.ValidationErrors[0].Property);
-        Assert.AreEqual("first conversion failed", target.ValidationErrors[0].Message);
-        Assert.AreSame(ValidationControl.SecondProperty, target.ValidationErrors[1].Property);
+        Assert.AreEqual("first validation failed", target.ValidationErrors[0].Message);
         Assert.IsTrue(target.CurrentFlags.HasFlag(VisualStateFlags.Invalid));
         Assert.IsTrue(target.CurrentFlags.HasFlag(VisualStateFlags.Enabled));
         Assert.ThrowsExactly<NotSupportedException>(
             () => ((IList<ValidationError>)target.ValidationErrors).Add(
                 new ValidationError(ValidationControl.FirstProperty, "replacement")));
 
-        first.Value = 3;
-
-        Assert.IsTrue(target.HasValidationError);
-        Assert.HasCount(1, target.ValidationErrors);
-        Assert.AreSame(ValidationControl.SecondProperty, target.ValidationErrors[0].Property);
-
         target.IsEnabled = false;
         Assert.IsTrue(target.CurrentFlags.HasFlag(VisualStateFlags.Invalid));
         Assert.IsFalse(target.CurrentFlags.HasFlag(VisualStateFlags.Enabled));
 
-        target.ClearBinding(ValidationControl.SecondProperty);
+        target.ReportBindingError(
+            ValidationControl.FirstProperty,
+            "unavailable first",
+            BindingStatus.BindingError,
+            BindingErrorStage.Consistency,
+            new InvalidOperationException("first consistency failure"));
 
         Assert.IsFalse(target.HasValidationError);
         Assert.IsEmpty(target.ValidationErrors);
@@ -276,12 +272,11 @@ public sealed class BindingErrorTransportTests
         target.SetBinding(
             TextBox.TextProperty,
             source,
-            static value => value == 2
-                ? throw new InvalidOperationException("conversion failed")
-                : value.ToString(),
-            mode: BindingMode.OneWay);
+            static value => value.ToString(),
+            static value => int.Parse(value),
+            BindingMode.TwoWay);
 
-        source.Value = 2;
+        ReportValidationError(target, TextBox.TextProperty, "invalid");
         target.ResolveVisualStateInternal(snap: true);
 
         Assert.IsTrue(target.HasValidationError);
@@ -305,12 +300,11 @@ public sealed class BindingErrorTransportTests
         target.SetBinding(
             TextBox.TextProperty,
             source,
-            static value => value == 2
-                ? throw new InvalidOperationException("conversion failed")
-                : value.ToString(),
-            mode: BindingMode.OneWay);
+            static value => value.ToString(),
+            static value => int.Parse(value),
+            BindingMode.TwoWay);
 
-        source.Value = 2;
+        ReportValidationError(target, TextBox.TextProperty, "invalid");
         target.ResolveVisualStateInternal(snap: true);
 
         Assert.IsTrue(target.HasValidationError);
@@ -333,12 +327,11 @@ public sealed class BindingErrorTransportTests
         target.SetBinding(
             TextBox.TextProperty,
             source,
-            static value => value == 2
-                ? throw new InvalidOperationException("conversion failed")
-                : value.ToString(),
-            mode: BindingMode.OneWay);
+            static value => value.ToString(),
+            static value => int.Parse(value),
+            BindingMode.TwoWay);
 
-        source.Value = 2;
+        ReportValidationError(target, TextBox.TextProperty, "invalid");
 
         AssertFocusedValidationBorderIsRendered(target);
     }
@@ -352,18 +345,12 @@ public sealed class BindingErrorTransportTests
             return;
         }
 
-        var source = new ObservableValue<int>(1);
+        var source = new ObservableValue<int>(-1);
         var target = new ComboBox();
         target.ResolveAndApplyStyle();
-        target.SetBinding(
-            ComboBox.SelectedIndexProperty,
-            source,
-            static value => value == 2
-                ? throw new InvalidOperationException("conversion failed")
-                : value,
-            mode: BindingMode.OneWay);
+        target.SetBinding(ComboBox.SelectedIndexProperty, source, BindingMode.TwoWay);
 
-        source.Value = 2;
+        ReportValidationError(target, ComboBox.SelectedIndexProperty, 2);
 
         AssertFocusedValidationBorderIsRendered(target);
     }
@@ -404,6 +391,14 @@ public sealed class BindingErrorTransportTests
         Assert.AreEqual(target.ThemeInternal.Palette.Error, target.BorderBrush);
         Assert.AreEqual(target.ThemeInternal.Palette.Error, context.BorderColor);
     }
+
+    private static void ReportValidationError<T>(Control target, MewProperty<T> property, T candidate)
+        => target.ReportBindingError(
+            property,
+            candidate,
+            BindingStatus.ValidationError,
+            BindingErrorStage.SourceValidation,
+            new InvalidOperationException("validation failed"));
 
     private sealed class BorderRecordingContext : MeasureGraphicsContextBase, IGraphicsContext
     {

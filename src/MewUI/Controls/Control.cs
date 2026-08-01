@@ -61,7 +61,7 @@ public abstract class Control : TextElement
             MewPropertyOptions.AffectsVisualState);
 
     /// <summary>
-    /// Gets whether any binding on this control currently has an error.
+    /// Gets whether any binding on this control currently has a validation error.
     /// </summary>
     public static readonly MewProperty<bool> HasValidationErrorProperty =
         HasValidationErrorPropertyKey.Property;
@@ -72,7 +72,7 @@ public abstract class Control : TextElement
             EMPTY_VALIDATION_ERRORS);
 
     /// <summary>
-    /// Gets an immutable snapshot of the current per-property binding errors on this control.
+    /// Gets an immutable snapshot of the current per-property binding validation errors on this control.
     /// </summary>
     public static readonly MewProperty<IReadOnlyList<ValidationError>> ValidationErrorsProperty =
         ValidationErrorsPropertyKey.Property;
@@ -246,7 +246,7 @@ public abstract class Control : TextElement
     internal override void OnBindingErrorChanged(int propertyId, BindingError? error)
     {
         bool changed;
-        if (error == null)
+        if (error?.Status != BindingStatus.ValidationError)
         {
             changed = _validationErrors?.Remove(propertyId) == true;
         }
