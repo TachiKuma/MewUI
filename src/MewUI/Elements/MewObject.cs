@@ -363,11 +363,35 @@ public abstract class MewObject : IPropertyOwner
         }
 
         RecordBindingCandidate(property.Id, value);
-        object? candidate;
+
+        if (!binding.Capabilities.AcceptsTargetCommit)
+        {
+            try
+            {
+                binding.UpdateTargetValue(value);
+                object? targetValue = PropertyStore.GetSourceValue(property, ValueSource.Binding);
+                RecordBindingSuccess(property.Id, targetValue);
+            }
+            catch (Exception ex)
+            {
+                ReportBindingError(
+                    property,
+                    value,
+                    BindingStatus.ValidationError,
+                    BindingErrorStage.TargetValidation,
+                    ex);
+            }
+            return;
+        }
+
+        object? candidate = value;
         try
         {
-            binding.UpdateTargetValue(value);
-            candidate = PropertyStore.GetSourceValue(property, ValueSource.Binding);
+            PropertyStore.ValidateValueCandidate(property, value);
+            if (candidate != null)
+            {
+                candidate = PropertyStore.CoerceValueCandidate(property, candidate);
+            }
         }
         catch (Exception ex)
         {
@@ -380,15 +404,24 @@ public abstract class MewObject : IPropertyOwner
             return;
         }
 
-        if (!binding.Capabilities.AcceptsTargetCommit)
-        {
-            RecordBindingSuccess(property.Id, candidate);
-            return;
-        }
-
         BindingCommitResult result = binding.CommitTargetValue(candidate);
         if (!result.Succeeded)
         {
+            try
+            {
+                binding.UpdateTargetValue(value);
+            }
+            catch (Exception ex)
+            {
+                ReportBindingError(
+                    property,
+                    value,
+                    BindingStatus.ValidationError,
+                    BindingErrorStage.TargetValidation,
+                    ex);
+                return;
+            }
+
             ReportBindingError(property.Id, candidate, result.Error!);
             return;
         }
