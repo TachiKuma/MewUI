@@ -17,7 +17,7 @@ Startup();
 
 VideoPlayerWindow playerWindow = null!;
 Window? logWindow = null;
-MultiLineTextBox? logTextBox = null;
+NewMultiLineTextBox? logTextBox = null;
 
 ProcessStatistics processStats = new();
 
@@ -225,7 +225,7 @@ void EnsureLogWindow()
     }
 
     Window window = null!;
-    MultiLineTextBox textBox = null!;
+    NewMultiLineTextBox textBox = null!;
     window = new Window()
         .Resizable(720, 420)
         .Build(x => x
@@ -235,7 +235,7 @@ void EnsureLogWindow()
                 new Border()
                     .Padding(8)
                     .Child(
-                        new MultiLineTextBox()
+                        new NewMultiLineTextBox()
                             .Ref(out textBox)
                             .Wrap(true)
                             .FontFamily("Consolas")

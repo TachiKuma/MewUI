@@ -299,7 +299,7 @@ Element Buttons() => new StackPanel()
 
 Element NormalControls()
 {
-    MultiLineTextBox notesTextBox = null!;
+    NewMultiLineTextBox notesTextBox = null!;
     CheckBox wrapCheck = null!;
     int appendCount = 0;
     var demoMenu = new ContextMenu();
@@ -580,7 +580,7 @@ Element NormalControls()
                         ),
 
                     new GroupBox()
-                        .Header("MultiLineTextBox")
+                        .Header("NewMultiLineTextBox")
                         .Height(340)
                         .RowSpan(2)
                         .Content(
@@ -610,7 +610,7 @@ Element NormalControls()
                                         .Content("Wrap")
                                         .OnCheckedChanged(x => notesTextBox.Wrap = x),
 
-                                    new MultiLineTextBox()
+                                    new NewMultiLineTextBox()
                                         .Ref(out notesTextBox)
                                         .OnWrapChanged(x => wrapCheck?.IsChecked = x)
                                         .Wrap(true)
