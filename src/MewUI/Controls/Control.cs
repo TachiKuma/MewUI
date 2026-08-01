@@ -589,6 +589,136 @@ public abstract class Control : TextElement
         Style DeclaringStyle,
         StateTrigger? Trigger);
 
+#if DEBUG
+    internal StyleCascadeTrace GetStyleCascadeTrace(MewProperty property)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+
+        var entries = new List<StyleCascadeEntryTrace>();
+        int finalEntryIndex = -1;
+        CollectStyleCascadeTrace(
+            _style,
+            property,
+            _visualState.Flags,
+            Theme,
+            entries,
+            ref finalEntryIndex);
+
+        ResolvedStyleValue applied = default;
+        bool hasStyleCandidate = _appliedStyleValues?.TryGetValue(property.Id, out applied) == true;
+        object? styleValue = hasStyleCandidate ? applied.Value : null;
+
+        if (finalEntryIndex >= 0)
+        {
+            var finalEntry = entries[finalEntryIndex];
+            entries[finalEntryIndex] = finalEntry with
+            {
+                IsFinal = true,
+                IsWinner = hasStyleCandidate && !finalEntry.IsUnset,
+            };
+        }
+
+        var valueTrace = GetPropertyValueTrace(property);
+        return new StyleCascadeTrace(
+            property,
+            entries.ToArray(),
+            hasStyleCandidate,
+            styleValue,
+            valueTrace.EffectiveSource,
+            valueTrace.IsAnimated);
+    }
+
+    private static void CollectStyleCascadeTrace(
+        Style? style,
+        MewProperty property,
+        VisualStateFlags flags,
+        Theme theme,
+        List<StyleCascadeEntryTrace> entries,
+        ref int finalEntryIndex)
+    {
+        if (style == null)
+        {
+            return;
+        }
+
+        CollectStyleCascadeTrace(
+            style.BasedOn,
+            property,
+            flags,
+            theme,
+            entries,
+            ref finalEntryIndex);
+
+        CollectStyleCascadeSetters(
+            style,
+            trigger: null,
+            style.Setters,
+            property,
+            isActive: true,
+            theme,
+            entries,
+            ref finalEntryIndex);
+
+        for (int i = 0; i < style.Triggers.Count; i++)
+        {
+            var trigger = style.Triggers[i];
+            CollectStyleCascadeSetters(
+                style,
+                trigger,
+                trigger.Setters,
+                property,
+                trigger.Matches(flags),
+                theme,
+                entries,
+                ref finalEntryIndex);
+        }
+    }
+
+    private static void CollectStyleCascadeSetters(
+        Style style,
+        StateTrigger? trigger,
+        IReadOnlyList<SetterBase> setters,
+        MewProperty property,
+        bool isActive,
+        Theme theme,
+        List<StyleCascadeEntryTrace> entries,
+        ref int finalEntryIndex)
+    {
+        for (int i = 0; i < setters.Count; i++)
+        {
+            var setter = setters[i];
+            if (!ReferenceEquals(setter.Property, property))
+            {
+                continue;
+            }
+
+            bool isUnset = setter is UnsetSetter;
+            bool hasResolvedValue = setter is Setter valueSetter &&
+                (isActive || valueSetter.ThemeResolver == null);
+            object? resolvedValue = hasResolvedValue
+                ? ((Setter)setter).ResolveValue(theme)
+                : null;
+            int entryIndex = entries.Count;
+            entries.Add(new StyleCascadeEntryTrace(
+                style,
+                trigger,
+                isActive,
+                isUnset,
+                hasResolvedValue,
+                resolvedValue,
+                IsFinal: false,
+                IsWinner: false));
+
+            if (!isActive)
+            {
+                continue;
+            }
+
+            finalEntryIndex = entryIndex;
+        }
+    }
+#endif
+
     private static void CollectResolvedValues(Style? style, VisualStateFlags flags,
         Theme theme, Dictionary<int, ResolvedStyleValue> result)
     {

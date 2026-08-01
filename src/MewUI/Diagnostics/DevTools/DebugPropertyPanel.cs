@@ -196,10 +196,39 @@ internal sealed class DebugPropertyPanel : UserControl
             }
         }
 
+        if (element is Control control)
+        {
+            var styleTrace = control.GetStyleCascadeTrace(property);
+            if (styleTrace.FinalEntry is { } finalStyleEntry)
+            {
+                string origin = finalStyleEntry.Trigger == null
+                    ? "setter"
+                    : $"trigger {FormatTrigger(finalStyleEntry.Trigger)}";
+                string outcome;
+                if (finalStyleEntry.IsUnset)
+                {
+                    outcome = "unset";
+                }
+                else if (!styleTrace.IsStyleEffective)
+                {
+                    outcome = $"shadowed by {styleTrace.EffectiveSource}";
+                }
+                else
+                {
+                    outcome = styleTrace.IsAnimated ? "winner under animation" : "winner";
+                }
+                value +=
+                    $"  [Style {finalStyleEntry.DeclaringStyle.TargetType.Name}/{origin} {outcome}]";
+            }
+        }
+
         bool isSet = trace.BindingState != null || trace.HasNonDefaultCandidate;
 
         return new PropertyValueInfo(Truncate(value), source, isSet);
     }
+
+    private static string FormatTrigger(StateTrigger trigger)
+        => $"+{trigger.Match}/-{trigger.Exclude}";
 
     private static string FormatValue(object? value)
     {

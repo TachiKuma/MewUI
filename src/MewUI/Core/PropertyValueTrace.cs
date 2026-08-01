@@ -6,6 +6,46 @@ internal readonly record struct PropertyValueCandidateTrace(
     bool IsWinner,
     object? RawValue);
 
+#if DEBUG
+internal readonly record struct StyleCascadeEntryTrace(
+    Style DeclaringStyle,
+    StateTrigger? Trigger,
+    bool IsActive,
+    bool IsUnset,
+    bool HasResolvedValue,
+    object? ResolvedValue,
+    bool IsFinal,
+    bool IsWinner);
+
+internal readonly record struct StyleCascadeTrace(
+    MewProperty Property,
+    IReadOnlyList<StyleCascadeEntryTrace> Entries,
+    bool HasStyleCandidate,
+    object? StyleValue,
+    ValueSource EffectiveSource,
+    bool IsAnimated)
+{
+    public bool IsStyleEffective
+        => HasStyleCandidate && EffectiveSource == ValueSource.Style;
+
+    public StyleCascadeEntryTrace? FinalEntry
+    {
+        get
+        {
+            for (int i = Entries.Count - 1; i >= 0; i--)
+            {
+                if (Entries[i].IsFinal)
+                {
+                    return Entries[i];
+                }
+            }
+
+            return null;
+        }
+    }
+}
+#endif
+
 internal readonly record struct PropertyValueTrace(
     MewProperty Property,
     object? BaseValue,
