@@ -12,12 +12,22 @@ public sealed class Style
     /// Gets the default theme style for the specified control type.
     /// </summary>
     public static Style? ForType(Type controlType)
-        => DefaultStyles.GetStyle(controlType);
+    {
+        ArgumentNullException.ThrowIfNull(controlType);
+        if (!typeof(Control).IsAssignableFrom(controlType))
+        {
+            throw new ArgumentException(
+                $"Style target type '{controlType.FullName}' must derive from Control.",
+                nameof(controlType));
+        }
+
+        return DefaultStyles.GetStyle(controlType);
+    }
 
     /// <summary>
     /// Gets the default theme style for the specified control type.
     /// </summary>
-    public static Style? ForType<T>() where T : class
+    public static Style? ForType<T>() where T : Control
         => ForType(typeof(T));
 
     /// <summary>
@@ -50,6 +60,14 @@ public sealed class Style
 
     public Style(Type targetType)
     {
+        ArgumentNullException.ThrowIfNull(targetType);
+        if (!typeof(Control).IsAssignableFrom(targetType))
+        {
+            throw new ArgumentException(
+                $"Style target type '{targetType.FullName}' must derive from Control.",
+                nameof(targetType));
+        }
+
         TargetType = targetType;
     }
 
