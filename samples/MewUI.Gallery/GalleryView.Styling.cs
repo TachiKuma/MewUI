@@ -125,9 +125,14 @@ partial class GalleryView
         sheet.Define("fg-pinned", () => pinnedStyle);
         sheet.Define("fg-unset", () => unsetStyle);
 
+        Border scope = null!;
+        var status = new TextBlock()
+            .Text("StyleSheet: applied")
+            .FontSize(11);
+
         // The Border (a Control) provides the ambient Foreground that descendants inherit,
         // and hosts the StyleSheet the named styles resolve against.
-        return new Border()
+        scope = new Border()
             .Foreground(ambient)
             .Apply(b => b.StyleSheet = sheet)
             .Child(
@@ -146,8 +151,30 @@ partial class GalleryView
                         new Button()
                             .Content("BasedOn + Unset (follows ambient)")
                             .StyleName("fg-unset")
-                            .HorizontalAlignment(HorizontalAlignment.Left)
+                            .HorizontalAlignment(HorizontalAlignment.Left),
+                        new StackPanel()
+                            .Horizontal()
+                            .Spacing(8)
+                            .Children(
+                                new Button()
+                                    .Content("Remove StyleSheet")
+                                    .OnClick(() =>
+                                    {
+                                        scope.StyleSheet = null;
+                                        status.Text = "StyleSheet: removed (named styles fall back to defaults)";
+                                    }),
+                                new Button()
+                                    .Content("Apply StyleSheet")
+                                    .OnClick(() =>
+                                    {
+                                        scope.StyleSheet = sheet;
+                                        status.Text = "StyleSheet: applied";
+                                    })
+                            ),
+                        status
                     )
             );
+
+        return scope;
     }
 }
