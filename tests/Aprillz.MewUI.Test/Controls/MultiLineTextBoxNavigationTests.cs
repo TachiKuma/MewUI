@@ -2,6 +2,8 @@ using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
 using MewUI.Test.Infrastructure;
 
+#pragma warning disable CS0618 // This suite preserves the legacy behavior oracle.
+
 namespace MewUI.Test.Controls;
 
 [TestClass]
@@ -318,3 +320,5 @@ public sealed class MultiLineTextBoxNavigationTests
         Assert.AreEqual(5, textBox.CaretPosition);
     }
 }
+
+#pragma warning restore CS0618
