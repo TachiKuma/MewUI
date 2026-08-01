@@ -127,8 +127,13 @@ partial class GalleryView
         sheet.Define("derived-no-override", () => noOverrideStyle);
         sheet.Define("derived-unset", () => unsetStyle);
 
+        Border scope = null!;
+        var status = new TextBlock()
+            .Text("StyleSheet: applied")
+            .FontSize(11);
+
         // The Border provides both the nearest named-style scope and the inherited candidate.
-        return new Border()
+        scope = new Border()
             .WithTheme((t, b) => b.Foreground(t.Palette.Accent))
             .Apply(b => b.StyleSheet = sheet)
             .Child(
@@ -151,9 +156,31 @@ partial class GalleryView
                         new TextBlock()
                             .Text("Unset does not assign Accent. It removes the Style candidate, so the resolver exposes the next source in the property precedence chain.")
                             .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(11)
+                            .FontSize(11),
+                        new StackPanel()
+                            .Horizontal()
+                            .Spacing(8)
+                            .Children(
+                                new Button()
+                                    .Content("Remove StyleSheet")
+                                    .OnClick(() =>
+                                    {
+                                        scope.StyleSheet = null;
+                                        status.Text = "StyleSheet: removed (named styles fall back to defaults)";
+                                    }),
+                                new Button()
+                                    .Content("Apply StyleSheet")
+                                    .OnClick(() =>
+                                    {
+                                        scope.StyleSheet = sheet;
+                                        status.Text = "StyleSheet: applied";
+                                    })
+                            ),
+                        status
                     )
             );
+
+        return scope;
     }
 
     private FrameworkElement TypeRuleDemo()
