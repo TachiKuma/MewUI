@@ -2437,7 +2437,16 @@ public partial class Window : ContentControl, ILayoutRoundingHost
 
     internal void SetClientSizeDip(double widthDip, double heightDip) => _clientSizeDip = new Size(widthDip, heightDip);
 
-    internal void SetIsActive(bool isActive) => IsActive = isActive;
+    internal void SetIsActive(bool isActive)
+    {
+        if (IsActive == isActive)
+        {
+            return;
+        }
+
+        IsActive = isActive;
+        FocusManager.InvalidateFocusVisualStates();
+    }
 
     internal void RaiseLoaded()
     {
