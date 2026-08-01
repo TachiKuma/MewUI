@@ -1,5 +1,6 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
+using Aprillz.MewUI.Rendering;
 
 namespace MewUI.Test.Binding;
 
@@ -318,6 +319,56 @@ public sealed class BindingErrorTransportTests
     }
 
     [TestMethod]
+    public void TextBoxRenderer_PreservesValidationBorderWhileFocused()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        var source = new ObservableValue<int>(1);
+        var target = new TextBox();
+        target.ResolveAndApplyStyle();
+        target.SetBinding(
+            TextBox.TextProperty,
+            source,
+            static value => value == 2
+                ? throw new InvalidOperationException("conversion failed")
+                : value.ToString(),
+            mode: BindingMode.OneWay);
+
+        source.Value = 2;
+
+        AssertFocusedValidationBorderIsRendered(target);
+    }
+
+    [TestMethod]
+    public void DropDownRenderer_PreservesValidationBorderWhileFocused()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        var source = new ObservableValue<int>(1);
+        var target = new ComboBox();
+        target.ResolveAndApplyStyle();
+        target.SetBinding(
+            ComboBox.SelectedIndexProperty,
+            source,
+            static value => value == 2
+                ? throw new InvalidOperationException("conversion failed")
+                : value,
+            mode: BindingMode.OneWay);
+
+        source.Value = 2;
+
+        AssertFocusedValidationBorderIsRendered(target);
+    }
+
+    [TestMethod]
     public void ValidationStateProperties_CannotBeWrittenByStyleOrElementTrigger()
     {
         var style = new Style(typeof(ValidationControl))
@@ -337,6 +388,56 @@ public sealed class BindingErrorTransportTests
                     Setter.Create(Control.HasValidationErrorProperty, true)),
             ]);
         StringAssert.Contains(triggerException.Message, "read-only property");
+    }
+
+    private static void AssertFocusedValidationBorderIsRendered(Control target)
+    {
+        target.SetFocused(true);
+        target.ResolveVisualStateInternal(snap: true);
+        target.Measure(new Size(240, 40));
+        target.Arrange(new Rect(0, 0, 240, 40));
+
+        var context = new BorderRecordingContext();
+        target.Render(context);
+
+        Assert.IsTrue(target.HasValidationError);
+        Assert.AreEqual(target.ThemeInternal.Palette.Error, target.BorderBrush);
+        Assert.AreEqual(target.ThemeInternal.Palette.Error, context.BorderColor);
+    }
+
+    private sealed class BorderRecordingContext : MeasureGraphicsContextBase, IGraphicsContext
+    {
+        public Color? BorderColor { get; private set; }
+
+        public override double DpiScale => 1;
+
+        public override Size MeasureText(ReadOnlySpan<char> text, IFont font)
+            => new(text.Length * 7, 14);
+
+        public override Size MeasureText(ReadOnlySpan<char> text, IFont font, double maxWidth)
+            => new(Math.Min(text.Length * 7, maxWidth), 14);
+
+        public override TextLayout? CreateTextLayout(
+            ReadOnlySpan<char> text,
+            TextFormat format,
+            in TextLayoutConstraints constraints)
+            => null;
+
+        void IGraphicsContext.DrawRoundedRectangle(
+            Rect rect,
+            double radiusX,
+            double radiusY,
+            Color color,
+            double thickness,
+            bool strokeInset)
+            => BorderColor = color;
+
+        void IGraphicsContext.DrawRectangle(
+            Rect rect,
+            Color color,
+            double thickness,
+            bool strokeInset)
+            => BorderColor = color;
     }
 
     private sealed class IntTarget : MewObject

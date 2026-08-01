@@ -477,13 +477,12 @@ public abstract partial class TextBase : Control, ITextCompositionClient, ITextI
         double radius = CornerRadius;
 
         var state = CurrentVisualState;
-        var borderColor = PickAccentBorder(Theme, BorderBrush, state, 0.6);
 
         DrawBackgroundAndBorder(
             context,
             bounds,
-            PickControlBackground(state),
-            borderColor,
+            Background,
+            BorderBrush,
             BorderThickness,
             radius);
 
