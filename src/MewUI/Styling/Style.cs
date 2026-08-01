@@ -38,6 +38,44 @@ public sealed class Style
         => ForType(typeof(T));
 
     /// <summary>
+    /// Creates a style that explicitly extends the nearest framework default style for
+    /// <typeparamref name="T"/>. This does not change ordinary Style or StyleSheet lookup.
+    /// </summary>
+    public static Style DeriveFromDefault<T>(
+        IReadOnlyList<SetterBase>? setters = null,
+        IReadOnlyList<StateTrigger>? triggers = null,
+        IReadOnlyList<Transition>? transitions = null)
+        where T : Control
+    {
+        Type targetType = typeof(T);
+        Style? defaultStyle = null;
+        for (Type? candidate = targetType;
+             candidate != null && typeof(Control).IsAssignableFrom(candidate);
+             candidate = candidate.BaseType)
+        {
+            defaultStyle = DefaultStyles.GetStyle(candidate);
+            if (defaultStyle != null)
+            {
+                break;
+            }
+        }
+
+        if (defaultStyle == null)
+        {
+            throw new InvalidOperationException(
+                $"No framework default style is available for control type '{targetType.FullName}'.");
+        }
+
+        return new Style(targetType)
+        {
+            BasedOn = defaultStyle,
+            Setters = setters ?? [],
+            Triggers = triggers ?? [],
+            Transitions = transitions ?? [],
+        };
+    }
+
+    /// <summary>
     /// Gets the target control type this style applies to.
     /// </summary>
     public Type TargetType { get; }

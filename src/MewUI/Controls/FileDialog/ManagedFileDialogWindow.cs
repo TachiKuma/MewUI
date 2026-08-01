@@ -834,15 +834,12 @@ internal static class FileDialogStyles
 
     internal static void Register(StyleSheet sheet)
     {
-        sheet.Define(NullTextBox, () => new Style(typeof(TextBox))
-        {
-            BasedOn = Style.ForType<TextBox>(),
-            Setters =
+        sheet.Define(NullTextBox, () => Style.DeriveFromDefault<TextBox>(
+            setters:
             [
                 Setter.Create(Control.BorderThicknessProperty, 0.0),
                 Setter.Create(Control.BackgroundProperty,  Color.Transparent),
-            ],
-        });
+            ]));
 
         sheet.Define(AddressBar, () => new Style(typeof(ContentControl))
         {
