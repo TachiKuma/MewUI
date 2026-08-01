@@ -20,7 +20,7 @@ Application.DispatcherUnhandledException += e =>
     e.Handled = true;
 };
 
-var logBox = new MultiLineTextBox
+var logBox = new NewMultiLineTextBox
 {
     Wrap = true,
     IsHitTestVisible = false,
@@ -51,7 +51,7 @@ var handleBubblingComposition = new ObservableValue<bool>(false);
 var handleTextInput = new ObservableValue<bool>(false);
 
 TextBox singleLine = null!;
-MultiLineTextBox multiLine = null!;
+NewMultiLineTextBox multiLine = null!;
 
 Application.Create()
     .UseAccent(Accent.Purple)
@@ -183,7 +183,7 @@ Application.Create()
 
                             new Label().Text("Multi-line TextBox").Bold(),
 
-                            new MultiLineTextBox()
+                            new NewMultiLineTextBox()
                                 .Ref(out multiLine)
                                 .Wrap(true)
                                 .Text("Type here...\n(try long composition and commits)")
@@ -272,4 +272,3 @@ static void Startup()
         MewVGX11Backend.Register();
     }
 }
-

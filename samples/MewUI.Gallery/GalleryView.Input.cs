@@ -12,7 +12,7 @@ partial class GalleryView
     // SelectionStart/SelectionLength MewProperties - used to inspect selection geometry.
     private FrameworkElement MultiLineTextBoxDemo()
     {
-        var box = new MultiLineTextBox()
+        var box = new NewMultiLineTextBox()
             .Height(120)
             .Width(290)
             .Wrap(false)
@@ -137,7 +137,7 @@ partial class GalleryView
                 ),
 
                 Card(
-                    "MultiLineTextBox",
+                    "NewMultiLineTextBox",
                     MultiLineTextBoxDemo()
                 ),
 

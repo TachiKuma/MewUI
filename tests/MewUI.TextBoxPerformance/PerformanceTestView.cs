@@ -8,9 +8,9 @@ namespace Aprillz.MewUI.TextBoxPerformance;
 partial class PerformanceTestView : UserControl
 {
     private TextBox _singleLineTextBox = null!;
-    private MultiLineTextBox _multiLineTextBox = null!;
-    private MultiLineTextBox _emojiTextBox = null!;
-    private MultiLineTextBox _logOutput = null!;
+    private NewMultiLineTextBox _multiLineTextBox = null!;
+    private NewMultiLineTextBox _emojiTextBox = null!;
+    private NewMultiLineTextBox _logOutput = null!;
 
     public PerformanceTestView()
     {
@@ -28,7 +28,7 @@ partial class PerformanceTestView : UserControl
                     .DockBottom()
                     .Children(
                         new Label().Text("Log").Bold(),
-                        new MultiLineTextBox()
+                        new NewMultiLineTextBox()
                             .Ref(out _logOutput)
                             .IsReadOnly()
                             .Wrap()
@@ -43,10 +43,10 @@ partial class PerformanceTestView : UserControl
                             .Header("Single-line (TextBox)")
                             .Content(BuildSingleLineTab()),
                         new TabItem()
-                            .Header("Multi-line (MultiLineTextBox)")
+                            .Header("Multi-line (new engine)")
                             .Content(BuildMultiLineTab()),
                         new TabItem()
-                            .Header("emoji (MultiLineTextBox)")
+                            .Header("emoji (new engine)")
                             .Content(BuildEmojiTab())
                     )
             );
@@ -83,10 +83,12 @@ partial class PerformanceTestView : UserControl
                         new Button().Content("Clear").OnClick(OnClearMultiLine),
                         new Button().Content("Generate 1MB").OnClick(() => GenerateMultiLine(1_000_000)),
                         new Button().Content("Generate 10MB").OnClick(() => GenerateMultiLine(10_000_000)),
+                        new Button().Content("Generate 10MB single line (no wrap)").OnClick(() => GenerateLongLogicalLine(10_000_000, wrap: false)),
+                        new Button().Content("Generate 10MB single line (wrap)").OnClick(() => GenerateLongLogicalLine(10_000_000, wrap: true)),
                         new Button().Content("Type Simulation (1000)").OnClick(OnTypeSimulationMultiLine)
                     ),
                 new Label().Text("Place multiline-test.zip in Resources/").DockTop().Margin(0, 0, 0, 8),
-                new MultiLineTextBox()
+                new NewMultiLineTextBox()
                     .Wrap()
                     .Ref(out _multiLineTextBox)
             );
@@ -102,7 +104,7 @@ partial class PerformanceTestView : UserControl
                         new Button().Content("Load emoji-test.zip").OnClick(OnLoadEmoji)
                     ),
                 new Label().Text("Place emoji-test.zip in Resources/").DockTop().Margin(0, 0, 0, 8),
-                new MultiLineTextBox()
+                new NewMultiLineTextBox()
                     .Wrap()
                     .FontFamily("Consolas")
                     .Ref(out _emojiTextBox)
@@ -267,6 +269,24 @@ partial class PerformanceTestView : UserControl
         sw.Restart();
         _multiLineTextBox.Text = text;
         Log($"  MultiLineTextBox.Text set: {sw.ElapsedMilliseconds}ms");
+    }
+
+    private void GenerateLongLogicalLine(int length, bool wrap)
+    {
+        Log($"Generating {length:N0} chars as one logical line (wrap={wrap})...");
+        var sw = Stopwatch.StartNew();
+        const string chunk = "abcdefghijklmnopqrstuvwxyz0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var text = string.Create(length, chunk, static (span, value) =>
+        {
+            for (int index = 0; index < span.Length; index++)
+                span[index] = value[index % value.Length];
+        });
+        Log($"  Generated: {sw.ElapsedMilliseconds}ms");
+
+        _multiLineTextBox.Wrap = wrap;
+        sw.Restart();
+        _multiLineTextBox.Text = text;
+        Log($"  New text engine Text set: {sw.ElapsedMilliseconds}ms");
     }
 
     private async void OnTypeSimulationMultiLine()
