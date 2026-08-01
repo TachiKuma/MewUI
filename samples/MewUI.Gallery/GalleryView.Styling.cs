@@ -127,13 +127,8 @@ partial class GalleryView
         sheet.Define("derived-no-override", () => noOverrideStyle);
         sheet.Define("derived-unset", () => unsetStyle);
 
-        Border scope = null!;
-        var status = new TextBlock()
-            .Text("StyleSheet: applied")
-            .FontSize(11);
-
         // The Border provides both the nearest named-style scope and the inherited candidate.
-        scope = new Border()
+        return new Border()
             .WithTheme((t, b) => b.Foreground(t.Palette.Accent))
             .Apply(b => b.StyleSheet = sheet)
             .Child(
@@ -156,31 +151,9 @@ partial class GalleryView
                         new TextBlock()
                             .Text("Unset does not assign Accent. It removes the Style candidate, so the resolver exposes the next source in the property precedence chain.")
                             .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(11),
-                        new StackPanel()
-                            .Horizontal()
-                            .Spacing(8)
-                            .Children(
-                                new Button()
-                                    .Content("Remove StyleSheet")
-                                    .OnClick(() =>
-                                    {
-                                        scope.StyleSheet = null;
-                                        status.Text = "StyleSheet: removed (named styles fall back to defaults)";
-                                    }),
-                                new Button()
-                                    .Content("Apply StyleSheet")
-                                    .OnClick(() =>
-                                    {
-                                        scope.StyleSheet = sheet;
-                                        status.Text = "StyleSheet: applied";
-                                    })
-                            ),
-                        status
+                            .FontSize(11)
                     )
             );
-
-        return scope;
     }
 
     private FrameworkElement TypeRuleDemo()
@@ -194,24 +167,51 @@ partial class GalleryView
                 Setter.Create(TextElement.FontWeightProperty, FontWeight.Bold),
             ]));
 
+        Border scope = null!;
+        var status = new TextBlock()
+            .Text("StyleSheet: applied")
+            .FontSize(11);
+
+        scope = new Border()
+            .Apply(b => b.StyleSheet = sheet)
+            .Child(
+                new Button()
+                    .Content("Inside scope: Define<Button>")
+                    .HorizontalAlignment(HorizontalAlignment.Left)
+            );
+
         return new StackPanel()
             .Vertical()
             .Spacing(8)
             .Children(
                 new TextBlock()
-                    .Text("The first button is outside the local sheet. The second is inside a Border that owns a Button type rule, so it receives the square, padded, bold style without a StyleName.")
+                    .Text("The first button is outside the local sheet. The second is inside a Border that owns a Button type rule, so it receives the square, padded, bold style without a StyleName. Removing the sheet safely returns it to the default Button style.")
                     .TextWrapping(TextWrapping.Wrap)
                     .FontSize(11),
                 new Button()
                     .Content("Outside scope: default Button")
                     .HorizontalAlignment(HorizontalAlignment.Left),
-                new Border()
-                    .Apply(b => b.StyleSheet = sheet)
-                    .Child(
+                scope,
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(8)
+                    .Children(
                         new Button()
-                            .Content("Inside scope: Define<Button>")
-                            .HorizontalAlignment(HorizontalAlignment.Left)
-                    )
+                            .Content("Remove StyleSheet")
+                            .OnClick(() =>
+                            {
+                                scope.StyleSheet = null;
+                                status.Text = "StyleSheet: removed (inside button uses the default style)";
+                            }),
+                        new Button()
+                            .Content("Apply StyleSheet")
+                            .OnClick(() =>
+                            {
+                                scope.StyleSheet = sheet;
+                                status.Text = "StyleSheet: applied";
+                            })
+                    ),
+                status
             );
     }
 }

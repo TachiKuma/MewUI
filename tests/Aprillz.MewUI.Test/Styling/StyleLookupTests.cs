@@ -120,6 +120,27 @@ public sealed class StyleLookupTests
         StringAssert.Contains(exception.Message, typeof(LookupControl).FullName!);
     }
 
+    [TestMethod]
+    public void TypeRuleStyleSheet_CanBeRemovedAndReappliedWhileAttached()
+    {
+        var sheet = new StyleSheet();
+        sheet.Define<LookupControl>(StyleWithWidth(typeof(LookupControl), 42));
+
+        var child = new LookupControl();
+        var scope = new Border { StyleSheet = sheet, Child = child };
+        var window = new Window { Content = scope };
+
+        Assert.AreEqual(42, child.Width);
+
+        scope.StyleSheet = null;
+
+        Assert.IsTrue(double.IsNaN(child.Width), "removing the type rule restores the default Width");
+
+        scope.StyleSheet = sheet;
+
+        Assert.AreEqual(42, child.Width, "the same frozen sheet can be reapplied");
+    }
+
     private static Style StyleWithBackground(Type targetType, Color value)
         => new(targetType)
         {
