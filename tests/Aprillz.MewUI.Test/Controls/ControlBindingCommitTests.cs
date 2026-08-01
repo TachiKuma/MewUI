@@ -20,6 +20,23 @@ public sealed class ControlBindingCommitTests
     }
 
     [TestMethod]
+    public void CheckBoxToggle_UpdatesSourceBeforeCheckedChanged()
+    {
+        var source = new ObservableValue<bool?>(false);
+        var checkBox = new CheckBox();
+        checkBox.SetBinding(CheckBox.IsCheckedProperty, source);
+
+        bool? sourceDuringEvent = null;
+        checkBox.CheckedChanged += _ => sourceDuringEvent = source.Value;
+
+        checkBox.Toggle();
+
+        Assert.IsTrue(sourceDuringEvent.GetValueOrDefault());
+        Assert.IsTrue(source.Value.GetValueOrDefault());
+        Assert.IsTrue(checkBox.IsChecked.GetValueOrDefault());
+    }
+
+    [TestMethod]
     public void ToggleButtonAccessKey_CommitsWithoutRemovingBinding()
     {
         var source = new ObservableValue<bool>(false);
