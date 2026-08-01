@@ -75,20 +75,19 @@ public abstract class DropDownBase : PopupOwnerBase
             var borderInset = GetBorderVisualInset();
             double radius = CornerRadiusDip;
 
-            var state = CurrentVisualState;
-
-            var bg = PickButtonBackground(state);
-
-            Color baseBorder = state.IsEnabled ? BorderBrush : Theme.Palette.ControlBorder;
-            var borderColor = PickAccentBorder(Theme, baseBorder, state, hoverMix: 0.6);
-
-            DrawBackgroundAndBorder(context, bounds, bg, borderColor, BorderThickness, radius);
+            DrawBackgroundAndBorder(
+                context,
+                bounds,
+                Background,
+                BorderBrush,
+                BorderThickness,
+                radius);
 
             var headerHeight = ResolveAnchorHeight();
             var headerRect = new Rect(bounds.X, bounds.Y, bounds.Width, headerHeight);
             var innerHeaderRect = headerRect.Deflate(new Thickness(borderInset));
 
-            ArrowForeground = state.IsEnabled ? Foreground : Theme.Palette.DisabledText;
+            ArrowForeground = Foreground;
             var profiler = PerformanceProfiler.Instance;
             using (profiler.IsEnabled ? profiler.SampleElement(typeof(DropDownBase), ProfilerSampleCategory.Render, this) : default)
             {
