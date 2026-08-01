@@ -144,7 +144,6 @@ internal sealed class ManagedFileDialogWindow : Window
                 else if (item.Id == NAV_FORWARD) _forwardButton = seg;
             });
 
-        FileDialogStyles.Ensure();
         _pathBox = new TextBox().TabIndex(2).StyleName(FileDialogStyles.NullTextBox).Padding(6, 0);
         _pathBox.OnKeyDown(e =>
         {
@@ -833,17 +832,9 @@ internal static class FileDialogStyles
     public const string NullTextBox = "null-textbox";
     public const string AddressBar = "address-bar";
 
-    private static bool _registered;
-
-    public static void Ensure()
+    internal static void Register(StyleSheet sheet)
     {
-        if (_registered)
-        {
-            return;
-        }
-        _registered = true;
-
-        Application.Current.StyleSheet.Define(NullTextBox, () => new Style(typeof(TextBox))
+        sheet.Define(NullTextBox, () => new Style(typeof(TextBox))
         {
             BasedOn = Style.ForType<TextBox>(),
             Setters =
@@ -853,7 +844,7 @@ internal static class FileDialogStyles
             ],
         });
 
-        Application.Current.StyleSheet.Define(AddressBar, () => new Style(typeof(ContentControl))
+        sheet.Define(AddressBar, () => new Style(typeof(ContentControl))
         {
             Transitions = [Transition.Create(Control.BorderBrushProperty)],
             Setters =

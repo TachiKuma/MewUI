@@ -3009,6 +3009,84 @@ public partial class Window : ContentControl, ILayoutRoundingHost
 
     internal static void VisitVisualTree(Element element, Action<Element> visitor) => VisualTree.Visit(element, visitor);
 
+    /// <summary>
+    /// Re-resolves controls whose context chain passes through <paramref name="scope"/>. The walk
+    /// includes portal and overlay surfaces that are not descendants of the scope in the visual tree.
+    /// A null scope represents the application StyleSheet and refreshes every control in the window.
+    /// </summary>
+    internal void RefreshStyles(Element? scope, bool animate)
+    {
+        void Refresh(Element element)
+        {
+            if (element is not Control control ||
+                (scope != null && !IsInStyleContext(control, scope)))
+            {
+                return;
+            }
+
+            control.ResolveAndApplyStyle(animate);
+        }
+
+        Refresh(this);
+
+        if (EffectiveVisualRoot != null)
+        {
+            VisitVisualTree(EffectiveVisualRoot, Refresh);
+        }
+
+        OverlayLayer.VisitAll(Refresh);
+        _popupManager.VisitAll(Refresh);
+
+        for (int i = 0; i < _adorners.Count; i++)
+        {
+            VisitVisualTree(_adorners[i].Element, Refresh);
+        }
+    }
+
+    internal void InvalidateStyleSheetLazyCaches()
+    {
+        var sheets = new HashSet<StyleSheet>();
+
+        void Collect(Element element)
+        {
+            if (element is FrameworkElement { StyleSheet: { } sheet })
+            {
+                sheets.Add(sheet);
+            }
+        }
+
+        Collect(this);
+        if (EffectiveVisualRoot != null)
+        {
+            VisitVisualTree(EffectiveVisualRoot, Collect);
+        }
+
+        OverlayLayer.VisitAll(Collect);
+        _popupManager.VisitAll(Collect);
+        for (int i = 0; i < _adorners.Count; i++)
+        {
+            VisitVisualTree(_adorners[i].Element, Collect);
+        }
+
+        foreach (var sheet in sheets)
+        {
+            sheet.InvalidateLazyCache();
+        }
+    }
+
+    private static bool IsInStyleContext(Element element, Element scope)
+    {
+        for (Element? current = element; current != null; current = current.ContextParent)
+        {
+            if (ReferenceEquals(current, scope))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     internal void RaiseDpiChanged(uint oldDpi, uint newDpi)
     {
         OnDpiChanged(oldDpi, newDpi);

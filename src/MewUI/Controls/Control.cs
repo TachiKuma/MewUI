@@ -440,6 +440,7 @@ public abstract class Control : TextElement
 
     internal void SetStyle(Style? style, bool snap = true)
     {
+        style?.Freeze();
         _style = style;
         _styleContextVersion = ContextVersion;
 

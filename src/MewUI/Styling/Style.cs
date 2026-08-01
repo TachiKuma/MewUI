@@ -8,6 +8,13 @@ namespace Aprillz.MewUI;
 /// </summary>
 public sealed class Style
 {
+    private static readonly object _freezeGate = new();
+    private Style? _basedOn;
+    private IReadOnlyList<SetterBase> _setters = [];
+    private IReadOnlyList<StateTrigger> _triggers = [];
+    private IReadOnlyList<Transition> _transitions = [];
+    private bool _isFrozen;
+
     /// <summary>
     /// Gets the default theme style for the specified control type.
     /// </summary>
@@ -39,24 +46,40 @@ public sealed class Style
     /// Gets the parent style to inherit from. Properties not defined in this style
     /// fall through to <see cref="BasedOn"/>.
     /// </summary>
-    public Style? BasedOn { get; init; }
+    public Style? BasedOn
+    {
+        get => _basedOn;
+        init => _basedOn = value;
+    }
 
     /// <summary>
     /// Gets the base setters applied regardless of visual state (lowest priority within this style).
     /// </summary>
-    public IReadOnlyList<SetterBase> Setters { get; init; } = [];
+    public IReadOnlyList<SetterBase> Setters
+    {
+        get => _setters;
+        init => _setters = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     /// <summary>
     /// Gets the state-conditional triggers. Matching triggers are evaluated in declaration order;
     /// for each property, the last active declaration wins.
     /// </summary>
-    public IReadOnlyList<StateTrigger> Triggers { get; init; } = [];
+    public IReadOnlyList<StateTrigger> Triggers
+    {
+        get => _triggers;
+        init => _triggers = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     /// <summary>
     /// Gets the transitions that animate property changes from this style's setters and triggers.
     /// Resolved via <see cref="FindTransition"/> which walks the BasedOn chain.
     /// </summary>
-    public IReadOnlyList<Transition> Transitions { get; init; } = [];
+    public IReadOnlyList<Transition> Transitions
+    {
+        get => _transitions;
+        init => _transitions = value ?? throw new ArgumentNullException(nameof(value));
+    }
 
     public Style(Type targetType)
     {
@@ -84,4 +107,151 @@ public sealed class Style
 
         return BasedOn?.FindTransition(propertyId);
     }
+
+    internal void Freeze()
+    {
+        if (_isFrozen)
+        {
+            return;
+        }
+
+        lock (_freezeGate)
+        {
+            if (_isFrozen)
+            {
+                return;
+            }
+
+            FreezeCore(new HashSet<Style>());
+        }
+    }
+
+    private void FreezeCore(HashSet<Style> visiting)
+    {
+        if (_isFrozen)
+        {
+            return;
+        }
+
+        if (!visiting.Add(this))
+        {
+            throw new InvalidOperationException(
+                $"A BasedOn cycle was found while freezing the style targeting '{TargetType.FullName}'.");
+        }
+
+        try
+        {
+            if (_basedOn != null)
+            {
+                if (!_basedOn.TargetType.IsAssignableFrom(TargetType))
+                {
+                    throw new InvalidOperationException(
+                        $"Style targeting '{TargetType.FullName}' cannot be based on a style targeting " +
+                        $"'{_basedOn.TargetType.FullName}'.");
+                }
+
+                _basedOn.FreezeCore(visiting);
+            }
+
+            var setters = _setters.ToArray();
+            var triggers = _triggers.ToArray();
+            var transitions = _transitions.ToArray();
+
+            ValidateSetters(setters, "Style.Setters");
+
+            const VisualStateFlags definedFlags =
+                VisualStateFlags.Enabled |
+                VisualStateFlags.Hot |
+                VisualStateFlags.Focused |
+                VisualStateFlags.Pressed |
+                VisualStateFlags.Checked |
+                VisualStateFlags.Indeterminate |
+                VisualStateFlags.Active |
+                VisualStateFlags.Selected |
+                VisualStateFlags.ReadOnly;
+
+            for (int i = 0; i < triggers.Length; i++)
+            {
+                var trigger = triggers[i] ?? throw new InvalidOperationException(
+                    $"Style.Triggers[{i}] cannot be null.");
+                var usedFlags = trigger.Match | trigger.Exclude;
+                if ((usedFlags & ~definedFlags) != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Style.Triggers[{i}] uses undefined VisualStateFlags bits: " +
+                        $"0x{(uint)(usedFlags & ~definedFlags):X8}.");
+                }
+
+                if ((trigger.Match & trigger.Exclude) != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Style.Triggers[{i}] requires and excludes the same visual state flags.");
+                }
+
+                ValidateSetters(trigger.SnapshotSetters(), $"Style.Triggers[{i}].Setters");
+            }
+
+            for (int i = 0; i < transitions.Length; i++)
+            {
+                var transition = transitions[i] ?? throw new InvalidOperationException(
+                    $"Style.Transitions[{i}] cannot be null.");
+                ValidatePropertyOwner(transition.Property, $"Style.Transitions[{i}]");
+                if (transition.Duration <= TimeSpan.Zero)
+                {
+                    throw new InvalidOperationException(
+                        $"Style.Transitions[{i}] must have a duration greater than zero.");
+                }
+            }
+
+            _setters = setters;
+            _triggers = triggers;
+            _transitions = transitions;
+            _isFrozen = true;
+        }
+        finally
+        {
+            visiting.Remove(this);
+        }
+    }
+
+    private void ValidateSetters(SetterBase[] setters, string location)
+    {
+        for (int i = 0; i < setters.Length; i++)
+        {
+            var setter = setters[i] ?? throw new InvalidOperationException(
+                $"{location}[{i}] cannot be null.");
+
+            // TargetSetter addresses a template part whose CLR type is not known at style-freeze
+            // time. Its runtime validation remains at the part application boundary until the
+            // deprecated target-setter path is removed.
+            if (setter is not TargetSetter)
+            {
+                ValidatePropertyOwner(setter.Property, $"{location}[{i}]");
+            }
+
+            if (setter is Setter && setter.ThemeResolver == null &&
+                !IsCompatibleValue(setter.Property.ValueType, setter.Value))
+            {
+                throw new InvalidOperationException(
+                    $"{location}[{i}] provides a value incompatible with property " +
+                    $"'{setter.Property.OwnerType.FullName}.{setter.Property.Name}' " +
+                    $"({setter.Property.ValueType.FullName}).");
+            }
+        }
+    }
+
+    private void ValidatePropertyOwner(MewProperty property, string location)
+    {
+        if (!property.OwnerType.IsAssignableFrom(TargetType))
+        {
+            throw new InvalidOperationException(
+                $"{location} uses property '{property.OwnerType.FullName}.{property.Name}', which cannot " +
+                $"be applied to style target '{TargetType.FullName}'.");
+        }
+    }
+
+    private static bool IsCompatibleValue(Type valueType, object? value)
+        => value != null
+            ? valueType.IsInstanceOfType(value)
+            : !valueType.IsValueType || Nullable.GetUnderlyingType(valueType) != null;
 }

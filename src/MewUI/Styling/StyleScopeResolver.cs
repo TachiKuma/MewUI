@@ -12,6 +12,7 @@ internal static class StyleScopeResolver
         ArgumentNullException.ThrowIfNull(control);
 
         Type controlType = control.GetType();
+        bool liveLookup = control.FindVisualRoot() is Window;
         for (Element? current = control; current != null; current = current.ContextParent)
         {
             if (current is not FrameworkElement { StyleSheet: { } sheet })
@@ -19,18 +20,33 @@ internal static class StyleScopeResolver
                 continue;
             }
 
-            Style? style = styleName != null
-                ? sheet.Get(styleName)
-                : sheet.GetByType(controlType);
+            Style? style = Lookup(sheet, styleName, controlType, liveLookup);
             if (style != null)
             {
                 return style;
             }
         }
 
-        return styleName != null
-            ? applicationStyleSheet?.Get(styleName)
-            : applicationStyleSheet?.GetByType(controlType);
+        if (applicationStyleSheet == null)
+        {
+            return null;
+        }
+
+        return Lookup(applicationStyleSheet, styleName, controlType, liveLookup);
+    }
+
+    private static Style? Lookup(
+        StyleSheet sheet,
+        string? styleName,
+        Type controlType,
+        bool liveLookup)
+    {
+        if (styleName != null)
+        {
+            return liveLookup ? sheet.GetLive(styleName) : sheet.Get(styleName);
+        }
+
+        return liveLookup ? sheet.GetLiveByType(controlType) : sheet.GetByType(controlType);
     }
 
     internal static string DescribeScopes(Control control, bool includesApplication)

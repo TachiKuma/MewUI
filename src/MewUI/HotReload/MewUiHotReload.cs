@@ -79,9 +79,11 @@ internal static class MewUiHotReload
         reloading = true;
         try
         {
+            Application.Current.InvalidateStyleCachesForHotReload();
             var entries = HotReloadRegistry.SnapshotAndSweep();
             var reactions = HotReloadPlanner.Plan(entries);
             ExecuteReactions(reactions, scope);
+            Application.Current.RefreshStylesAfterHotReload();
         }
         finally
         {
