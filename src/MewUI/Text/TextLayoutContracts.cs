@@ -1,0 +1,145 @@
+using System.Globalization;
+using Aprillz.MewUI.Rendering;
+
+namespace Aprillz.MewUI.Text;
+
+public enum TextLayoutCachePolicy { Content, Owner }
+
+public enum TextFidelity { RunWidth, ClusterAdvance, Shaped }
+
+public enum TextFlowDirection { LeftToRight, RightToLeft }
+
+public enum LogicalDirection { Backward, Forward }
+
+public enum VisualDirection { Left, Right, Up, Down }
+
+public enum CaretMode { CodeUnit, TextElement }
+
+[Flags]
+public enum TextDecoration
+{
+    None = 0,
+    Underline = 1,
+    Strikethrough = 2
+}
+
+public readonly record struct CharacterHit(int FirstCharacterIndex, int TrailingLength)
+{
+    public int InsertionIndex => checked(FirstCharacterIndex + TrailingLength);
+}
+
+public readonly record struct TextRange(int Start, int Length)
+{
+    public int End => checked(Start + Length);
+}
+
+public readonly record struct TextRunStyle(
+    string FontFamily,
+    double FontSize,
+    FontWeight Weight = FontWeight.Normal,
+    bool Italic = false,
+    TextDecoration Decoration = TextDecoration.None,
+    CultureInfo? Culture = null,
+    string? Language = null)
+{
+    public static TextRunStyle Default { get; } = new("Segoe UI", 12);
+}
+
+public sealed record TextParagraphStyle
+{
+    public double MaxWidth { get; init; } = double.PositiveInfinity;
+    public double MaxHeight { get; init; } = double.PositiveInfinity;
+    public TextWrapping Wrapping { get; init; } = TextWrapping.NoWrap;
+    public TextTrimming Trimming { get; init; } = TextTrimming.None;
+    public TextAlignment Alignment { get; init; } = TextAlignment.Left;
+    public TextFlowDirection FlowDirection { get; init; } = TextFlowDirection.LeftToRight;
+    public CultureInfo Culture { get; init; } = CultureInfo.CurrentUICulture;
+    public string? Language { get; init; }
+    public IReadOnlyList<double> TabStops { get; init; } = [];
+    public double? LineHeight { get; init; }
+    public double LineSpacing { get; init; }
+    public double LetterSpacing { get; init; }
+}
+
+public readonly record struct GeometryStyleRun(int Start, int Length, TextRunStyle Style)
+{
+    public int End => checked(Start + Length);
+}
+
+public readonly record struct InlineMetrics(double Width, double Height, double Baseline);
+
+public interface IInlineTextObject
+{
+    InlineMetrics Measure();
+    void Draw(ITextRenderContext context, Point origin);
+}
+
+public readonly record struct InlineRun(int Position, int Length, IInlineTextObject Object);
+
+public sealed record TextLayoutRequest
+{
+    public required ReadOnlyMemory<char> Text { get; init; }
+    public uint Dpi { get; init; } = 96;
+    public TextParagraphStyle Paragraph { get; init; } = new();
+    public TextRunStyle DefaultStyle { get; init; } = TextRunStyle.Default;
+    public IReadOnlyList<GeometryStyleRun> Runs { get; init; } = [];
+    public IReadOnlyList<InlineRun> Inlines { get; init; } = [];
+    public TextFidelity Fidelity { get; init; } = TextFidelity.ClusterAdvance;
+    public long Revision { get; init; }
+    public bool Transient { get; init; }
+}
+
+public readonly record struct TextLayoutLineMetrics(
+    int TextStart,
+    int TextLength,
+    int NewLineLength,
+    Rect Bounds,
+    double Baseline)
+{
+    public int TextEnd => checked(TextStart + TextLength);
+}
+
+public interface ITextLayout
+{
+    Size MeasuredSize { get; }
+    double ContentHeight { get; }
+    IReadOnlyList<TextLayoutLineMetrics> Lines { get; }
+    CharacterHit HitTestPoint(Point point);
+    Rect GetCaretBounds(CharacterHit hit);
+    CharacterHit GetNextLogicalCaret(CharacterHit from, LogicalDirection direction, CaretMode mode);
+    CharacterHit GetNextVisualCaret(CharacterHit from, VisualDirection direction, CaretMode mode);
+    void GetRangeBounds(int start, int length, IList<Rect> output);
+}
+
+public interface ITextLayoutCache
+{
+    int Count { get; }
+    void ReleaseOwner(object owner);
+    void Trim();
+}
+
+public interface ITextEngine
+{
+    ITextLayout CreateLayout(TextLayoutRequest request);
+    ITextLayout GetOrCreateLayout(TextLayoutRequest request, TextLayoutCachePolicy cachePolicy, object? owner = null);
+    ITextLayoutCache ManagedCache { get; }
+}
+
+public readonly record struct TextPaintSpan(
+    TextRange Range,
+    Color? Foreground = null,
+    Color? Background = null,
+    TextDecoration Decoration = TextDecoration.None);
+
+public readonly record struct TextOverlay(TextRange Range, Color Color);
+
+public readonly record struct TextDrawOptions(
+    Color Foreground,
+    ReadOnlyMemory<TextPaintSpan> PaintSpans = default,
+    ReadOnlyMemory<TextOverlay> Overlays = default,
+    object? Owner = null);
+
+public interface ITextRenderContext
+{
+    void Draw(ITextLayout layout, Point origin, in TextDrawOptions options);
+}

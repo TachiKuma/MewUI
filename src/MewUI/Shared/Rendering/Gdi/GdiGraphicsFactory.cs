@@ -6,6 +6,7 @@ using Aprillz.MewUI.Platform;
 using Aprillz.MewUI.Platform.Win32;
 using Aprillz.MewUI.Rendering.Gdi.Core;
 using Aprillz.MewUI.Resources;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering.Gdi;
 
@@ -17,6 +18,8 @@ public sealed class GdiGraphicsFactory : IGraphicsFactory, IRenderDevice, IWindo
     public const string BackendIdentifier = "Gdi";
 
     public string Backend => BackendIdentifier;
+
+    public ITextEngine TextEngine => TextServices.GetEngine(this);
 
     internal GdiGraphicsFactory() { }
 
@@ -210,6 +213,7 @@ public sealed class GdiGraphicsFactory : IGraphicsFactory, IRenderDevice, IWindo
 
     public void Dispose()
     {
+        TextServices.ReleaseEngine(this);
         _renderResourceCache.Dispose();
 
         lock (_layeredLock)

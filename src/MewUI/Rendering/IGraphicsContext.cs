@@ -1,4 +1,5 @@
 using System.Numerics;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering
 {
@@ -8,6 +9,9 @@ namespace Aprillz.MewUI.Rendering
     /// </summary>
     public interface IGraphicsContext : IDisposable
     {
+        /// <summary>Gets the frame-bound text drawing surface.</summary>
+        ITextRenderContext Text => TextServices.GetRenderContext(this);
+
         /// <summary>
         /// Starts a new frame for the given render target.
         /// Must be called before any drawing operations.

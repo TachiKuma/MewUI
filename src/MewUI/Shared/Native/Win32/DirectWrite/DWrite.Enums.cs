@@ -108,6 +108,13 @@ internal enum DWRITE_RENDERING_MODE : uint
     OUTLINE = 6
 }
 
+internal enum DWRITE_MEASURING_MODE : uint
+{
+    NATURAL = 0,
+    GDI_CLASSIC = 1,
+    GDI_NATURAL = 2
+}
+
 internal struct DWRITE_TRIMMING
 {
     public DWRITE_TRIMMING_GRANULARITY granularity;

@@ -402,6 +402,7 @@ public sealed partial class MewVGWin32GraphicsFactory
         // unbind it. The caller can render directly on whatever context is active.
         if (OpenGL32.wglGetCurrentContext() != 0)
         {
+            MewVGGLBootstrap.EnsureInitialized();
             return MewVGNoOpRenderScope.Instance;
         }
 
@@ -430,6 +431,8 @@ public sealed partial class MewVGWin32GraphicsFactory
                 throw new InvalidOperationException(
                     $"wglMakeCurrent (worker) failed: {Marshal.GetLastWin32Error()}");
             }
+
+            MewVGGLBootstrap.EnsureInitialized();
         }
         catch
         {

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering;
 
@@ -10,6 +11,8 @@ namespace Aprillz.MewUI.Rendering;
 /// </summary>
 public abstract class MeasureGraphicsContextBase : IGraphicsContext
 {
+    public ITextRenderContext Text => TextServices.GetRenderContext(this);
+
     public abstract double DpiScale { get; }
 
     public bool EnableAlphaTextHint { get; set; }

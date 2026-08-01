@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 using Aprillz.MewUI.Native.Structs;
+using Aprillz.MewUI.Native.DirectWrite;
 
 namespace Aprillz.MewUI.Native.Direct2D;
 
@@ -406,6 +407,19 @@ internal static unsafe class D2D1VTable
     {
         var fn = (delegate* unmanaged[Stdcall]<ID2D1RenderTarget*, D2D1_POINT_2F, nint, nint, D2D1_DRAW_TEXT_OPTIONS, void>)(rt->lpVtbl[28]);
         fn(rt, origin, textLayout, brush, options);
+    }
+
+    /// <summary>ID2D1RenderTarget::DrawGlyphRun (vtable index 29).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void DrawGlyphRun(
+        ID2D1RenderTarget* rt,
+        D2D1_POINT_2F baselineOrigin,
+        DWRITE_GLYPH_RUN* glyphRun,
+        nint brush,
+        DWRITE_MEASURING_MODE measuringMode)
+    {
+        var fn = (delegate* unmanaged[Stdcall]<ID2D1RenderTarget*, D2D1_POINT_2F, DWRITE_GLYPH_RUN*, nint, DWRITE_MEASURING_MODE, void>)(rt->lpVtbl[29]);
+        fn(rt, baselineOrigin, glyphRun, brush, measuringMode);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
