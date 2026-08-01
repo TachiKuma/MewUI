@@ -48,7 +48,7 @@ public sealed class PropertyPrecedenceTests
     {
         var owner = new PrecedenceOwner();
         owner.PropertyStore.SetStyle(Prop, 10);
-        owner.PropertyStore.SetTrigger(Prop, 20);
+        owner.PropertyStore.SetElementTrigger(Prop, 20);
         Assert.AreEqual(20, owner.Value);
     }
 
@@ -57,7 +57,7 @@ public sealed class PropertyPrecedenceTests
     {
         var owner = new PrecedenceOwner();
         owner.PropertyStore.SetStyle(Prop, 10);
-        owner.PropertyStore.SetTrigger(Prop, 20);
+        owner.PropertyStore.SetElementTrigger(Prop, 20);
         owner.PropertyStore.SetLocal(Prop, 30);
         Assert.AreEqual(30, owner.Value);
     }
@@ -70,7 +70,7 @@ public sealed class PropertyPrecedenceTests
 
         // A style/trigger arriving after a local value must not lower the effective value.
         owner.PropertyStore.SetStyle(Prop, 10);
-        owner.PropertyStore.SetTrigger(Prop, 20);
+        owner.PropertyStore.SetElementTrigger(Prop, 20);
 
         Assert.AreEqual(30, owner.Value);
     }
@@ -82,10 +82,10 @@ public sealed class PropertyPrecedenceTests
         var a = new PrecedenceOwner();
         a.PropertyStore.SetLocal(Prop, 30);
         a.PropertyStore.SetStyle(Prop, 10);
-        a.PropertyStore.SetTrigger(Prop, 20);
+        a.PropertyStore.SetElementTrigger(Prop, 20);
 
         var b = new PrecedenceOwner();
-        b.PropertyStore.SetTrigger(Prop, 20);
+        b.PropertyStore.SetElementTrigger(Prop, 20);
         b.PropertyStore.SetStyle(Prop, 10);
         b.PropertyStore.SetLocal(Prop, 30);
 

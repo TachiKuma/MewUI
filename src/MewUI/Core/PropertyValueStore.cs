@@ -11,7 +11,7 @@ internal enum ValueSource : byte
     Inherited = 1,
     Style = 2,
     Binding = 3,
-    Trigger = 4,
+    ElementTrigger = 4,
     Local = 5,
 }
 
@@ -38,7 +38,7 @@ internal sealed class AnimatedEntry
 
 /// <summary>
 /// Per-instance storage for <see cref="MewProperty{T}"/> values.
-/// Every source (Local, Trigger, Binding, Style, Inherited) is preserved simultaneously, so clearing a
+/// Every source (Local, ElementTrigger, Binding, Style, Inherited) is preserved simultaneously, so clearing a
 /// higher-priority source reveals the preserved lower one without the caller re-deriving it.
 /// The common single-source case stays inline: <c>RawValue</c>/<c>Value</c>/<c>Source</c> hold the
 /// selected raw candidate, effective base, and source. A <see cref="SlotSet"/> is allocated only
@@ -51,7 +51,7 @@ internal sealed class PropertyValueStore
     private const int MAX_JUSTIFIED_DENSE_ID = 256;
 
     // Small ints and the two most common doubles (Opacity/scale endpoints) are cached to avoid
-    // a fresh box on every SetLocal/SetTarget/SetInherited call in the hot style/trigger path.
+    // a fresh box on every SetLocal/SetInherited call in the hot property path.
     private const int CACHED_INT_MIN = -1;
     private const int CACHED_INT_MAX = 8;
 
@@ -94,7 +94,7 @@ internal sealed class PropertyValueStore
 
     /// <summary>
     /// Gets the current effective value of a property.
-    /// Resolution: Animated over the highest set source (Local > Trigger > Style > Inherited > Default).
+    /// Resolution: Animated over the highest set source (Local > ElementTrigger > Binding > Style > Inherited > Default).
     /// </summary>
     public T GetValue<T>(MewProperty<T> property)
     {
@@ -173,11 +173,11 @@ internal sealed class PropertyValueStore
     }
 
     /// <summary>
-    /// Sets a trigger setter value. Overrides style values.
+    /// Sets an element-trigger value. Overrides binding and style values.
     /// </summary>
-    public void SetTrigger(MewProperty property, object value)
+    internal void SetElementTrigger(MewProperty property, object value)
     {
-        SetValue(property, value, ValueSource.Trigger);
+        SetValue(property, value, ValueSource.ElementTrigger);
     }
 
     /// <summary>
@@ -278,14 +278,6 @@ internal sealed class PropertyValueStore
     }
 
     /// <summary>
-    /// Backward-compatible SetTarget - maps to Trigger source.
-    /// </summary>
-    public void SetTarget(MewProperty property, object? value)
-    {
-        SetValue(property, value, ValueSource.Trigger);
-    }
-
-    /// <summary>
     /// Sets a pre-boxed value at the local tier. Used by the property-forward path so
     /// bindings sit above styles/triggers, consistent with the typed <see cref="SetLocal{T}"/>.
     /// </summary>
@@ -306,14 +298,6 @@ internal sealed class PropertyValueStore
             return;
 
         SetValueCore(property, value, ValueSource.Local, validateCandidate: false);
-    }
-
-    /// <summary>
-    /// Typed SetTarget convenience.
-    /// </summary>
-    public void SetTarget<T>(MewProperty<T> property, T value)
-    {
-        SetTarget(property, BoxCached(value));
     }
 
     /// <summary>
@@ -439,15 +423,6 @@ internal sealed class PropertyValueStore
         return GetEntry(propertyId).Source;
     }
 
-    /// <summary>
-    /// Returns true if any value (style, trigger, or local) has been set.
-    /// </summary>
-    internal bool HasTargetValue(int propertyId)
-    {
-        var entry = GetEntry(propertyId);
-        return entry.Value is AnimatedEntry || entry.Source != ValueSource.Default;
-    }
-
     internal bool HasValue(int propertyId, ValueSource source)
         => HasSlot(GetEntry(propertyId), source);
 
@@ -510,7 +485,7 @@ internal sealed class PropertyValueStore
             entry.Source,
             isAnimated,
             CreateCandidateTrace(entry, ValueSource.Local),
-            CreateCandidateTrace(entry, ValueSource.Trigger),
+            CreateCandidateTrace(entry, ValueSource.ElementTrigger),
             CreateCandidateTrace(entry, ValueSource.Binding),
             CreateCandidateTrace(entry, ValueSource.Style),
             CreateCandidateTrace(entry, ValueSource.Inherited),
@@ -533,31 +508,6 @@ internal sealed class PropertyValueStore
             isSet,
             isSet && entry.Source == source,
             rawValue);
-    }
-
-    /// <summary>
-    /// Sets the underlying base value without stopping animations or notifying.
-    /// Used by <see cref="Animation.PropertyAnimator"/> when starting a new animation.
-    /// </summary>
-    internal void SetTargetDirect(MewProperty property, object value, ValueSource? source = null)
-    {
-        ValidateCandidate(property, value);
-        ref var entry = ref EnsureEntry(property.Id);
-        if (entry.Value is AnimatedEntry animated)
-        {
-            // Update the raw base slot while the animation overlay is temporarily lifted, then
-            // restore the overlay over the recomputed effective base.
-            var targetSource = source ?? animated.BaseSource;
-            UnwrapAnimation(ref entry);
-            SetSlotValue(ref entry, targetSource, value);
-            ApplyCoercion(ref entry, property);
-            RewrapAnimation(ref entry, animated);
-        }
-        else
-        {
-            SetSlotValue(ref entry, source ?? entry.Source, value);
-            ApplyCoercion(ref entry, property);
-        }
     }
 
     /// <summary>
@@ -1055,7 +1005,7 @@ internal sealed class PropertyValueStore
         private object? _inherited;
         private object? _style;
         private object? _binding;
-        private object? _trigger;
+        private object? _elementTrigger;
         private object? _local;
         private int _setMask;
 
@@ -1068,7 +1018,7 @@ internal sealed class PropertyValueStore
             ValueSource.Inherited => _inherited,
             ValueSource.Style => _style,
             ValueSource.Binding => _binding,
-            ValueSource.Trigger => _trigger,
+            ValueSource.ElementTrigger => _elementTrigger,
             ValueSource.Local => _local,
             _ => null,
         };
@@ -1080,7 +1030,7 @@ internal sealed class PropertyValueStore
                 case ValueSource.Inherited: _inherited = value; break;
                 case ValueSource.Style: _style = value; break;
                 case ValueSource.Binding: _binding = value; break;
-                case ValueSource.Trigger: _trigger = value; break;
+                case ValueSource.ElementTrigger: _elementTrigger = value; break;
                 case ValueSource.Local: _local = value; break;
                 default: return;
             }
@@ -1094,7 +1044,7 @@ internal sealed class PropertyValueStore
                 case ValueSource.Inherited: _inherited = null; break;
                 case ValueSource.Style: _style = null; break;
                 case ValueSource.Binding: _binding = null; break;
-                case ValueSource.Trigger: _trigger = null; break;
+                case ValueSource.ElementTrigger: _elementTrigger = null; break;
                 case ValueSource.Local: _local = null; break;
                 default: return;
             }

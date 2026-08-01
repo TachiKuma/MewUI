@@ -41,7 +41,7 @@ public sealed class StyleResolverTests
         control.ReconcileStyle(snap: true);
 
         Assert.AreEqual(30.0, control.Value, "a style reconciliation must not overwrite the element trigger");
-        Assert.AreEqual(ValueSource.Trigger, control.PropertyStore.GetSource(ValueProperty.Id));
+        Assert.AreEqual(ValueSource.ElementTrigger, control.PropertyStore.GetSource(ValueProperty.Id));
 
         parent.IsEnabled = true;
 

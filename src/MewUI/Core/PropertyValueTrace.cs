@@ -13,7 +13,7 @@ internal readonly record struct PropertyValueTrace(
     ValueSource EffectiveSource,
     bool IsAnimated,
     PropertyValueCandidateTrace Local,
-    PropertyValueCandidateTrace Trigger,
+    PropertyValueCandidateTrace ElementTrigger,
     PropertyValueCandidateTrace Binding,
     PropertyValueCandidateTrace Style,
     PropertyValueCandidateTrace Inherited,
@@ -21,13 +21,13 @@ internal readonly record struct PropertyValueTrace(
     BindingStateSnapshot? BindingState)
 {
     public bool HasNonDefaultCandidate
-        => Local.IsSet || Trigger.IsSet || Binding.IsSet || Style.IsSet || Inherited.IsSet;
+        => Local.IsSet || ElementTrigger.IsSet || Binding.IsSet || Style.IsSet || Inherited.IsSet;
 
     public PropertyValueCandidateTrace GetCandidate(ValueSource source)
         => source switch
         {
             ValueSource.Local => Local,
-            ValueSource.Trigger => Trigger,
+            ValueSource.ElementTrigger => ElementTrigger,
             ValueSource.Binding => Binding,
             ValueSource.Style => Style,
             ValueSource.Inherited => Inherited,

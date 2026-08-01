@@ -15,8 +15,7 @@ public sealed class ElementTrigger
     public required object? Value { get; init; }
 
     /// <summary>
-    /// Gets the setters applied while the trigger matches. <see cref="UnsetSetter"/> and
-    /// <see cref="TargetSetter"/> are not valid here.
+    /// Gets the setters applied while the trigger matches. <see cref="UnsetSetter"/> is not valid here.
     /// </summary>
     public required IReadOnlyList<SetterBase> Setters { get; init; }
 

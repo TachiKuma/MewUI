@@ -934,17 +934,6 @@ public abstract partial class UIElement : Element
         => _animator ??= new Animation.PropertyAnimator(this, PropertyStore);
 
     /// <summary>
-    /// Sets the animation target for a visual property. No-op when target is unchanged.
-    /// </summary>
-    protected void SetTarget<T>(MewProperty<T> property, T value) => PropertyStore.SetTarget(property, value);
-
-    /// <summary>
-    /// Sets a property target value. Used by TargetSetter resolution.
-    /// </summary>
-    internal void SetTargetInternal(MewProperty property, object value)
-        => PropertyStore.SetTarget(property, value);
-
-    /// <summary>
     /// Stops all running property animations (e.g. when detached from the visual tree).
     /// </summary>
     internal void StopAllPropertyAnimations()
