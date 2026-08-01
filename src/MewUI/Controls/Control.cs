@@ -464,35 +464,40 @@ public abstract class Control : TextElement
     /// <param name="animate">When true, a runtime style swap applies with the new style's transitions.</param>
     internal void ResolveAndApplyStyle(bool animate = false)
     {
-        Style? resolved = null;
+        StyleSheet? applicationStyleSheet = Application.IsRunning
+            ? Application.Current.StyleSheet
+            : null;
+        Style? resolved;
 
         // 1. StyleName → walk StyleSheet chain
         if (_styleName != null)
         {
-            resolved = FindNamedStyle(_styleName);
-            if (resolved == null && !Application.IsRunning)
+            resolved = StyleScopeResolver.Resolve(this, _styleName, applicationStyleSheet);
+            if (resolved == null)
             {
-                // StyleSheet not available yet (Application not running) - retry later
-                _styleNameResolved = false;
-                return;
+                bool isAttached = FindVisualRoot() is Window;
+                if (!isAttached || applicationStyleSheet == null)
+                {
+                    // A detached control or a headless tree without an Application does not yet
+                    // have the complete scope chain. Retry on attach or the next layout pass.
+                    _styleNameResolved = false;
+                    return;
+                }
+
+                string scopes = StyleScopeResolver.DescribeScopes(this, includesApplication: true);
+                throw new InvalidOperationException(
+                    $"StyleName '{_styleName}' was not found for control type '{GetType().FullName}'. " +
+                    $"Searched scopes: {scopes}.");
             }
+        }
+
+        // 2. StyleSheet type rule → nearest container type-matched rule
+        else
+        {
+            resolved = StyleScopeResolver.Resolve(this, styleName: null, applicationStyleSheet);
         }
 
         _styleNameResolved = true;
-
-        // 2. StyleSheet type rule → nearest container type-matched rule
-        if (resolved == null)
-        {
-            var controlType = GetType();
-            for (Element? current = ContextParent; current != null; current = current.ContextParent)
-            {
-                if (current is FrameworkElement fe)
-                {
-                    resolved = fe.StyleSheet?.GetByType(controlType);
-                    if (resolved != null) break;
-                }
-            }
-        }
 
         // 3. Theme default style (walk type hierarchy)
         if (resolved == null)
@@ -506,23 +511,17 @@ public abstract class Control : TextElement
             }
         }
 
+        if (resolved != null && !resolved.TargetType.IsAssignableFrom(GetType()))
+        {
+            throw new InvalidOperationException(
+                $"Style targeting '{resolved.TargetType.FullName}' cannot be applied to " +
+                $"control type '{GetType().FullName}'.");
+        }
+
         // Transitions only make sense for a runtime swap on an attached, already-styled
         // control; initial attach, theme change, and detached resolution snap.
         bool snap = !animate || _style == null || FindVisualRoot() is not Window;
         SetStyle(resolved, snap);
-    }
-
-    private Style? FindNamedStyle(string name)
-    {
-        for (Element? current = this; current != null; current = current.ContextParent)
-        {
-            if (current is FrameworkElement fe && fe.StyleSheet != null)
-            {
-                var style = fe.StyleSheet.Get(name);
-                if (style != null) return style;
-            }
-        }
-        return Application.IsRunning ? Application.Current.StyleSheet?.Get(name) : null;
     }
 
     protected override sealed void ResolveVisualState(bool snap)

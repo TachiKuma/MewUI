@@ -18,6 +18,7 @@ public sealed class StyleSheet
     /// <param name="factory">The style factory to invoke lazily.</param>
     public void Define(string name, Func<Style> factory)
     {
+        ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(factory);
 
         _namedStyles.Remove(name);
@@ -28,8 +29,17 @@ public sealed class StyleSheet
     /// Defines a type-based style rule. All descendant controls of type <typeparamref name="T"/>
     /// (without an explicit <c>StyleName</c>) will receive this style.
     /// </summary>
-    public void Define<T>(Style style)
+    public void Define<T>(Style style) where T : Controls.Control
     {
+        ArgumentNullException.ThrowIfNull(style);
+        if (!style.TargetType.IsAssignableFrom(typeof(T)))
+        {
+            throw new ArgumentException(
+                $"Style targeting '{style.TargetType.FullName}' cannot be registered for " +
+                $"control type '{typeof(T).FullName}'.",
+                nameof(style));
+        }
+
         _typeRules ??= new();
         _typeRules.Add((typeof(T), style));
     }
@@ -61,20 +71,27 @@ public sealed class StyleSheet
     /// </summary>
     public Style? GetByType(Type controlType)
     {
-        if (_typeRules == null) return null;
-
-        // Exact match first
-        for (int i = _typeRules.Count - 1; i >= 0; i--)
+        ArgumentNullException.ThrowIfNull(controlType);
+        if (!typeof(Controls.Control).IsAssignableFrom(controlType))
         {
-            if (_typeRules[i].Type == controlType)
-                return _typeRules[i].Style;
+            throw new ArgumentException(
+                $"Type '{controlType.FullName}' must derive from Control.",
+                nameof(controlType));
         }
 
-        // Base type match
-        for (int i = _typeRules.Count - 1; i >= 0; i--)
+        if (_typeRules == null) return null;
+
+        for (Type? candidate = controlType;
+             candidate != null && typeof(Controls.Control).IsAssignableFrom(candidate);
+             candidate = candidate.BaseType)
         {
-            if (_typeRules[i].Type.IsAssignableFrom(controlType))
-                return _typeRules[i].Style;
+            for (int i = _typeRules.Count - 1; i >= 0; i--)
+            {
+                if (_typeRules[i].Type == candidate)
+                {
+                    return _typeRules[i].Style;
+                }
+            }
         }
 
         return null;
