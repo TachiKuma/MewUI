@@ -59,6 +59,11 @@ partial class GalleryView
             ),
 
             Card(
+                "Scoped StyleSheet type rule",
+                TypeRuleDemo()
+            ),
+
+            Card(
                 "MenuBar dropdown font",
                 new StackPanel()
                     .Vertical()
@@ -125,14 +130,9 @@ partial class GalleryView
         sheet.Define("fg-pinned", () => pinnedStyle);
         sheet.Define("fg-unset", () => unsetStyle);
 
-        Border scope = null!;
-        var status = new TextBlock()
-            .Text("StyleSheet: applied")
-            .FontSize(11);
-
         // The Border (a Control) provides the ambient Foreground that descendants inherit,
         // and hosts the StyleSheet the named styles resolve against.
-        scope = new Border()
+        return new Border()
             .Foreground(ambient)
             .Apply(b => b.StyleSheet = sheet)
             .Child(
@@ -151,30 +151,70 @@ partial class GalleryView
                         new Button()
                             .Content("BasedOn + Unset (follows ambient)")
                             .StyleName("fg-unset")
-                            .HorizontalAlignment(HorizontalAlignment.Left),
-                        new StackPanel()
-                            .Horizontal()
-                            .Spacing(8)
-                            .Children(
-                                new Button()
-                                    .Content("Remove StyleSheet")
-                                    .OnClick(() =>
-                                    {
-                                        scope.StyleSheet = null;
-                                        status.Text = "StyleSheet: removed (named styles fall back to defaults)";
-                                    }),
-                                new Button()
-                                    .Content("Apply StyleSheet")
-                                    .OnClick(() =>
-                                    {
-                                        scope.StyleSheet = sheet;
-                                        status.Text = "StyleSheet: applied";
-                                    })
-                            ),
-                        status
+                            .HorizontalAlignment(HorizontalAlignment.Left)
                     )
             );
+    }
 
-        return scope;
+    private FrameworkElement TypeRuleDemo()
+    {
+        var sheet = new StyleSheet();
+        sheet.Define<Button>(new Style(typeof(Button))
+        {
+            BasedOn = Style.ForType<Button>(),
+            Setters =
+            [
+                Setter.Create(Control.CornerRadiusProperty, 0.0),
+                Setter.Create(Control.PaddingProperty, new Thickness(18, 8, 18, 8)),
+                Setter.Create(TextElement.FontWeightProperty, FontWeight.Bold),
+            ],
+        });
+
+        Border scope = null!;
+        var status = new TextBlock()
+            .Text("StyleSheet: applied")
+            .FontSize(11);
+
+        scope = new Border()
+            .Apply(b => b.StyleSheet = sheet)
+            .Child(
+                new Button()
+                    .Content("Inside scope: Define<Button>")
+                    .HorizontalAlignment(HorizontalAlignment.Left)
+            );
+
+        return new StackPanel()
+            .Vertical()
+            .Spacing(8)
+            .Children(
+                new TextBlock()
+                    .Text("The first button is outside the local sheet. The second is inside a Border that owns a Button type rule, so it receives the square, padded, bold style without a StyleName. Removing the sheet safely returns it to the default Button style.")
+                    .TextWrapping(TextWrapping.Wrap)
+                    .FontSize(11),
+                new Button()
+                    .Content("Outside scope: default Button")
+                    .HorizontalAlignment(HorizontalAlignment.Left),
+                scope,
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(8)
+                    .Children(
+                        new Button()
+                            .Content("Remove StyleSheet")
+                            .OnClick(() =>
+                            {
+                                scope.StyleSheet = null;
+                                status.Text = "StyleSheet: removed (inside button uses the default style)";
+                            }),
+                        new Button()
+                            .Content("Apply StyleSheet")
+                            .OnClick(() =>
+                            {
+                                scope.StyleSheet = sheet;
+                                status.Text = "StyleSheet: applied";
+                            })
+                    ),
+                status
+            );
     }
 }
