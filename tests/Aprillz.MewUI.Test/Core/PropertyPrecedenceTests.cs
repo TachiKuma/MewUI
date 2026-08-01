@@ -4,12 +4,9 @@ using Aprillz.MewUI.Controls;
 namespace MewUI.Test.Core;
 
 /// <summary>
-/// Characterizes the observable property-source precedence (Local &gt; Trigger &gt; Style &gt; Default)
-/// that the value store must preserve. These are invariants: they lock the resolution order that any
-/// future multi-slot store rewrite has to keep. The separate clear-reveals-lower behavior (which the
-/// single-slot store does not do today - a cleared source drops to Default and the control layer
-/// re-applies) is intentionally NOT locked here, because that store-level semantic is what a
-/// multi-slot migration changes.
+/// Characterizes the observable property-source precedence
+/// (Local &gt; ElementTrigger &gt; Style &gt; Default) that the multi-slot value store preserves.
+/// Clear-and-reveal behavior is covered separately by <see cref="PropertyMultiSlotTests"/>.
 /// </summary>
 [TestClass]
 public sealed class PropertyPrecedenceTests
