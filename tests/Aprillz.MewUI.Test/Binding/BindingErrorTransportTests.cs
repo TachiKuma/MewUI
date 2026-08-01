@@ -214,6 +214,131 @@ public sealed class BindingErrorTransportTests
         Assert.IsNull(errors[1]);
     }
 
+    [TestMethod]
+    public void ControlValidationState_AggregatesErrorsAndProjectsInvalidFlag()
+    {
+        var first = new ObservableValue<int>(1);
+        var second = new ObservableValue<int>(1);
+        var target = new ValidationControl();
+        target.SetBinding(
+            ValidationControl.FirstProperty,
+            first,
+            static value => value == 2
+                ? throw new InvalidOperationException("first conversion failed")
+                : value.ToString(),
+            mode: BindingMode.OneWay);
+        target.SetBinding(
+            ValidationControl.SecondProperty,
+            second,
+            static value => value == 2
+                ? throw new InvalidOperationException("second conversion failed")
+                : value.ToString(),
+            mode: BindingMode.OneWay);
+
+        first.Value = 2;
+        second.Value = 2;
+
+        Assert.IsTrue(target.HasValidationError);
+        Assert.HasCount(2, target.ValidationErrors);
+        Assert.AreSame(ValidationControl.FirstProperty, target.ValidationErrors[0].Property);
+        Assert.AreEqual("first conversion failed", target.ValidationErrors[0].Message);
+        Assert.AreSame(ValidationControl.SecondProperty, target.ValidationErrors[1].Property);
+        Assert.IsTrue(target.CurrentFlags.HasFlag(VisualStateFlags.Invalid));
+        Assert.IsTrue(target.CurrentFlags.HasFlag(VisualStateFlags.Enabled));
+        Assert.ThrowsExactly<NotSupportedException>(
+            () => ((IList<ValidationError>)target.ValidationErrors).Add(
+                new ValidationError(ValidationControl.FirstProperty, "replacement")));
+
+        first.Value = 3;
+
+        Assert.IsTrue(target.HasValidationError);
+        Assert.HasCount(1, target.ValidationErrors);
+        Assert.AreSame(ValidationControl.SecondProperty, target.ValidationErrors[0].Property);
+
+        target.IsEnabled = false;
+        Assert.IsTrue(target.CurrentFlags.HasFlag(VisualStateFlags.Invalid));
+        Assert.IsFalse(target.CurrentFlags.HasFlag(VisualStateFlags.Enabled));
+
+        target.ClearBinding(ValidationControl.SecondProperty);
+
+        Assert.IsFalse(target.HasValidationError);
+        Assert.IsEmpty(target.ValidationErrors);
+        Assert.IsFalse(target.CurrentFlags.HasFlag(VisualStateFlags.Invalid));
+    }
+
+    [TestMethod]
+    public void TextBoxDefaultStyle_ShowsAndClearsValidationBorder()
+    {
+        var source = new ObservableValue<int>(1);
+        var target = new TextBox();
+        target.ResolveAndApplyStyle();
+        target.SetBinding(
+            TextBox.TextProperty,
+            source,
+            static value => value == 2
+                ? throw new InvalidOperationException("conversion failed")
+                : value.ToString(),
+            mode: BindingMode.OneWay);
+
+        source.Value = 2;
+        target.ResolveVisualStateInternal(snap: true);
+
+        Assert.IsTrue(target.HasValidationError);
+        Assert.AreEqual(target.ThemeInternal.Palette.Error, target.BorderBrush);
+
+        source.Value = 3;
+        target.ResolveVisualStateInternal(snap: true);
+
+        Assert.IsFalse(target.HasValidationError);
+        Assert.AreEqual(target.ThemeInternal.Palette.ControlBorder, target.BorderBrush);
+    }
+
+    [TestMethod]
+    public void TextBoxValidationStyle_PreservesLocalBorderBrush()
+    {
+        var source = new ObservableValue<int>(1);
+        var target = new TextBox();
+        var localBorder = Color.FromRgb(12, 34, 56);
+        target.ResolveAndApplyStyle();
+        target.BorderBrush = localBorder;
+        target.SetBinding(
+            TextBox.TextProperty,
+            source,
+            static value => value == 2
+                ? throw new InvalidOperationException("conversion failed")
+                : value.ToString(),
+            mode: BindingMode.OneWay);
+
+        source.Value = 2;
+        target.ResolveVisualStateInternal(snap: true);
+
+        Assert.IsTrue(target.HasValidationError);
+        Assert.AreEqual(localBorder, target.BorderBrush);
+        Assert.AreEqual(ValueSource.Local, target.PropertyStore.GetSource(Control.BorderBrushProperty.Id));
+    }
+
+    [TestMethod]
+    public void ValidationStateProperties_CannotBeWrittenByStyleOrElementTrigger()
+    {
+        var style = new Style(typeof(ValidationControl))
+        {
+            Setters = [Setter.Create(Control.HasValidationErrorProperty, true)],
+        };
+        var styleException = Assert.ThrowsExactly<InvalidOperationException>(style.Freeze);
+        StringAssert.Contains(styleException.Message, "read-only property");
+
+        var target = new ValidationControl();
+        var triggerException = Assert.ThrowsExactly<ArgumentException>(() =>
+            target.Triggers =
+            [
+                ElementTrigger.When(
+                    UIElement.IsEffectivelyEnabledProperty,
+                    false,
+                    Setter.Create(Control.HasValidationErrorProperty, true)),
+            ]);
+        StringAssert.Contains(triggerException.Message, "read-only property");
+    }
+
     private sealed class IntTarget : MewObject
     {
         public static readonly MewProperty<int> ValueProperty =
@@ -283,5 +408,20 @@ public sealed class BindingErrorTransportTests
             get => GetValue(ValueProperty);
             set => SetValue(ValueProperty, value);
         }
+    }
+
+    private sealed class ValidationControl : Control
+    {
+        public static readonly MewProperty<string> FirstProperty =
+            MewProperty<string>.Register<ValidationControl>(nameof(First), string.Empty);
+
+        public static readonly MewProperty<string> SecondProperty =
+            MewProperty<string>.Register<ValidationControl>(nameof(Second), string.Empty);
+
+        public string First => GetValue(FirstProperty);
+
+        public string Second => GetValue(SecondProperty);
+
+        public VisualStateFlags CurrentFlags => ComputeVisualState().Flags;
     }
 }

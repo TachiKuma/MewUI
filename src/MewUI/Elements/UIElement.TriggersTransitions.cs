@@ -92,6 +92,12 @@ public abstract partial class UIElement
                         $"Element triggers cannot contain {setter.GetType().Name}: there is no style candidate to unset.");
                 }
 
+                if (setter.Property.IsReadOnly)
+                {
+                    throw new ArgumentException(
+                        $"Element trigger setters cannot target read-only property '{setter.Property.Name}'.");
+                }
+
                 if (setter.ThemeResolver == null && !IsAssignableToProperty(setter.Property, setter.Value))
                 {
                     throw new ArgumentException(

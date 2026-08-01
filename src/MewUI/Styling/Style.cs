@@ -206,7 +206,8 @@ public sealed class Style
                 VisualStateFlags.Indeterminate |
                 VisualStateFlags.Active |
                 VisualStateFlags.Selected |
-                VisualStateFlags.ReadOnly;
+                VisualStateFlags.ReadOnly |
+                VisualStateFlags.Invalid;
 
             for (int i = 0; i < triggers.Length; i++)
             {
@@ -260,6 +261,13 @@ public sealed class Style
                 $"{location}[{i}] cannot be null.");
 
             ValidatePropertyOwner(setter.Property, $"{location}[{i}]");
+
+            if (setter.Property.IsReadOnly)
+            {
+                throw new InvalidOperationException(
+                    $"{location}[{i}] cannot set read-only property " +
+                    $"'{setter.Property.OwnerType.FullName}.{setter.Property.Name}'.");
+            }
 
             if (setter is Setter && setter.ThemeResolver == null &&
                 !IsCompatibleValue(setter.Property.ValueType, setter.Value))
