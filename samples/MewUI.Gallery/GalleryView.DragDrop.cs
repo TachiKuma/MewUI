@@ -295,6 +295,7 @@ partial class GalleryView
         new Window()
             .Ref(out second)
             .Resizable(340, 280)
+            .Topmost()
             .StartCenterOwner()
             .Build(x =>
             {
