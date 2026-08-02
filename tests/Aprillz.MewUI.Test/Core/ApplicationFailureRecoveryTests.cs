@@ -2,6 +2,7 @@ using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Platform;
+using MewUI.Test.Infrastructure;
 
 namespace MewUI.Test.Core;
 
@@ -9,8 +10,7 @@ namespace MewUI.Test.Core;
 [DoNotParallelize]
 public sealed class ApplicationFailureRecoveryTests
 {
-    private static readonly Queue<FailurePlatformHost> Hosts = new();
-    private static bool _registered;
+    private static Queue<IPlatformHost> Hosts => TestPlatformHosts.Queue;
 
     [TestMethod]
     public void StartupAndRunFailures_DoNotPreventAnotherRun()
@@ -181,17 +181,7 @@ public sealed class ApplicationFailureRecoveryTests
         }
     }
 
-    private static void EnsureRegistered()
-    {
-        if (_registered)
-        {
-            return;
-        }
-
-        Application.RegisterPlatformHost(static () => Hosts.Dequeue(), Aprillz.MewUI.Platform.PlatformSurfaceKind.Win32, "Test",
-            "Arial");
-        _registered = true;
-    }
+    private static void EnsureRegistered() => TestPlatformHosts.EnsureRegistered();
 
     private sealed class FailurePlatformHost(
         bool throwFromFontDefaults = false,
