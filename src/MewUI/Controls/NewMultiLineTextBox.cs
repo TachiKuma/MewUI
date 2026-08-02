@@ -566,7 +566,7 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
             try
             {
                 currentText = _document.ToString();
-                CommitTargetValue(TextProperty, currentText);
+                SetValue(TextProperty, currentText);
             }
             finally
             {
