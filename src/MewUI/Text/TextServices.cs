@@ -153,17 +153,9 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                     {
                         Console.Error.WriteLine($"[Text]   run [{textStart},{textLength}] style={cluster.Style.FontFamily}/{cluster.Style.FontSize}pt w={cluster.Style.Weight} i={cluster.Style.Italic} font={cluster.Font.Family}/{cluster.Font.Size} '{Truncate(managed.Snapshot.Text.Substring(textStart, textLength))}'");
                     }
-                    DrawLegacyRun(managed, textStart, textLength, format, legacyLayout, options.Foreground, options.Owner);
-                    DrawForegroundSpans(
-                        managed,
-                        origin,
-                        bounds,
-                        textStart,
-                        textLength,
-                        format,
-                        legacyLayout,
-                        options.PaintSpans.Span,
-                        options.Owner);
+                    DrawRunColorSegments(
+                        managed, clusters, index, runEnd, origin, bounds,
+                        textStart, textLength, format, legacyLayout, in options);
                 }
                 index = runEnd;
             }
@@ -371,49 +363,86 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
         }
     }
 
-    private void DrawForegroundSpans(
+    /// <summary>
+    /// Draws one style run partitioned into effective-foreground segments so every pixel is
+    /// painted exactly once. The geometry realization stays whole-run (paint spans never split
+    /// or recreate it); only the draw is clipped per color segment, avoiding the old overdraw
+    /// pass that blended the base color into antialiased glyph edges.
+    /// </summary>
+    private void DrawRunColorSegments(
         ManagedTextLayout managed,
+        List<ManagedTextCluster> clusters,
+        int firstCluster,
+        int endCluster,
         Point origin,
         Rect runBounds,
         int textStart,
         int textLength,
         TextFormat format,
         Rendering.TextLayout legacyLayout,
-        ReadOnlySpan<TextPaintSpan> spans,
-        object? owner)
+        in TextDrawOptions options)
     {
-        foreach (var span in spans)
-        {
-            if (span.Foreground is not Color color ||
-                span.Range.End <= textStart ||
-                span.Range.Start >= textStart + textLength)
-            {
-                continue;
-            }
+        var spans = options.PaintSpans.Span;
+        int segmentStart = firstCluster;
+        var segmentColor = GetSpanForeground(spans, clusters[firstCluster].Start) ?? options.Foreground;
 
-            var rangeBounds = new List<Rect>();
-            managed.GetRangeBounds(span.Range.Start, span.Range.Length, rangeBounds);
-            foreach (var range in rangeBounds)
+        for (int clusterIndex = firstCluster + 1; clusterIndex <= endCluster; clusterIndex++)
+        {
+            Color nextColor = default;
+            if (clusterIndex < endCluster)
             {
-                var translated = new Rect(origin.X + range.X, origin.Y + range.Y, range.Width, range.Height);
-                var clip = runBounds.Intersect(translated);
-                if (clip.IsEmpty)
+                nextColor = GetSpanForeground(spans, clusters[clusterIndex].Start) ?? options.Foreground;
+                if (nextColor == segmentColor)
                 {
                     continue;
                 }
+            }
 
-                _context.Save();
-                try
+            var startCluster = clusters[segmentStart];
+            var lastCluster = clusters[clusterIndex - 1];
+            double left = origin.X + startCluster.X;
+            double right = origin.X + lastCluster.X + lastCluster.Width;
+            if (segmentStart == firstCluster && clusterIndex == endCluster)
+            {
+                DrawLegacyRun(managed, textStart, textLength, format, legacyLayout, segmentColor, options.Owner);
+            }
+            else
+            {
+                var clip = new Rect(left, runBounds.Y, Math.Max(0, right - left), runBounds.Height).Intersect(runBounds);
+                if (!clip.IsEmpty)
                 {
-                    _context.IntersectClip(clip);
-                    DrawLegacyRun(managed, textStart, textLength, format, legacyLayout, color, owner);
-                }
-                finally
-                {
-                    _context.Restore();
+                    _context.Save();
+                    try
+                    {
+                        _context.IntersectClip(clip);
+                        DrawLegacyRun(managed, textStart, textLength, format, legacyLayout, segmentColor, options.Owner);
+                    }
+                    finally
+                    {
+                        _context.Restore();
+                    }
                 }
             }
+            segmentStart = clusterIndex;
+            segmentColor = nextColor;
         }
+    }
+
+    /// <summary>
+    /// Resolves the effective foreground for a character index: the last covering paint span
+    /// wins, matching painter-order span semantics.
+    /// </summary>
+    private static Color? GetSpanForeground(ReadOnlySpan<TextPaintSpan> spans, int index)
+    {
+        Color? result = null;
+        foreach (var span in spans)
+        {
+            if (span.Foreground is Color color && index >= span.Range.Start && index < span.Range.End)
+            {
+                result = color;
+            }
+        }
+        return result;
     }
 
     private void DrawLegacyRun(

@@ -140,7 +140,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
                     Theme.Palette.SelectionText,
                     Theme.Palette.SelectionBackground,
                     out var span)
-                    ? [span]
+                    ? [span with { Foreground = null }]
                     : [];
                 double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
                 var origin = new Point(

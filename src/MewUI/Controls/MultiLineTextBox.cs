@@ -232,7 +232,9 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
                 Theme.Palette.SelectionBackground,
                 out var selectionSpan))
         {
-            spans.Add(selectionSpan);
+            // Selection paints only the background; keeping the glyph colors avoids the
+            // foreground-segment repaint whose boundaries shift on every drag frame.
+            spans.Add(selectionSpan with { Foreground = null });
         }
 
         if (_editor.IsComposing)
