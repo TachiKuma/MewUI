@@ -31,12 +31,14 @@ public sealed class FluentExtensionCoverageTests
     public void ControlPropertyExtensions_SetValues()
     {
         var ring = new ProgressRing().IsActive(false);
+        var bar = new ProgressBar().IsIndeterminate(false);
         var password = new PasswordBox().PasswordChar('*');
         var slider = new Slider()
             .ThumbBrush(Color.Red)
             .ThumbBorderBrush(Color.Black);
 
         Assert.IsFalse(ring.IsActive);
+        Assert.IsFalse(bar.IsIndeterminate);
         Assert.AreEqual('*', password.PasswordChar);
         Assert.AreEqual(Color.Red, slider.ThumbBrush);
         Assert.AreEqual(Color.Black, slider.ThumbBorderBrush);
@@ -136,6 +138,7 @@ public sealed class FluentExtensionCoverageTests
         _ = new ListBox().BindSelectedIndex(source, value => value, value => value);
         _ = new ComboBox().BindSelectedIndex(source, value => value, value => value);
         _ = new ProgressBar().BindValue(source, value => value);
+        _ = new ProgressBar().BindIsIndeterminate(source, value => value < 0);
         _ = new Slider().BindValue(source, value => value, value => (int)value);
         _ = new NumericUpDown().BindValue(source, value => value, value => (int)value);
         _ = new Calendar().BindSelectedDate(source, value => new DateTime(2000, 1, value), value => value?.Day ?? 1);
