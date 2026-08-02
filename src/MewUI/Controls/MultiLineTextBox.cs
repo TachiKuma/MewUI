@@ -68,6 +68,8 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
 
     public string SelectedText => GetSelectedDocumentText();
 
+    private protected override string? GetClipboardCopyText() => SelectedText;
+
     public bool Wrap
     {
         get => GetValue(WrapProperty);

@@ -25,4 +25,6 @@ public sealed class TextBox : SingleLineTextBase
     /// Gets the currently selected text.
     /// </summary>
     public string SelectedText => GetSelectedDocumentText();
+
+    private protected override string? GetClipboardCopyText() => SelectedText;
 }

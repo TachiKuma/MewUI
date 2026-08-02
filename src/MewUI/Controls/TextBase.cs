@@ -258,10 +258,22 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         }
     }
 
-    /// <summary>Writes the selection to the clipboard. Masking controls override to withhold it.</summary>
-    private protected virtual void CopyToClipboardCore() => TrySetClipboardText(GetSelectedDocumentText());
+    /// <summary>
+    /// The text a clipboard copy exposes. Null by default: only controls that surface their
+    /// document text (TextBox, MultiLineTextBox) opt in, so masking controls are safe without overrides.
+    /// </summary>
+    private protected virtual string? GetClipboardCopyText() => null;
 
-    /// <summary>Cuts the selection. Masking controls override to withhold the clipboard write.</summary>
+    /// <summary>Writes the selection to the clipboard when the control exposes copyable text.</summary>
+    private protected virtual void CopyToClipboardCore()
+    {
+        if (GetClipboardCopyText() is string text)
+        {
+            TrySetClipboardText(text);
+        }
+    }
+
+    /// <summary>Cuts the selection; the clipboard write follows the copy opt-in.</summary>
     private protected virtual void CutToClipboardCore()
     {
         CopyToClipboardCore();
