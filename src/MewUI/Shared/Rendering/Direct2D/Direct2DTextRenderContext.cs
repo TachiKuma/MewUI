@@ -1,10 +1,8 @@
-using System.Runtime.CompilerServices;
-using Aprillz.MewUI.Native.DirectWrite;
 using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering.Direct2D;
 
-/// <summary>Positioned-glyph realization of managed text layouts for Direct2D.</summary>
+/// <summary>Native text-layout realization of managed text layouts for Direct2D.</summary>
 internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposable
 {
     private const int RealizationCapacity = 128;
@@ -21,8 +19,8 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
     }
 
     internal int CachedRunCount => _cache.Count;
-    internal IEnumerable<DWriteGlyphRunExtractor.GlyphRun> CachedGlyphRuns
-        => _cache.Values.SelectMany(static run => run.GlyphRuns);
+    internal IEnumerable<TextLayout> CachedLayouts
+        => _cache.Values.Select(static run => run.Layout);
 
     public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options)
     {
@@ -104,30 +102,24 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
             layout.Snapshot.Text.AsSpan(first.Start, textLength),
             format,
             in constraints) ?? throw new InvalidOperationException("DirectWrite failed to realize a managed text run.");
-        IReadOnlyList<DWriteGlyphRunExtractor.GlyphRun> glyphRuns;
-        try
-        {
-            glyphRuns = DWriteGlyphRunExtractor.Capture(nativeLayout.BackendHandle, retainFontFaces: true);
-        }
-        finally
-        {
-            nativeLayout.ReleaseBackendHandle();
-        }
-
-        var created = new RealizedRun(glyphRuns);
+        var created = new RealizedRun(
+            layout.Snapshot.Text.Substring(first.Start, textLength),
+            format,
+            nativeLayout,
+            Math.Max(1, width),
+            Math.Max(1, height));
         _cache.Add(key, created);
         return created;
     }
 
     private void DrawRealized(RealizedRun realization, Point origin, Color color)
     {
-        foreach (var run in realization.GlyphRuns)
-        {
-            _context.DrawPositionedGlyphRun(
-                run,
-                new Point(origin.X + run.BaselineOriginX, origin.Y + run.BaselineOriginY),
-                color);
-        }
+        realization.Layout.EffectiveBounds = new Rect(
+            origin.X,
+            origin.Y,
+            realization.Width,
+            realization.Height);
+        _context.DrawTextLayout(realization.Text, realization.Format, realization.Layout, color);
     }
 
     private void DrawForegroundSpans(
@@ -222,12 +214,19 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
         double Width,
         double Height);
 
-    private sealed class RealizedRun(IReadOnlyList<DWriteGlyphRunExtractor.GlyphRun> glyphRuns) : IDisposable
+    private sealed class RealizedRun(
+        string text,
+        TextFormat format,
+        TextLayout layout,
+        double width,
+        double height) : IDisposable
     {
-        public IReadOnlyList<DWriteGlyphRunExtractor.GlyphRun> GlyphRuns { get; } = glyphRuns;
-        public void Dispose()
-        {
-            foreach (var run in GlyphRuns) run.Dispose();
-        }
+        public string Text { get; } = text;
+        public TextFormat Format { get; } = format;
+        public TextLayout Layout { get; } = layout;
+        public double Width { get; } = width;
+        public double Height { get; } = height;
+
+        public void Dispose() => Layout.ReleaseBackendHandle();
     }
 }

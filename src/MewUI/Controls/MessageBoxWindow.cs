@@ -117,7 +117,7 @@ public sealed class MessageBoxWindow : Window
         // Detail toggle
         if (hasDetail)
         {
-            var detailTextBox = new NewMultiLineTextBox
+            var detailTextBox = new MultiLineTextBox
             {
                 Text = _detail!,
                 IsReadOnly = true,

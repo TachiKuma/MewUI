@@ -103,6 +103,9 @@ public sealed class TextEditorSession
         SetCaret(target, extendSelection);
     }
 
+    internal int GetPreviousCaretPosition(int position)
+        => PreviousTextElement(Math.Clamp(position, 0, Document.TextLength));
+
     public void ReplaceSelection(string? text)
     {
         string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);

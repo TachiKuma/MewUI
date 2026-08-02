@@ -6,7 +6,6 @@ using Aprillz.MewUI.Rendering.Direct2D;
 using Aprillz.MewUI.Rendering.Gdi;
 using Aprillz.MewUI.Text;
 using Aprillz.MewUI.Controls;
-using Aprillz.MewUI.Native.DirectWrite;
 using MewUI.Test.Infrastructure;
 using System.Text;
 
@@ -35,7 +34,7 @@ public sealed class TextEngineWindowsBackendTests
         {
             const int width = 640;
             const int height = 300;
-            var editor = new NewMultiLineTextBox { Width = width, Height = height, Wrap = true };
+            var editor = new MultiLineTextBox { Width = width, Height = height, Wrap = true };
             using var window = HeadlessWindow.Create(width, height);
             window.Content = editor;
             using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(width, height, 1));
@@ -126,7 +125,55 @@ public sealed class TextEngineWindowsBackendTests
         context.EndFrame();
 
         Assert.AreEqual(128, renderContext.CachedRunCount,
-            "Direct2D glyph realizations grew beyond the bounded cache capacity.");
+            "Direct2D text-layout realizations grew beyond the bounded cache capacity.");
+    }
+
+    [TestMethod]
+    public void Direct2D_ClippedColorEmoji_RemainsColor()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Direct2D is Windows-only.");
+            return;
+        }
+
+        const string text = "😀";
+        using var factory = new Direct2DGraphicsFactory();
+        using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(64, 64, 1));
+        using (var context = factory.CreateContext(surface))
+        {
+            var style = new TextRunStyle("Segoe UI Emoji", 40);
+            var layout = factory.TextEngine.CreateLayout(new TextLayoutRequest
+            {
+                Text = text.AsMemory(),
+                DefaultStyle = style,
+                Paragraph = new TextParagraphStyle { MaxWidth = 64, Wrapping = TextWrapping.NoWrap },
+                Runs = [new GeometryStyleRun(0, text.Length, style)]
+            });
+
+            context.BeginFrame(surface);
+            context.Clear(Color.Transparent);
+            context.IntersectClip(new Rect(0, 0, 64, 64));
+            context.Text.Draw(layout, new Point(-8, 4), new TextDrawOptions(Color.White));
+            context.EndFrame();
+        }
+
+        var pixels = ((ICpuPixelSurface)surface).GetReadOnlyPixelSpan();
+        int colorfulPixels = 0;
+        for (int i = 0; i + 3 < pixels.Length; i += 4)
+        {
+            byte b = pixels[i];
+            byte g = pixels[i + 1];
+            byte r = pixels[i + 2];
+            byte a = pixels[i + 3];
+            if (a > 32 && Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b)) > 24)
+            {
+                colorfulPixels++;
+            }
+        }
+
+        Assert.IsGreaterThan(8, colorfulPixels,
+            "A partially clipped color emoji was rendered as a monochrome fallback glyph.");
     }
 
     [TestMethod]
@@ -186,7 +233,7 @@ public sealed class TextEngineWindowsBackendTests
         Assert.AreEqual(text.Length, endHit.InsertionIndex);
 
         using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(width, height, 1));
-        DWriteGlyphRunExtractor.GlyphRun? nativeRealization = null;
+        TextLayout? nativeRealization = null;
         using (var context = factory.CreateContext(surface))
         {
             context.BeginFrame(surface);
@@ -195,15 +242,14 @@ public sealed class TextEngineWindowsBackendTests
             context.EndFrame();
             if (factory is Direct2DGraphicsFactory)
             {
-                nativeRealization = ((Direct2DTextRenderContext)context.Text).CachedGlyphRuns
-                    .First(static item => item.HasOwnedFontFace);
+                nativeRealization = ((Direct2DTextRenderContext)context.Text).CachedLayouts.First();
             }
         }
 
         if (nativeRealization is not null)
         {
-            Assert.IsFalse(nativeRealization.HasOwnedFontFace,
-                "Disposing the graphics context did not release its DirectWrite font face realization.");
+            Assert.AreEqual(0, nativeRealization.BackendHandle,
+                "Disposing the graphics context did not release its DirectWrite text layout realization.");
         }
 
         var pixels = ((ICpuPixelSurface)surface).GetReadOnlyPixelSpan();
@@ -226,7 +272,7 @@ public sealed class TextEngineWindowsBackendTests
         Application.DefaultGraphicsFactory = factory;
         try
         {
-            var editor = new NewMultiLineTextBox
+            var editor = new MultiLineTextBox
             {
                 Width = width,
                 Height = height,
@@ -253,7 +299,7 @@ public sealed class TextEngineWindowsBackendTests
             {
                 if (pixels[index] > 16) covered++;
             }
-            Assert.IsGreaterThan(5, covered, $"{factory.Backend}: NewMultiLineTextBox produced no ink.");
+            Assert.IsGreaterThan(5, covered, $"{factory.Backend}: MultiLineTextBox produced no ink.");
         }
         finally
         {

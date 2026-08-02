@@ -19,39 +19,6 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
 
     public override ITextRenderContext Text => _newTextRenderContext ??= new Direct2DTextRenderContext(this);
 
-    internal void DrawPositionedGlyphRun(
-        DWriteGlyphRunExtractor.GlyphRun run,
-        Point baselineOrigin,
-        Color color)
-    {
-        if (run.FontFace == 0 || run.GlyphIndices.Length == 0 || _renderTarget == 0)
-        {
-            return;
-        }
-        fixed (ushort* indices = run.GlyphIndices)
-        fixed (float* advances = run.Advances)
-        fixed (DWRITE_GLYPH_OFFSET* offsets = run.Offsets)
-        {
-            var native = new DWRITE_GLYPH_RUN
-            {
-                fontFace = run.FontFace,
-                fontEmSize = run.FontEmSize,
-                glyphCount = (uint)run.GlyphIndices.Length,
-                glyphIndices = indices,
-                glyphAdvances = advances,
-                glyphOffsets = offsets,
-                isSideways = run.IsSideways ? 1 : 0,
-                bidiLevel = run.BidiLevel
-            };
-            D2D1VTable.DrawGlyphRun(
-                (ID2D1RenderTarget*)_renderTarget,
-                new D2D1_POINT_2F((float)baselineOrigin.X, (float)baselineOrigin.Y),
-                &native,
-                GetSolidBrush(color),
-                DWRITE_MEASURING_MODE.NATURAL);
-        }
-    }
-
     // Far beyond any render target, so a clip using it bounds only the other axis.
     private const float UNBOUNDED_CLIP_EXTENT = 1 << 20;
 

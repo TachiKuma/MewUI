@@ -525,8 +525,8 @@ public static class ControlExtensions
     }
 
     /// <summary>Adds a text input handler to the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox OnTextInput(
-        this NewMultiLineTextBox element,
+    public static MultiLineTextBox OnTextInput(
+        this MultiLineTextBox element,
         Action<TextInputEventArgs> handler)
     {
         element.TextInput += handler;
@@ -547,8 +547,8 @@ public static class ControlExtensions
     }
 
     /// <summary>Adds a composition-start handler to the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox OnTextCompositionStart(
-        this NewMultiLineTextBox element,
+    public static MultiLineTextBox OnTextCompositionStart(
+        this MultiLineTextBox element,
         Action<TextCompositionEventArgs> handler)
     {
         element.TextCompositionStart += handler;
@@ -569,8 +569,8 @@ public static class ControlExtensions
     }
 
     /// <summary>Adds a composition-update handler to the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox OnTextCompositionUpdate(
-        this NewMultiLineTextBox element,
+    public static MultiLineTextBox OnTextCompositionUpdate(
+        this MultiLineTextBox element,
         Action<TextCompositionEventArgs> handler)
     {
         element.TextCompositionUpdate += handler;
@@ -591,8 +591,8 @@ public static class ControlExtensions
     }
 
     /// <summary>Adds a composition-end handler to the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox OnTextCompositionEnd(
-        this NewMultiLineTextBox element,
+    public static MultiLineTextBox OnTextCompositionEnd(
+        this MultiLineTextBox element,
         Action<TextCompositionEventArgs> handler)
     {
         element.TextCompositionEnd += handler;
@@ -1443,15 +1443,8 @@ public static class ControlExtensions
         return textBox;
     }
 
-    /// <summary>Sets text on the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox Text(this NewMultiLineTextBox textBox, string text)
-    {
-        textBox.Text = text;
-        return textBox;
-    }
-
     /// <summary>Sets placeholder text on the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox Placeholder(this NewMultiLineTextBox textBox, string placeholder)
+    public static MultiLineTextBox Placeholder(this MultiLineTextBox textBox, string placeholder)
     {
         textBox.Placeholder = placeholder;
         return textBox;
@@ -1507,7 +1500,7 @@ public static class ControlExtensions
         return textBox;
     }
 
-    public static NewMultiLineTextBox IsReadOnly(this NewMultiLineTextBox textBox, bool isReadOnly = true)
+    public static MultiLineTextBox IsReadOnly(this MultiLineTextBox textBox, bool isReadOnly = true)
     {
         textBox.IsReadOnly = isReadOnly;
         return textBox;
@@ -1526,7 +1519,7 @@ public static class ControlExtensions
         return textBox;
     }
 
-    public static NewMultiLineTextBox AcceptTab(this NewMultiLineTextBox textBox, bool acceptTab = true)
+    public static MultiLineTextBox AcceptTab(this MultiLineTextBox textBox, bool acceptTab = true)
     {
         textBox.AcceptTab = acceptTab;
         return textBox;
@@ -1545,7 +1538,7 @@ public static class ControlExtensions
         return textBox;
     }
 
-    public static NewMultiLineTextBox CaretPosition(this NewMultiLineTextBox textBox, int value)
+    public static MultiLineTextBox CaretPosition(this MultiLineTextBox textBox, int value)
     {
         textBox.CaretPosition = value;
         return textBox;
@@ -1567,8 +1560,8 @@ public static class ControlExtensions
         return textBox;
     }
 
-    public static NewMultiLineTextBox ImeMode(
-        this NewMultiLineTextBox textBox,
+    public static MultiLineTextBox ImeMode(
+        this MultiLineTextBox textBox,
         global::Aprillz.MewUI.Input.ImeMode value)
     {
         textBox.ImeMode = value;
@@ -1588,7 +1581,7 @@ public static class ControlExtensions
         return textBox;
     }
 
-    public static NewMultiLineTextBox MaxLength(this NewMultiLineTextBox textBox, int value)
+    public static MultiLineTextBox MaxLength(this MultiLineTextBox textBox, int value)
     {
         textBox.MaxLength = value;
         return textBox;
@@ -1620,8 +1613,8 @@ public static class ControlExtensions
         return textBox;
     }
 
-    public static NewMultiLineTextBox OnTextChanged(
-        this NewMultiLineTextBox textBox,
+    public static MultiLineTextBox OnTextChanged(
+        this MultiLineTextBox textBox,
         Action<string> handler)
     {
         textBox.TextChanged += handler;
@@ -1679,15 +1672,6 @@ public static class ControlExtensions
         return textBox;
     }
 
-    /// <summary>Binds text on the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox BindText(this NewMultiLineTextBox textBox, ObservableValue<string> source)
-    {
-        ArgumentNullException.ThrowIfNull(textBox);
-        ArgumentNullException.ThrowIfNull(source);
-        textBox.SetBinding(NewMultiLineTextBox.TextProperty, source);
-        return textBox;
-    }
-
     /// <summary>
     /// Binds the text to a converted observable value.
     /// </summary>
@@ -1708,20 +1692,6 @@ public static class ControlExtensions
         ArgumentNullException.ThrowIfNull(convert);
 
         textBox.SetBinding(MultiLineTextBox.TextProperty, source, convert, convertBack);
-        return textBox;
-    }
-
-    /// <summary>Binds converted text on the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox BindText<TSource>(
-        this NewMultiLineTextBox textBox,
-        ObservableValue<TSource> source,
-        Func<TSource, string> convert,
-        Func<string, TSource>? convertBack = null)
-    {
-        ArgumentNullException.ThrowIfNull(textBox);
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(convert);
-        textBox.SetBinding(NewMultiLineTextBox.TextProperty, source, convert, convertBack);
         return textBox;
     }
 
@@ -3808,13 +3778,6 @@ public static class ControlExtensions
         return textBox;
     }
 
-    /// <summary>Sets wrapping on the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox Wrap(this NewMultiLineTextBox textBox, bool wrap = true)
-    {
-        textBox.Wrap = wrap;
-        return textBox;
-    }
-
     /// <summary>
     /// Adds a wrap changed event handler.
     /// </summary>
@@ -3822,13 +3785,6 @@ public static class ControlExtensions
     /// <param name="handler">Event handler.</param>
     /// <returns>The text box for chaining.</returns>
     public static MultiLineTextBox OnWrapChanged(this MultiLineTextBox textBox, Action<bool> handler)
-    {
-        textBox.WrapChanged += handler;
-        return textBox;
-    }
-
-    /// <summary>Adds a wrapping change handler to the extensible multi-line editor.</summary>
-    public static NewMultiLineTextBox OnWrapChanged(this NewMultiLineTextBox textBox, Action<bool> handler)
     {
         textBox.WrapChanged += handler;
         return textBox;

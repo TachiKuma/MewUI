@@ -2,34 +2,12 @@ using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
 using MewUI.Test.Infrastructure;
 
-#pragma warning disable CS0618 // This suite preserves the legacy behavior oracle.
-
 namespace MewUI.Test.Controls;
 
 [TestClass]
 [DoNotParallelize]
 public sealed class MultiLineTextBoxNavigationTests
 {
-    [TestMethod]
-    public void WrappedCaretBoundary_IsOwnedByOnlyOneVisualRow()
-    {
-        Assert.IsFalse(MultiLineTextBox.IsCaretOwnedByWrappedRow(
-            caretColumn: 5,
-            segmentStart: 0,
-            segmentEnd: 5,
-            isLastRow: false));
-        Assert.IsTrue(MultiLineTextBox.IsCaretOwnedByWrappedRow(
-            caretColumn: 5,
-            segmentStart: 5,
-            segmentEnd: 10,
-            isLastRow: false));
-        Assert.IsTrue(MultiLineTextBox.IsCaretOwnedByWrappedRow(
-            caretColumn: 10,
-            segmentStart: 5,
-            segmentEnd: 10,
-            isLastRow: true));
-    }
-
     [TestMethod]
     public void ArrowKeys_WithWrap_MoveBetweenVisualRows()
     {
@@ -320,5 +298,3 @@ public sealed class MultiLineTextBoxNavigationTests
         Assert.AreEqual(5, textBox.CaretPosition);
     }
 }
-
-#pragma warning restore CS0618

@@ -14,7 +14,7 @@ Startup();
 
 Window window = null!;
 ListBox fileList = null!;
-NewMultiLineTextBox editor = null!;
+MultiLineTextBox editor = null!;
 ScrollViewer vectorScrollViewer = null!;
 ZoomPanCanvas vectorZoomHost = null!;
 SvgView vectorPreview = null!;
@@ -405,7 +405,7 @@ Element Body() => new Grid()
                 new GroupBox()
                     .Header("SVG Source")
                     .Content(
-                        new NewMultiLineTextBox()
+                        new MultiLineTextBox()
                             .Ref(out editor)
                             .Wrap(false)
                             .FontFamily("Consolas")

@@ -52,7 +52,7 @@ public static class DefaultStyles
             [typeof(ButtonGroup)] = CreateButtonGroupStyle,
             [typeof(MenuBar)] = CreateMenuBarStyle,
             [typeof(TextBase)] = CreateTextBaseStyle,
-            [typeof(NewMultiLineTextBox)] = CreateNewMultiLineTextBoxStyle,
+            [typeof(MultiLineTextBox)] = CreateMultiLineTextBoxStyle,
             [typeof(SyntaxViewer)] = CreateSyntaxViewerStyle,
             [typeof(CheckBox)] = CreateCheckBoxStyle,
             [typeof(RadioButton)] = CreateRadioButtonStyle,
@@ -816,8 +816,8 @@ public static class DefaultStyles
     private static Style CreateTextBaseStyle()
         => CreateTextInputStyle(typeof(TextBase));
 
-    private static Style CreateNewMultiLineTextBoxStyle()
-        => CreateTextInputStyle(typeof(NewMultiLineTextBox));
+    private static Style CreateMultiLineTextBoxStyle()
+        => CreateTextInputStyle(typeof(MultiLineTextBox));
 
     private static Style CreateSyntaxViewerStyle()
         => CreateTextInputStyle(typeof(SyntaxViewer));
