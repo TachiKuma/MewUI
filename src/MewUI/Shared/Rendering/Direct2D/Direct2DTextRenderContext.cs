@@ -71,9 +71,7 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
                     Math.Max(1, width),
                     line.Metrics.Bounds.Height);
                 var realized = GetOrCreate(managed, first, textLength, width, line.Metrics.Bounds.Height);
-                DrawRealized(realized, bounds.Position, options.Foreground);
-                DrawRunDecoration(first.Style, bounds, line.Metrics.Baseline, options.Foreground);
-                DrawForegroundSpans(managed, origin, bounds, first.Start, textLength, realized, options.PaintSpans.Span, first.Style, line.Metrics.Baseline);
+                DrawRunColorSegments(clusters, index, end, origin, bounds, line.Metrics.Baseline, realized, in options);
                 index = end;
             }
         }
@@ -123,53 +121,104 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
         _context.DrawTextLayout(realization.Text, realization.Format, realization.Layout, color);
     }
 
-    private void DrawForegroundSpans(
-        ManagedTextLayout layout,
+    /// <summary>
+    /// Draws one style run partitioned into effective-foreground segments so every pixel is
+    /// painted exactly once. ClearType blends subpixel coverage against the destination, so
+    /// overdrawing span colors onto the base pass would fringe; single-pass clipping keeps
+    /// each glyph blended against the clean background.
+    /// </summary>
+    private void DrawRunColorSegments(
+        List<ManagedTextCluster> clusters,
+        int firstCluster,
+        int endCluster,
         Point origin,
         Rect runBounds,
-        int textStart,
-        int textLength,
-        RealizedRun realization,
-        ReadOnlySpan<TextPaintSpan> spans,
-        TextRunStyle style,
-        double baseline)
+        double baseline,
+        RealizedRun realized,
+        in TextDrawOptions options)
     {
-        foreach (var span in spans)
+        var spans = options.PaintSpans.Span;
+        int segmentStart = firstCluster;
+        var segmentColor = GetSpanForeground(spans, clusters[firstCluster].Start) ?? options.Foreground;
+
+        for (int clusterIndex = firstCluster + 1; clusterIndex <= endCluster; clusterIndex++)
         {
-            if (span.Foreground is not Color color ||
-                span.Range.End <= textStart || span.Range.Start >= textStart + textLength) continue;
-            var ranges = new List<Rect>();
-            layout.GetRangeBounds(span.Range.Start, span.Range.Length, ranges);
-            foreach (var range in ranges)
+            Color nextColor = default;
+            if (clusterIndex < endCluster)
             {
-                var clip = runBounds.Intersect(new Rect(
-                    origin.X + range.X,
-                    origin.Y + range.Y,
-                    range.Width,
-                    range.Height));
-                if (clip.IsEmpty) continue;
-                _context.Save();
-                try
+                nextColor = GetSpanForeground(spans, clusters[clusterIndex].Start) ?? options.Foreground;
+                if (nextColor == segmentColor)
                 {
-                    _context.IntersectClip(clip);
-                    DrawRealized(realization, runBounds.Position, color);
-                    DrawRunDecoration(style, runBounds, baseline, color);
-                }
-                finally
-                {
-                    _context.Restore();
+                    continue;
                 }
             }
+
+            var startCluster = clusters[segmentStart];
+            var lastCluster = clusters[clusterIndex - 1];
+            double left = origin.X + startCluster.X;
+            double right = origin.X + lastCluster.X + lastCluster.Width;
+            if (segmentStart == firstCluster && clusterIndex == endCluster)
+            {
+                DrawRealized(realized, runBounds.Position, segmentColor);
+            }
+            else
+            {
+                // Interior color boundaries floor to whole device pixels so adjacent clips agree
+                // on pixel ownership; backend clip rounding otherwise shifts the boundary column
+                // into the neighbor color depending on the fractional scroll offset.
+                double dpiScale = _context.DpiScale;
+                double clipLeft = segmentStart == firstCluster ? runBounds.X : Math.Floor(left * dpiScale) / dpiScale;
+                double clipRight = clusterIndex == endCluster ? runBounds.Right : Math.Floor(right * dpiScale) / dpiScale;
+                var clip = new Rect(clipLeft, runBounds.Y, Math.Max(0, clipRight - clipLeft), runBounds.Height).Intersect(runBounds);
+                if (!clip.IsEmpty)
+                {
+                    _context.Save();
+                    try
+                    {
+                        _context.IntersectClip(clip);
+                        DrawRealized(realized, runBounds.Position, segmentColor);
+                    }
+                    finally
+                    {
+                        _context.Restore();
+                    }
+                }
+            }
+            DrawRunDecoration(startCluster.Style, left, right, runBounds, baseline, segmentColor);
+
+            segmentStart = clusterIndex;
+            segmentColor = nextColor;
         }
+    }
+
+    /// <summary>
+    /// Resolves the effective foreground for a character index: the last covering paint span
+    /// wins, matching painter-order span semantics.
+    /// </summary>
+    private static Color? GetSpanForeground(ReadOnlySpan<TextPaintSpan> spans, int index)
+    {
+        Color? result = null;
+        foreach (var span in spans)
+        {
+            if (span.Foreground is Color color && index >= span.Range.Start && index < span.Range.End)
+            {
+                result = color;
+            }
+        }
+        return result;
     }
 
     /// <summary>
     /// Draws style-run underline/strikethrough as renderer geometry so decorations match the
     /// engine-drawn path used by the other render contexts.
     /// </summary>
-    private void DrawRunDecoration(TextRunStyle style, in Rect runBounds, double baseline, Color color)
+    private void DrawRunDecoration(TextRunStyle style, double left, double right, in Rect runBounds, double baseline, Color color)
     {
         if (style.Decoration == TextDecoration.None) return;
+
+        double clampedLeft = Math.Max(left, runBounds.X);
+        double width = Math.Min(right, runBounds.Right) - clampedLeft;
+        if (width <= 0) return;
 
         // Pixel-snap the line position and thickness so antialiasing does not smear the stroke.
         double dpiScale = _context.DpiScale;
@@ -177,13 +226,13 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
         if (style.Decoration.HasFlag(TextDecoration.Underline))
         {
             double y = LayoutRounding.RoundToPixel(Math.Min(runBounds.Y + baseline + 1, runBounds.Bottom - thickness), dpiScale);
-            _context.FillRectangle(new Rect(runBounds.X, y, runBounds.Width, thickness), color);
+            _context.FillRectangle(new Rect(clampedLeft, y, width, thickness), color);
         }
         if (style.Decoration.HasFlag(TextDecoration.Strikethrough))
         {
             // FontSize is in points; 4/3 converts to DIPs, strike sits ~30% of the em above baseline.
             double y = LayoutRounding.RoundToPixel(runBounds.Y + baseline - style.FontSize * (4.0 / 3.0) * 0.3, dpiScale);
-            _context.FillRectangle(new Rect(runBounds.X, y, runBounds.Width, thickness), color);
+            _context.FillRectangle(new Rect(clampedLeft, y, width, thickness), color);
         }
     }
 
