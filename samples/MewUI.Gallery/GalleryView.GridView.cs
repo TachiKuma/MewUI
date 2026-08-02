@@ -368,7 +368,6 @@ partial class GalleryView
                         build: _ => new ProgressBar()
                             .Minimum(0)
                             .Maximum(100)
-                            .Height(10)
                             .Margin(6, 0)
                             .CenterVertical(),
                         bind: (view, item) => ((ProgressBar)view).BindValue(item.Progress)),
