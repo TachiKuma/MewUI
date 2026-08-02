@@ -1,17 +1,26 @@
+using Aprillz.MewUI.Text;
+
 namespace Aprillz.MewUI.Controls;
 
 /// <summary>
 /// A single-line password input control that masks entered text.
 /// </summary>
-public sealed class PasswordBox : LegacySingleLineTextBase
+public sealed class PasswordBox : SingleLineTextBase
 {
     public static readonly MewProperty<string> PasswordProperty =
         MewProperty<string>.Register<PasswordBox>(nameof(Password), string.Empty,
             MewPropertyOptions.BindsTwoWayByDefault,
-            static (self, _, newVal) => self.ApplyExternalTextPropertyChange(newVal));
+            static (self, _, value) => self.ApplyExternalTextCore(value));
 
     public static readonly MewProperty<char> PasswordCharProperty =
-        MewProperty<char>.Register<PasswordBox>(nameof(PasswordChar), '●', MewPropertyOptions.AffectsRender);
+        MewProperty<char>.Register<PasswordBox>(nameof(PasswordChar), '●',
+            MewPropertyOptions.AffectsRender,
+            static (self, _, _) => self.InvalidateTextPipeline());
+
+    public PasswordBox()
+    {
+        _extensions.Projections.Add(new MaskProjection(this));
+    }
 
     /// <summary>
     /// Gets or sets the character used to mask the password.
@@ -31,8 +40,8 @@ public sealed class PasswordBox : LegacySingleLineTextBase
     /// </remarks>
     public string Password
     {
-        get => GetTextCore();
-        set => SetMirroredTextProperty(PasswordProperty, value);
+        get => GetTextSnapshot();
+        set => SetValue(PasswordProperty, value ?? string.Empty);
     }
 
     /// <summary>
@@ -41,41 +50,26 @@ public sealed class PasswordBox : LegacySingleLineTextBase
     /// </summary>
     public event Action? PasswordChanged;
 
-    /// <summary>The currently selected text, masked to its length (never the real characters).</summary>
-    public override string SelectedText
-    {
-        get
-        {
-            var (start, end) = SelectionRange;
-            int length = end - start;
-            return length > 0 ? new string(PasswordChar, length) : string.Empty;
-        }
-    }
+    private protected override MewProperty<string>? TextSyncProperty => PasswordProperty;
 
-    protected override void CopyDocumentTo(char[] buffer, int start, int length)
-    {
-        Array.Fill(buffer, PasswordChar, 0, length);
-    }
+    private protected override bool HasTextChangedSubscribers => PasswordChanged is not null;
 
-    protected override void CopyToClipboardCore()
-    {
-        // Prevent copying password to clipboard.
-    }
-
-    protected override void CutToClipboardCore()
-    {
-        // Prevent cutting password to clipboard.
-    }
-
-    protected override void NotifyTextChanged()
-    {
-        SyncTextPropertyFromDocument(PasswordProperty);
-        base.NotifyTextChanged();
-    }
-
-    protected override void RaiseTextChanged()
+    private protected override void RaiseTextChanged(string text)
     {
         // Suppress the plaintext-carrying TextChanged event for passwords; notify without a value instead.
         PasswordChanged?.Invoke();
+    }
+
+    private protected override string GetMeasureSample()
+        => _document.TextLength == 0 ? string.Empty : new string(PasswordChar, _document.TextLength);
+
+    /// <summary>
+    /// Projects every UTF-16 unit to the mask character so layout, caret geometry, and hit-testing
+    /// all operate on the masked shape while the document keeps the real characters.
+    /// </summary>
+    private sealed class MaskProjection(PasswordBox owner) : ITextProjection
+    {
+        public ProjectedText Project(in TextProjectionContext context)
+            => new(new string(owner.PasswordChar, context.SourceText.Length).AsMemory(), IdentityTextOffsetMap.Instance);
     }
 }

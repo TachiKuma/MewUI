@@ -1474,19 +1474,6 @@ public static class ControlExtensions
         return passwordBox;
     }
 
-    /// <summary>
-    /// Sets the placeholder text.
-    /// </summary>
-    /// <param name="passwordBox">Target password box.</param>
-    /// <param name="placeholder">Placeholder text.</param>
-    /// <returns>The password box for chaining.</returns>
-    // Bridges the legacy PasswordBox to the generic text extensions retargeted at the rebuilt
-    // TextBase; delete when PasswordBox moves onto the new hierarchy.
-    public static PasswordBox Placeholder(this PasswordBox passwordBox, string placeholder)
-    {
-        passwordBox.Placeholder = placeholder ?? string.Empty;
-        return passwordBox;
-    }
 
     /// <summary>
     /// Sets the placeholder text.

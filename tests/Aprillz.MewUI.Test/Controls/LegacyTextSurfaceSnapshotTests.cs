@@ -43,8 +43,35 @@ public sealed class LegacyTextSurfaceSnapshotTests
         => entry.Replace(":abstract", "").Replace(":virtual", "");
 
     [TestMethod]
-    public void PasswordBox_MatchesFrozenSurface()
-        => AssertSurface(typeof(PasswordBox), _passwordBoxSurface);
+    public void PasswordBox_CoversLegacyPublicSurface()
+    {
+        var chain = GetPublicChainSurface(typeof(PasswordBox), typeof(SingleLineTextBase), typeof(TextBase));
+
+        var missing = _passwordBoxPublicSurface.Where(entry => !chain.Contains(entry)).ToList();
+        Assert.IsTrue(missing.Count == 0,
+            $"Rebuilt PasswordBox chain lost legacy public surface.\nMissing:\n  {string.Join("\n  ", missing)}");
+
+        // Deferral design: the password surface must never expose document text publicly.
+        Assert.IsFalse(chain.Any(entry => entry.StartsWith("P:Text:", StringComparison.Ordinal)),
+            "PasswordBox chain must not expose a public Text property");
+        Assert.IsFalse(chain.Any(entry => entry.StartsWith("P:SelectedText:", StringComparison.Ordinal)),
+            "PasswordBox chain must not expose a public SelectedText property");
+        Assert.IsFalse(chain.Any(entry => entry.StartsWith("F:TextProperty:", StringComparison.Ordinal)),
+            "PasswordBox chain must not expose a public TextProperty field");
+    }
+
+    private static HashSet<string> GetPublicChainSurface(params Type[] chainTypes)
+    {
+        var chain = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var type in chainTypes)
+        {
+            foreach (var entry in GetDeclaredSurface(type, publicOnly: true))
+            {
+                chain.Add(StripInheritanceModifiers(entry));
+            }
+        }
+        return chain;
+    }
 
     private static void AssertSurface(Type type, string[] frozen)
     {
@@ -296,19 +323,45 @@ public sealed class LegacyTextSurfaceSnapshotTests
         "P:Text:String:getset",
     };
 
-    private static readonly string[] _passwordBoxSurface =
+    // Legacy public surface of PasswordBox and its legacy base chain, minus decided removals
+    // (SelectedText and WrapChanged; see agent/textBase/plan.md Breaking Changes).
+    private static readonly string[] _passwordBoxPublicSurface =
     {
         "C:()",
         "E:PasswordChanged:Action",
+        "E:TextCompositionEnd:Action<TextCompositionEventArgs>",
+        "E:TextCompositionStart:Action<TextCompositionEventArgs>",
+        "E:TextCompositionUpdate:Action<TextCompositionEventArgs>",
+        "E:TextInput:Action<TextInputEventArgs>",
+        "F:AcceptTabProperty:MewProperty<Boolean>",
+        "F:ImeModeProperty:MewProperty<ImeMode>",
+        "F:IsReadOnlyProperty:MewProperty<Boolean>",
+        "F:MaxLengthProperty:MewProperty<Int32>",
         "F:PasswordCharProperty:MewProperty<Char>",
         "F:PasswordProperty:MewProperty<String>",
-        "M:CopyDocumentTo(Char[],Int32,Int32):Void:virtual",
-        "M:CopyToClipboardCore():Void:virtual",
-        "M:CutToClipboardCore():Void:virtual",
-        "M:NotifyTextChanged():Void:virtual",
-        "M:RaiseTextChanged():Void:virtual",
+        "F:PlaceholderProperty:MewProperty<String>",
+        "F:SelectionLengthProperty:MewProperty<Int32>",
+        "F:SelectionStartProperty:MewProperty<Int32>",
+        "M:AppendText(String,Boolean):Void",
+        "M:Copy():Void",
+        "M:Cut():Void",
+        "M:GetCharRectInWindow(Int32):Rect",
+        "M:Paste():Void",
+        "M:Redo():Void",
+        "M:ScrollToCaret():Void",
+        "M:SelectAll():Void",
+        "M:Undo():Void",
+        "P:AcceptTab:Boolean:getset",
+        "P:CanRedo:Boolean:get",
+        "P:CanUndo:Boolean:get",
+        "P:CaretPosition:Int32:getset",
+        "P:ImeMode:ImeMode:getset",
+        "P:IsReadOnly:Boolean:getset",
+        "P:MaxLength:Int32:getset",
         "P:Password:String:getset",
         "P:PasswordChar:Char:getset",
-        "P:SelectedText:String:get:virtual",
+        "P:Placeholder:String:getset",
+        "P:SelectionLength:Int32:get",
+        "P:SelectionStart:Int32:get",
     };
 }

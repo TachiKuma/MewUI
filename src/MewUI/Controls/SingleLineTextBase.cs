@@ -472,4 +472,11 @@ public abstract class SingleLineTextBase : TextBase
         InvalidateMeasure();
         InvalidateVisual();
     }
+
+    /// <summary>Re-runs the extension pipeline after a registration or its inputs change.</summary>
+    private protected void InvalidateTextPipeline()
+    {
+        _extensions.Revision++;
+        ResetView();
+    }
 }
