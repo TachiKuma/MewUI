@@ -11,6 +11,7 @@ namespace Aprillz.MewUI.Native.DirectWrite;
 internal static unsafe class DWriteGlyphRunExtractor
 {
     private const int S_OK = 0;
+    private const int E_FAIL = unchecked((int)0x80004005);
     private const int E_NOINTERFACE = unchecked((int)0x80004002);
     private const int DrawIndex = 58;
 
@@ -72,8 +73,16 @@ internal static unsafe class DWriteGlyphRunExtractor
             var vtable = *(void***)textLayout;
             var draw = (delegate* unmanaged[Stdcall]<nint, nint, nint, float, float, int>)vtable[DrawIndex];
             int hr = draw(textLayout, 0, (nint)(&renderer), 0, 0);
+            if (state.Error is Exception callbackError)
+            {
+                DisposeRuns(state.Runs);
+                throw new InvalidOperationException(
+                    "DirectWrite failed while copying a glyph run.",
+                    callbackError);
+            }
             if (hr < 0)
             {
+                DisposeRuns(state.Runs);
                 Marshal.ThrowExceptionForHR(hr);
             }
 
@@ -83,6 +92,15 @@ internal static unsafe class DWriteGlyphRunExtractor
         {
             stateHandle.Free();
         }
+    }
+
+    private static void DisposeRuns(List<GlyphRun> runs)
+    {
+        foreach (var run in runs)
+        {
+            run.Dispose();
+        }
+        runs.Clear();
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -98,6 +116,7 @@ internal static unsafe class DWriteGlyphRunExtractor
         public List<GlyphRun> Runs { get; } = [];
         public Dictionary<nint, int> FaceIndices { get; } = [];
         public bool RetainFontFaces { get; } = retainFontFaces;
+        public Exception? Error { get; set; }
 
         public int GetFaceIndex(nint fontFace)
         {
@@ -207,7 +226,34 @@ internal static unsafe class DWriteGlyphRunExtractor
             return S_OK;
         }
 
-        var state = (CaptureState)GCHandle.FromIntPtr(self->StateHandle).Target!;
+        CaptureState? state = null;
+        try
+        {
+            state = (CaptureState)GCHandle.FromIntPtr(self->StateHandle).Target!;
+            return DrawGlyphRunCore(
+                state,
+                baselineOriginX,
+                baselineOriginY,
+                glyphRun,
+                description);
+        }
+        catch (Exception exception)
+        {
+            if (state is not null)
+            {
+                state.Error ??= exception;
+            }
+            return E_FAIL;
+        }
+    }
+
+    private static int DrawGlyphRunCore(
+        CaptureState state,
+        float baselineOriginX,
+        float baselineOriginY,
+        DWRITE_GLYPH_RUN* glyphRun,
+        DWRITE_GLYPH_RUN_DESCRIPTION* description)
+    {
         int glyphCount = checked((int)glyphRun->glyphCount);
         int textLength = description == null ? 0 : checked((int)description->textLength);
 
@@ -232,26 +278,38 @@ internal static unsafe class DWriteGlyphRunExtractor
         }
 
         nint retainedFace = 0;
-        if (state.RetainFontFaces && glyphRun->fontFace != 0)
+        try
         {
-            ComHelpers.AddRef(glyphRun->fontFace);
-            retainedFace = glyphRun->fontFace;
-        }
+            if (state.RetainFontFaces && glyphRun->fontFace != 0)
+            {
+                ComHelpers.AddRef(glyphRun->fontFace);
+                retainedFace = glyphRun->fontFace;
+            }
 
-        state.Runs.Add(new GlyphRun(
-            description == null ? 0 : description->textPosition,
-            description == null ? 0 : description->textLength,
-            baselineOriginX,
-            baselineOriginY,
-            glyphRun->fontEmSize,
-            state.GetFaceIndex(glyphRun->fontFace),
-            glyphRun->bidiLevel,
-            glyphRun->isSideways != 0,
-            retainedFace,
-            indices,
-            advances,
-            offsets,
-            clusters));
+            var run = new GlyphRun(
+                description == null ? 0 : description->textPosition,
+                description == null ? 0 : description->textLength,
+                baselineOriginX,
+                baselineOriginY,
+                glyphRun->fontEmSize,
+                state.GetFaceIndex(glyphRun->fontFace),
+                glyphRun->bidiLevel,
+                glyphRun->isSideways != 0,
+                retainedFace,
+                indices,
+                advances,
+                offsets,
+                clusters);
+            retainedFace = 0;
+            state.Runs.Add(run);
+        }
+        finally
+        {
+            if (retainedFace != 0)
+            {
+                ComHelpers.Release(retainedFace);
+            }
+        }
         return S_OK;
     }
 
