@@ -152,6 +152,8 @@ public class ProgressRing : Control
 
     protected override void OnVisualRootChanged(Element? oldRoot, Element? newRoot)
     {
+        base.OnVisualRootChanged(oldRoot, newRoot);
+
         if (newRoot == null)
         {
             // Detached from visual tree - stop clock to prevent AnimationManager leak.
