@@ -1,8 +1,9 @@
 using Aprillz.MewUI.Rendering.CoreText;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering.MewVG;
 
-internal sealed class MewVGMetalMeasurementContext : MeasureGraphicsContextBase
+internal sealed class MewVGMetalMeasurementContext : MeasureGraphicsContextBase, ITextAdvanceSource
 {
     private readonly uint _dpi;
 
@@ -29,6 +30,28 @@ internal sealed class MewVGMetalMeasurementContext : MeasureGraphicsContextBase
             EffectiveMaxWidth = effectiveMaxWidth,
             ContentHeight = measured.Height
         };
+    }
+
+    double[] ITextAdvanceSource.GetUtf16PrefixAdvances(ReadOnlySpan<char> text, IFont font)
+    {
+        if (!text.IsEmpty && font is CoreTextFont ct &&
+            CoreTextText.GetUtf16PrefixAdvancesPx(ct, text, _dpi) is double[] advances)
+        {
+            double scale = DpiScale;
+            for (int index = 0; index < advances.Length; index++)
+            {
+                advances[index] /= scale;
+            }
+            return advances;
+        }
+
+        // Mirrors the MeasureText fallback for non-CoreText fonts.
+        var fallback = new double[text.Length];
+        for (int index = 0; index < fallback.Length; index++)
+        {
+            fallback[index] = (index + 1) * 8;
+        }
+        return fallback;
     }
 
     public override Size MeasureText(ReadOnlySpan<char> text, IFont font)
