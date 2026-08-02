@@ -241,7 +241,7 @@ See [Binding](docs/Binding.md) for observed vs snapshot segments, null/fallback,
 Controls (Implemented):
 - `Button`, `ToggleButton`
 - `Label`, `TextBlock`, `Image`
-- `TextBox`, `MultiLineTextBox`, `PasswordBox`
+- `TextBox`, `MultiLineTextBox`, `SyntaxViewer`, `PasswordBox`
 - `CheckBox`, `RadioButton`, `ToggleSwitch`
 - `ComboBox`, `ListBox`, `TreeView`, `GridView`
 - `Slider`, `ProgressBar`, `ProgressRing`, `NumericUpDown`
