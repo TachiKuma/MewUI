@@ -127,6 +127,64 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
         ResetView();
     }
 
+    private void DrawCompositionUnderlines(IGraphicsContext context)
+    {
+        if (!_editor.IsComposing || _compositionLength <= 0)
+        {
+            return;
+        }
+
+        var color = Theme.Palette.WindowText;
+        int index = 0;
+        while (index < _compositionLength)
+        {
+            var attr = GetCompositionAttr(index);
+            var startRect = GetCharRectInWindow(_compositionStart + index);
+            double lineY = startRect.Y;
+
+            int segmentEnd = index + 1;
+            var endRect = GetCharRectInWindow(_compositionStart + segmentEnd);
+            while (segmentEnd < _compositionLength && GetCompositionAttr(segmentEnd) == attr && endRect.Y == lineY)
+            {
+                segmentEnd++;
+                endRect = GetCharRectInWindow(_compositionStart + segmentEnd);
+            }
+
+            // A wrapped segment ends past the visual line; underline to the viewport text edge instead.
+            double endX = endRect.Y == lineY ? endRect.X : _contentBounds.Right;
+            DrawCompositionUnderline(context, startRect.X, endX, lineY + startRect.Height, color, attr);
+            index = segmentEnd;
+        }
+    }
+
+    private CompositionAttr GetCompositionAttr(int offsetInComposition)
+        => _compositionAttributes is { Length: > 0 } attrs && offsetInComposition < attrs.Length
+            ? attrs[offsetInComposition]
+            : CompositionAttr.Input;
+
+    private static void DrawCompositionUnderline(
+        IGraphicsContext context, double startX, double endX, double y, Color color, CompositionAttr attr)
+    {
+        double thickness = attr is CompositionAttr.TargetConverted or CompositionAttr.TargetNotConverted ? 2 : 1;
+        bool dashed = attr is CompositionAttr.Input or CompositionAttr.TargetNotConverted;
+
+        if (!dashed)
+        {
+            context.DrawLine(new Point(startX, y), new Point(endX, y), color, thickness, pixelSnap: true);
+            return;
+        }
+
+        const double DASH = 3;
+        const double GAP = 2;
+        double x = startX;
+        while (x < endX)
+        {
+            double dashEnd = Math.Min(x + DASH, endX);
+            context.DrawLine(new Point(x, y), new Point(dashEnd, y), color, thickness, pixelSnap: true);
+            x = dashEnd + GAP;
+        }
+    }
+
     public override Rect GetCharRectInWindow(int charIndex)
     {
         EnsureView();
@@ -235,6 +293,8 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
                 Owner: line);
             line.Draw(context.Text, origin, in options);
         }
+
+        DrawCompositionUnderlines(context);
 
         if (IsFocused && _caretVisible)
         {
