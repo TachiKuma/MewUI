@@ -186,6 +186,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         int end = checked(start + length);
         var boundaries = GetTextElementBoundaries(snapshot.Text, start, end);
         var clusters = new List<ManagedTextCluster>(boundaries.Count);
+        var advanceSource = context as ITextAdvanceSource;
 
         for (int i = 0; i < boundaries.Count; i++)
         {
@@ -250,7 +251,9 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                 continue;
             }
 
-            var measured = context.MeasureText(span, font);
+            // A backend advance source measures each style run whole below and overwrites both
+            // values, so measuring every cluster here would be discarded work.
+            var measured = advanceSource is null ? context.MeasureText(span, font) : Size.Empty;
             clusters.Add(new ManagedTextCluster(
                 clusterStart,
                 clusterLength,
@@ -299,9 +302,13 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
 
             int textStart = first.Start;
             int textEnd = clusters[endIndex - 1].End;
-            var cumulative = advanceSource.GetUtf16PrefixAdvances(
-                snapshot.Text.AsSpan(textStart, textEnd - textStart),
-                first.Font);
+            var runText = snapshot.Text.AsSpan(textStart, textEnd - textStart);
+            var cumulative = advanceSource.GetUtf16PrefixAdvances(runText, first.Font);
+            // Line height takes the maximum over clusters, so one measurement per run carries the
+            // same result as measuring every cluster, including taller fallback glyphs.
+            double runHeight = Math.Max(
+                first.Font.Ascent + first.Font.Descent,
+                context.MeasureText(runText, first.Font).Height);
             double previous = 0;
             for (int clusterIndex = index; clusterIndex < endIndex; clusterIndex++)
             {
@@ -309,6 +316,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                 int relativeEnd = cluster.End - textStart;
                 double current = cumulative[relativeEnd - 1];
                 cluster.Width = Math.Max(0, current - previous + snapshot.Paragraph.LetterSpacing);
+                cluster.Height = runHeight;
                 previous = current;
             }
             index = endIndex;
@@ -801,7 +809,7 @@ internal sealed class ManagedTextCluster(
     public int End => checked(Start + Length);
     public double X { get; set; } = x;
     public double Width { get; set; } = width;
-    public double Height { get; } = height;
+    public double Height { get; set; } = height;
     public double Baseline { get; } = baseline;
     public TextRunStyle Style { get; } = style;
     public IFont Font { get; } = font;
