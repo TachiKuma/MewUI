@@ -26,6 +26,46 @@ public sealed class SyntaxViewerTests
     }
 
     [TestMethod]
+    public void DefaultStyleAndOverflowScrollBarsMatchReadOnlyTextSurface()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        var previousFactory = Application.DefaultGraphicsFactory;
+        using var factory = new GdiGraphicsFactory();
+        Application.DefaultGraphicsFactory = factory;
+        try
+        {
+            string line = "public static readonly string Value = \"This line extends beyond the visible syntax viewport.\";";
+            var viewer = new SyntaxViewer
+            {
+                Width = 320,
+                Height = 120,
+                Wrap = false,
+                Text = string.Join('\n', Enumerable.Repeat(line, 100))
+            };
+            using var window = HeadlessWindow.Create(320, 120);
+            window.Content = viewer;
+            window.PerformLayout();
+            using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(320, 120, 1));
+            window.RenderFrameToSurface(surface);
+
+            Assert.AreEqual(viewer.ThemeInternal.Palette.ControlBackground, viewer.Background);
+            Assert.AreEqual(viewer.ThemeInternal.Palette.ControlBorder, viewer.BorderBrush);
+            Assert.IsGreaterThan(0, viewer.BorderThickness);
+            Assert.IsTrue(viewer.IsVerticalScrollBarVisible);
+            Assert.IsTrue(viewer.IsHorizontalScrollBarVisible);
+        }
+        finally
+        {
+            Application.DefaultGraphicsFactory = previousFactory;
+        }
+    }
+
+    [TestMethod]
     public void ViewerRunsClassifierAndAdornmentOnlyForMaterializedLines()
     {
         if (!OperatingSystem.IsWindows())

@@ -1,4 +1,5 @@
 using Aprillz.MewUI.Controls;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Gallery;
 
@@ -36,6 +37,21 @@ partial class GalleryView
                     .Bind(TextBlock.TextProperty, box, TextBase.SelectionLengthProperty,
                         (int length) => $"SelectionLength: {length}")
             );
+    }
+
+    private FrameworkElement SyntaxViewerDemo()
+    {
+        var viewer = new SyntaxViewer
+        {
+            Width = 290,
+            Height = 150,
+            Wrap = false,
+            FontFamily = "Consolas",
+            Text = "public sealed class GreetingService\n{\n    public string Create(string name)\n    {\n        return $\"Hello, {name}! This deliberately long source line demonstrates horizontal syntax-view scrolling.\";\n    }\n}"
+        };
+        viewer.Extensions.Classifiers.Add(new GalleryKeywordClassifier());
+        viewer.InvalidateTextView();
+        return viewer;
     }
 
     private FrameworkElement InputsPage() =>
@@ -142,6 +158,11 @@ partial class GalleryView
                 ),
 
                 Card(
+                    "SyntaxViewer",
+                    SyntaxViewerDemo()
+                ),
+
+                Card(
                     "ToolTip / ContextMenu",
                     new StackPanel()
                         .Vertical()
@@ -181,4 +202,25 @@ partial class GalleryView
                          )
                  )
              );
+
+    private sealed class GalleryKeywordClassifier : ITextClassifier
+    {
+        private static readonly string[] Keywords = ["public", "sealed", "class", "string", "return"];
+
+        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
+        {
+            string text = context.Text.ToString();
+            foreach (string keyword in Keywords)
+            {
+                int start = 0;
+                while ((start = text.IndexOf(keyword, start, StringComparison.Ordinal)) >= 0)
+                {
+                    output.Add(new TextPaintSpan(
+                        new TextRange(start, keyword.Length),
+                        Foreground: Color.FromRgb(86, 156, 214)));
+                    start += keyword.Length;
+                }
+            }
+        }
+    }
 }
