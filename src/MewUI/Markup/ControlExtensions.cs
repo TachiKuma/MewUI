@@ -4277,6 +4277,51 @@ public static class ControlExtensions
     #region ProgressBar
 
     /// <summary>
+    /// Sets whether the progress bar shows an indeterminate animation.
+    /// </summary>
+    /// <param name="progressBar">Target progress bar.</param>
+    /// <param name="value">Whether the progress bar is indeterminate.</param>
+    /// <returns>The progress bar for chaining.</returns>
+    public static ProgressBar IsIndeterminate(this ProgressBar progressBar, bool value = true)
+    {
+        progressBar.IsIndeterminate = value;
+        return progressBar;
+    }
+
+    /// <summary>
+    /// Binds the indeterminate state to an observable value.
+    /// </summary>
+    /// <param name="progressBar">Target progress bar.</param>
+    /// <param name="source">Observable source.</param>
+    /// <returns>The progress bar for chaining.</returns>
+    public static ProgressBar BindIsIndeterminate(this ProgressBar progressBar, ObservableValue<bool> source)
+    {
+        progressBar.SetBinding(ProgressBar.IsIndeterminateProperty, source);
+        return progressBar;
+    }
+
+    /// <summary>
+    /// Binds the indeterminate state to a converted observable value.
+    /// </summary>
+    /// <typeparam name="TSource">Source value type.</typeparam>
+    /// <param name="progressBar">Target progress bar.</param>
+    /// <param name="source">Observable source.</param>
+    /// <param name="convert">Source-to-indeterminate-state converter.</param>
+    /// <returns>The progress bar for chaining.</returns>
+    public static ProgressBar BindIsIndeterminate<TSource>(
+        this ProgressBar progressBar,
+        ObservableValue<TSource> source,
+        Func<TSource, bool> convert)
+    {
+        ArgumentNullException.ThrowIfNull(progressBar);
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(convert);
+
+        progressBar.SetBinding(ProgressBar.IsIndeterminateProperty, source, convert, mode: BindingMode.OneWay);
+        return progressBar;
+    }
+
+    /// <summary>
     /// Binds the value to an observable value.
     /// </summary>
     /// <param name="progressBar">Target progress bar.</param>
