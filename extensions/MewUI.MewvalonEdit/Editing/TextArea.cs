@@ -37,19 +37,19 @@ public sealed class TextArea
 
     public void ReplaceSelection(string? text) => _editor.Surface.ReplaceSelection(text);
 
-    private void Attach(NewMultiLineTextBox surface)
+    private void Attach(MultiLineTextBox surface)
     {
         surface.EditingStateChanged += OnEditingStateChanged;
         surface.TextInput += OnTextInput;
     }
 
-    private void Detach(NewMultiLineTextBox surface)
+    private void Detach(MultiLineTextBox surface)
     {
         surface.EditingStateChanged -= OnEditingStateChanged;
         surface.TextInput -= OnTextInput;
     }
 
-    private void OnSurfaceChanged(NewMultiLineTextBox previous, NewMultiLineTextBox current)
+    private void OnSurfaceChanged(MultiLineTextBox previous, MultiLineTextBox current)
     {
         Detach(previous);
         Attach(current);

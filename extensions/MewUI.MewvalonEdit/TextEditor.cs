@@ -13,7 +13,7 @@ namespace Aprillz.MewUI.MewvalonEdit;
 public class TextEditor : ContentControl
 {
     private TextDocument _document;
-    private NewMultiLineTextBox _surface = null!;
+    private MultiLineTextBox _surface = null!;
     private LineNumberMargin _lineNumberMargin = null!;
     private IHighlightingDefinition? _syntaxHighlighting;
     private HighlightingColorizer? _colorizer;
@@ -119,8 +119,8 @@ public class TextEditor : ContentControl
     public double VerticalOffset => _surface.VerticalOffset;
     public double HorizontalOffset => _surface.HorizontalOffset;
 
-    internal NewMultiLineTextBox Surface => _surface;
-    internal event Action<NewMultiLineTextBox, NewMultiLineTextBox>? SurfaceChanged;
+    internal MultiLineTextBox Surface => _surface;
+    internal event Action<MultiLineTextBox, MultiLineTextBox>? SurfaceChanged;
 
     public event EventHandler? TextChanged;
     public event EventHandler? DocumentChanged;
@@ -159,7 +159,7 @@ public class TextEditor : ContentControl
             previous.TextInput -= OnSurfaceTextInput;
         }
 
-        _surface = new NewMultiLineTextBox(_document.CoreDocument)
+        _surface = new MultiLineTextBox(_document.CoreDocument)
         {
             Wrap = previous?.Wrap ?? false,
             IsReadOnly = previous?.IsReadOnly ?? false,
