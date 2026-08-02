@@ -31,7 +31,6 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
             static (self, _, _) => self.OnTextTrimmingChanged());
 
     private IFont? _font;
-    private TextMeasureCache _textMeasureCache;
     private double? _lastWrapMeasureWidth;
     private readonly FormattedTextStore _textStore = new();
 
@@ -87,14 +86,11 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
 
     protected void InvalidateTextLayout()
     {
-        InvalidateTextMeasure();
         _lastWrapMeasureWidth = null;
         _textStore.InvalidateLayout();
     }
 
     private bool HasExplicitLineBreaks => DisplayText.AsSpan().IndexOfAny('\r', '\n') >= 0;
-
-    private void InvalidateTextMeasure() => _textMeasureCache.Invalidate();
 
     private void InvalidateFont()
     {
@@ -105,7 +101,6 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
         _lastFontFamily = null;
         _lastFontSize = 0;
         _lastFontWeight = default;
-        InvalidateTextMeasure();
     }
 
     protected override void OnMewPropertyChanged(MewProperty property)
