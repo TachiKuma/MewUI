@@ -6,8 +6,7 @@ namespace Aprillz.MewUI.Rendering;
 /// </summary>
 public sealed class TextLayout
 {
-    private Action<nint>? _releaseBackendHandle;
-    private nint _backendHandle;
+    private NativeHandleLease? _backendLease;
 
     public required Size MeasuredSize { get; init; }
 
@@ -18,25 +17,39 @@ public sealed class TextLayout
     public required double ContentHeight { get; init; }
 
     /// <summary>Backend-private native handle for rendering.</summary>
-    internal nint BackendHandle => _backendHandle;
+    internal nint BackendHandle => Volatile.Read(ref _backendLease)?.Handle ?? 0;
+
+    internal NativeHandleLease? BackendLease => Volatile.Read(ref _backendLease);
 
     internal void AttachBackendHandle(nint handle, Action<nint> release)
     {
         ArgumentNullException.ThrowIfNull(release);
         ReleaseBackendHandle();
-        _backendHandle = handle;
-        _releaseBackendHandle = release;
+        _backendLease = new NativeHandleLease(handle, release);
     }
 
     internal void ReleaseBackendHandle()
     {
-        nint handle = Interlocked.Exchange(ref _backendHandle, 0);
-        var release = Interlocked.Exchange(ref _releaseBackendHandle, null);
-        if (handle != 0)
-        {
-            release?.Invoke(handle);
-        }
+        Interlocked.Exchange(ref _backendLease, null)?.Release();
     }
 
     ~TextLayout() => ReleaseBackendHandle();
+}
+
+internal sealed class NativeHandleLease(nint handle, Action<nint> release)
+{
+    private nint _handle = handle;
+    private Action<nint>? _release = release;
+
+    public nint Handle => Volatile.Read(ref _handle);
+
+    public void Release()
+    {
+        nint value = Interlocked.Exchange(ref _handle, 0);
+        var callback = Interlocked.Exchange(ref _release, null);
+        if (value != 0)
+        {
+            callback?.Invoke(value);
+        }
+    }
 }

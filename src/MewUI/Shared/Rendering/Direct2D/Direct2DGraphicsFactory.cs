@@ -37,10 +37,7 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
     // the text contrast pinned (see TEXT_CONTRAST). 0 until EnsureInitialized runs.
     private nint _textRenderingParams;
 
-    private readonly TextResourceTracker _textTracker = new()
-    {
-        ReleaseNativeHandle = handle => { if (handle != 0) ComHelpers.Release(handle); }
-    };
+    private readonly TextResourceTracker _textTracker = new();
 
     internal readonly DWriteTextFormatCache TextFormatCache = new();
 
