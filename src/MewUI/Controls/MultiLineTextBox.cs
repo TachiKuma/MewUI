@@ -13,6 +13,11 @@ namespace Aprillz.MewUI.Controls;
 /// </summary>
 public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
 {
+    public static readonly MewProperty<string> TextProperty =
+        MewProperty<string>.Register<MultiLineTextBox>(nameof(Text), string.Empty,
+            MewPropertyOptions.BindsTwoWayByDefault,
+            static (self, _, value) => self.ApplyExternalTextCore(value));
+
     public static readonly MewProperty<bool> WrapProperty =
         MewProperty<bool>.Register<MultiLineTextBox>(nameof(Wrap), true,
             MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
@@ -52,6 +57,14 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
         _verticalScrollBar.ValueChanged += value => SetVerticalOffset(value);
         _horizontalScrollBar.ValueChanged += value => SetHorizontalOffset(value);
     }
+
+    public string Text
+    {
+        get => GetTextSnapshot();
+        set => SetValue(TextProperty, value ?? string.Empty);
+    }
+
+    private protected override MewProperty<string>? TextSyncProperty => TextProperty;
 
     public bool Wrap
     {

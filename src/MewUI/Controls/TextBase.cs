@@ -15,11 +15,6 @@ namespace Aprillz.MewUI.Controls;
 // PasswordBox move onto this base.
 public abstract class TextBase : Control, ITextCompositionClient, ITextCompositionEditor, ITextInputClient
 {
-    public static readonly MewProperty<string> TextProperty =
-        MewProperty<string>.Register<TextBase>(nameof(Text), string.Empty,
-            MewPropertyOptions.BindsTwoWayByDefault,
-            static (self, _, value) => self.ApplyExternalText(value));
-
     public static readonly MewProperty<ImeMode> ImeModeProperty =
         MewProperty<ImeMode>.Register<TextBase>(nameof(ImeMode), ImeMode.Auto);
 
@@ -80,12 +75,12 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         _document.Changed += OnDocumentTextChanged;
         _editor.StateChanged += SyncSelectionMirrors;
 
-        if (_document.TextLength > 0)
+        if (_document.TextLength > 0 && TextSyncProperty is MewProperty<string> mirror)
         {
             _syncingText = true;
             try
             {
-                SetValue(TextProperty, GetTextSnapshot());
+                SetValue(mirror, GetTextSnapshot());
             }
             finally
             {
@@ -95,13 +90,11 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     }
 
     /// <summary>
-    /// Gets or sets the document text. Reads return a cached snapshot rebuilt only after changes.
+    /// The control-declared property mirroring the document text (Text, Password, ...).
+    /// The base never exposes a Text property itself; document changes are committed to this
+    /// mirror so controls decide the name and shape of their text surface.
     /// </summary>
-    public string Text
-    {
-        get => GetTextSnapshot();
-        set => SetValue(TextProperty, value ?? string.Empty);
-    }
+    private protected virtual MewProperty<string>? TextSyncProperty => null;
 
     public int SelectionStart => GetValue(SelectionStartProperty);
     public int SelectionLength => GetValue(SelectionLengthProperty);
@@ -262,7 +255,11 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         }
     }
 
-    private void ApplyExternalText(string value)
+    /// <summary>
+    /// Applies an externally assigned mirror-property value to the document. Control text
+    /// property callbacks route here.
+    /// </summary>
+    private protected void ApplyExternalTextCore(string value)
     {
         if (_syncingText)
         {
@@ -299,13 +296,14 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     {
         _textSnapshotVersion = -1;
         string? currentText = null;
-        if (!_syncingText && (HasPropertyBinding(TextProperty.Id) || TextChanged is not null))
+        var mirror = TextSyncProperty;
+        if (!_syncingText && mirror is not null && (HasPropertyBinding(mirror.Id) || TextChanged is not null))
         {
             _syncingText = true;
             try
             {
                 currentText = _document.ToString();
-                CommitTargetValue(TextProperty, currentText);
+                CommitTargetValue(mirror, currentText);
             }
             finally
             {
