@@ -30,6 +30,47 @@ public sealed class NewMultiLineTextBoxTests
     }
 
     [TestMethod]
+    public void DefaultStyleDrawsEditorChromeAndNoWrapShowsHorizontalScrollBar()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        var previousFactory = Application.DefaultGraphicsFactory;
+        using var factory = new GdiGraphicsFactory();
+        Application.DefaultGraphicsFactory = factory;
+        try
+        {
+            var textBox = new NewMultiLineTextBox
+            {
+                Width = 290,
+                Height = 120,
+                Wrap = false,
+                Text = "The quick brown fox jumps over the lazy dog, then keeps running far beyond the visible editor width."
+            };
+            using var window = HeadlessWindow.Create(290, 120);
+            window.Content = textBox;
+            window.PerformLayout();
+
+            using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(290, 120, 1));
+            window.RenderFrameToSurface(surface);
+
+            Assert.AreEqual(textBox.ThemeInternal.Palette.ControlBackground, textBox.Background);
+            Assert.AreEqual(textBox.ThemeInternal.Palette.ControlBorder, textBox.BorderBrush);
+            Assert.IsGreaterThan(0, textBox.BorderThickness);
+            Assert.IsTrue(textBox.IsHorizontalScrollBarVisible,
+                "Wrap=false did not expose a horizontal scrollbar for overflowing text.");
+            Assert.IsFalse(textBox.IsVerticalScrollBarVisible);
+        }
+        finally
+        {
+            Application.DefaultGraphicsFactory = previousFactory;
+        }
+    }
+
+    [TestMethod]
     public void TextInputCompositionUndoAndRedoUseNewEditingSession()
     {
         var textBox = new NewMultiLineTextBox { Text = "before target after" };
