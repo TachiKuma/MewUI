@@ -64,6 +64,8 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
     private bool _dragSelecting;
     private bool _suppressNewLineInput;
     private bool _suppressTabInput;
+    private string _textSnapshot = string.Empty;
+    private long _textSnapshotVersion = -1;
     private int _compositionStart;
     private int _compositionLength;
     private CompositionAttr[]? _compositionAttributes;
@@ -101,7 +103,7 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
             _syncingText = true;
             try
             {
-                SetValue(TextProperty, _document.ToString());
+                SetValue(TextProperty, GetTextSnapshot());
             }
             finally
             {
@@ -112,7 +114,7 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
 
     public string Text
     {
-        get => GetValue(TextProperty);
+        get => GetTextSnapshot();
         set => SetValue(TextProperty, value ?? string.Empty);
     }
 
@@ -542,7 +544,10 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
         try
         {
             _editor.CommitComposition();
-            _document.SetText(value ?? string.Empty);
+            string normalized = EditableTextDocument.NormalizeNewLines(value ?? string.Empty);
+            _document.SetText(normalized);
+            _textSnapshot = normalized;
+            _textSnapshotVersion = _document.Version;
             _editor.ClearHistory();
             _editor.SetCaret(Math.Min(_editor.CaretPosition, _document.TextLength));
         }
@@ -554,9 +559,10 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
 
     private void OnDocumentChanged(TextChange change)
     {
+        _textSnapshotVersion = -1;
         _view?.Invalidate(change);
         string? currentText = null;
-        if (!_syncingText)
+        if (!_syncingText && (HasPropertyBinding(TextProperty.Id) || TextChanged is not null))
         {
             _syncingText = true;
             try
@@ -576,6 +582,16 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
         }
         InvalidateMeasure();
         InvalidateVisual();
+    }
+
+    private string GetTextSnapshot()
+    {
+        if (_textSnapshotVersion != _document.Version)
+        {
+            _textSnapshot = _document.ToString();
+            _textSnapshotVersion = _document.Version;
+        }
+        return _textSnapshot;
     }
 
     private void OnEditorStateChanged()

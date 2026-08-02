@@ -15,6 +15,7 @@ public sealed class TextViewLayout : ITextViewLayout
     private readonly TextViewExtensionPipeline _extensions;
     private readonly List<TextLineLayout> _materialized = [];
     private LineState[] _states;
+    private readonly LineMetricsIndex _metrics;
     private double _estimatedLineHeight;
     private bool _disposed;
 
@@ -39,6 +40,7 @@ public sealed class TextViewLayout : ITextViewLayout
         _dpi = dpi == 0 ? 96 : dpi;
         _estimatedLineHeight = Math.Max(1, _paragraph.LineHeight ?? defaultStyle.FontSize * 1.25);
         _states = CreateStates(document.LineCount, _estimatedLineHeight);
+        _metrics = new LineMetricsIndex(_states);
         ApplyLineCollapsing();
     }
 
@@ -46,9 +48,9 @@ public sealed class TextViewLayout : ITextViewLayout
 
     public IReadOnlyList<TextLineLayout> MaterializedLines => _materialized;
 
-    public double ExtentWidth => _states.Length == 0 ? 0 : _states.Max(static state => state.ExtentWidth);
+    public double ExtentWidth => _metrics.MaxWidth;
 
-    public double ExtentHeight => _states.Sum(static state => state.Height);
+    public double ExtentHeight => _metrics.TotalHeight;
 
     public void SetViewport(TextViewport viewport)
     {
@@ -73,6 +75,7 @@ public sealed class TextViewLayout : ITextViewLayout
             throw new ArgumentOutOfRangeException(nameof(change));
         }
 
+        bool lineCountChanged = _states.Length != _document.LineCount;
         EnsureStateCount();
         int safeOffset = Math.Clamp(change.Offset, 0, _document.TextLength);
         int firstLine = _document.LineCount == 0
@@ -80,19 +83,24 @@ public sealed class TextViewLayout : ITextViewLayout
             : _document.GetLineByOffset(safeOffset).LineNumber;
         firstLine = Math.Clamp(firstLine, 0, Math.Max(0, _states.Length - 1));
 
-        for (int i = firstLine; i < _states.Length; i++)
+        int lastLine = lineCountChanged
+            ? _states.Length - 1
+            : _document.GetLineByOffset(Math.Clamp(
+                change.Offset + change.InsertedLength,
+                0,
+                _document.TextLength)).LineNumber;
+        for (int i = firstLine; i <= lastLine; i++)
         {
             var state = _states[i];
             _engine.ManagedCache.ReleaseOwner(state.Owner);
             state.Layout = null;
-            state.Version = -1;
-            state.Height = _estimatedLineHeight;
+            state.Dirty = true;
             state.Virtual = null;
             state.VirtualNoWrap = null;
             state.SliceStart = -1;
             state.SliceLength = -1;
             state.Width = -1;
-            state.ExtentWidth = 0;
+            SetStateMetrics(i, _estimatedLineHeight, 0);
         }
 
         MaterializeViewport();
@@ -190,14 +198,14 @@ public sealed class TextViewLayout : ITextViewLayout
         var state = _states[lineNumber];
         var source = _document.GetLineByNumber(lineNumber);
         if (ShouldVirtualizeWrap(source) &&
-            (state.Virtual is null || state.Version != _document.Version || state.Width != Viewport.Width))
+            (state.Virtual is null || state.Dirty || state.SourceLength != source.Length || state.Width != Viewport.Width))
         {
-            InitializeVirtualWrapState(state, source);
+            InitializeVirtualWrapState(lineNumber, state, source);
         }
         else if (ShouldVirtualizeNoWrap(source) &&
-                 (state.VirtualNoWrap is null || state.Version != _document.Version))
+                 (state.VirtualNoWrap is null || state.Dirty || state.SourceLength != source.Length))
         {
-            InitializeVirtualNoWrapState(state, source);
+            InitializeVirtualNoWrapState(lineNumber, state, source);
         }
 
         int sliceStart = 0;
@@ -237,12 +245,19 @@ public sealed class TextViewLayout : ITextViewLayout
             layoutX = noWrapState.GetXForOffset(sliceStart);
         }
 
-        if (state.Layout is not null && state.Version == _document.Version &&
+        if (state.Layout is not null && !state.Dirty &&
+            state.SourceOffset == source.Offset && state.SourceLength == source.Length &&
             state.Width == Viewport.Width &&
             state.SliceStart == sliceStart && state.SliceLength == sliceLength)
         {
             state.Layout.SetDocumentPosition(layoutX, layoutY);
             return state.Layout;
+        }
+
+        if (state.Layout is not null)
+        {
+            _engine.ManagedCache.ReleaseOwner(state.Owner);
+            state.Layout = null;
         }
 
         string sourceText = _document.GetText(source.Offset + sliceStart, sliceLength);
@@ -314,29 +329,32 @@ public sealed class TextViewLayout : ITextViewLayout
 
         state.Layout = layout;
         state.Version = _document.Version;
+        state.Dirty = false;
+        state.SourceOffset = source.Offset;
+        state.SourceLength = source.Length;
         state.Width = Viewport.Width;
         state.SliceStart = sliceStart;
         state.SliceLength = sliceLength;
         if (state.Virtual is { } activeVirtual)
         {
             activeVirtual.Refine(sliceLength, layout.VisualLines.Count, layout.Height);
-            state.Height = activeVirtual.EstimatedHeight;
-            state.ExtentWidth = Math.Max(state.ExtentWidth,
-                layout.VisualLines.Select(static line => line.Bounds.Right).DefaultIfEmpty(0).Max());
+            SetStateMetrics(
+                lineNumber,
+                activeVirtual.EstimatedHeight,
+                Math.Max(state.ExtentWidth,
+                    layout.VisualLines.Select(static line => line.Bounds.Right).DefaultIfEmpty(0).Max()));
         }
         else if (state.VirtualNoWrap is { } activeNoWrap)
         {
             activeNoWrap.Refine(sliceLength, textLayout.MeasuredSize.Width);
-            state.Height = Math.Max(1, textLayout.ContentHeight);
-            state.ExtentWidth = activeNoWrap.EstimatedWidth;
+            SetStateMetrics(lineNumber, Math.Max(1, textLayout.ContentHeight), activeNoWrap.EstimatedWidth);
         }
         else
         {
-            state.Height = Math.Max(1, layout.Height);
-            state.ExtentWidth = layout.VisualLines
-                .Select(static line => line.Bounds.Right)
-                .DefaultIfEmpty(0)
-                .Max();
+            SetStateMetrics(
+                lineNumber,
+                Math.Max(1, layout.Height),
+                layout.VisualLines.Select(static line => line.Bounds.Right).DefaultIfEmpty(0).Max());
             _estimatedLineHeight = Math.Max(1, (_estimatedLineHeight * 7 + state.Height) / 8);
         }
         return layout;
@@ -354,7 +372,7 @@ public sealed class TextViewLayout : ITextViewLayout
            double.IsFinite(Viewport.Width) &&
            Viewport.Width > 0;
 
-    private void InitializeVirtualWrapState(LineState state, IReadOnlyDocumentLine source)
+    private void InitializeVirtualWrapState(int lineNumber, LineState state, IReadOnlyDocumentLine source)
     {
         state.Virtual = null;
         state.VirtualNoWrap = null;
@@ -375,13 +393,14 @@ public sealed class TextViewLayout : ITextViewLayout
         int rows = Math.Max(1, sampleLayout.Lines.Count);
         double rowHeight = Math.Max(1, sampleLayout.ContentHeight / rows);
         state.Virtual = new VirtualWrapState(source.Length, sampleLength, rows, rowHeight);
-        state.Height = state.Virtual.EstimatedHeight;
-        state.ExtentWidth = Viewport.Width;
+        SetStateMetrics(lineNumber, state.Virtual.EstimatedHeight, Viewport.Width);
         state.Version = _document.Version;
+        state.SourceOffset = source.Offset;
+        state.SourceLength = source.Length;
         state.Width = Viewport.Width;
     }
 
-    private void InitializeVirtualNoWrapState(LineState state, IReadOnlyDocumentLine source)
+    private void InitializeVirtualNoWrapState(int lineNumber, LineState state, IReadOnlyDocumentLine source)
     {
         state.Virtual = null;
         state.VirtualNoWrap = null;
@@ -404,9 +423,10 @@ public sealed class TextViewLayout : ITextViewLayout
             : Math.Max(0.01, sampleLayout.MeasuredSize.Width / sampleLength);
         double rowHeight = Math.Max(1, sampleLayout.ContentHeight);
         state.VirtualNoWrap = new VirtualNoWrapState(source.Length, averageWidth);
-        state.Height = rowHeight;
-        state.ExtentWidth = state.VirtualNoWrap.EstimatedWidth;
+        SetStateMetrics(lineNumber, rowHeight, state.VirtualNoWrap.EstimatedWidth);
         state.Version = _document.Version;
+        state.SourceOffset = source.Offset;
+        state.SourceLength = source.Length;
         state.Width = Viewport.Width;
     }
 
@@ -426,29 +446,10 @@ public sealed class TextViewLayout : ITextViewLayout
     }
 
     private int FindLineByY(double documentY)
-    {
-        double y = 0;
-        for (int i = 0; i < _states.Length; i++)
-        {
-            double next = y + _states[i].Height;
-            if (documentY < next)
-            {
-                return i;
-            }
-            y = next;
-        }
-        return Math.Max(0, _states.Length - 1);
-    }
+        => _metrics.FindLineByY(documentY);
 
     private double GetLineY(int lineNumber)
-    {
-        double y = 0;
-        for (int i = 0; i < lineNumber; i++)
-        {
-            y += _states[i].Height;
-        }
-        return y;
-    }
+        => _metrics.GetLineY(lineNumber);
 
     private void EnsureStateCount()
     {
@@ -473,6 +474,7 @@ public sealed class TextViewLayout : ITextViewLayout
             }
         }
         _states = replacement;
+        _metrics.Reset(_states);
         ApplyLineCollapsing();
     }
 
@@ -490,14 +492,21 @@ public sealed class TextViewLayout : ITextViewLayout
             {
                 _engine.ManagedCache.ReleaseOwner(state.Owner);
                 state.Layout = null;
-                state.Height = 0;
-                state.ExtentWidth = 0;
+                SetStateMetrics(lineNumber, 0, 0);
             }
             else if (state.Height <= 0)
             {
-                state.Height = _estimatedLineHeight;
+                SetStateMetrics(lineNumber, _estimatedLineHeight, state.ExtentWidth);
             }
         }
+    }
+
+    private void SetStateMetrics(int lineNumber, double height, double width)
+    {
+        var state = _states[lineNumber];
+        state.Height = height;
+        state.ExtentWidth = width;
+        _metrics.Update(lineNumber, height, width);
     }
 
     private int FindVisibleCaretLine(int lineNumber)
@@ -544,6 +553,9 @@ public sealed class TextViewLayout : ITextViewLayout
     {
         public object Owner { get; } = new();
         public long Version { get; set; } = -1;
+        public bool Dirty { get; set; } = true;
+        public int SourceOffset { get; set; } = -1;
+        public int SourceLength { get; set; } = -1;
         public double Height { get; set; } = height;
         public TextLineLayout? Layout { get; set; }
         public VirtualWrapState? Virtual { get; set; }
@@ -610,6 +622,87 @@ public sealed class TextViewLayout : ITextViewLayout
             }
             double observed = measuredWidth / materializedLength;
             _averageCharacterWidth = Math.Max(0.01, _averageCharacterWidth * 0.75 + observed * 0.25);
+        }
+    }
+
+    private sealed class LineMetricsIndex
+    {
+        private double[] _heightTree = [];
+        private double[] _widthTree = [];
+        private int _leafBase;
+        private int _count;
+
+        public LineMetricsIndex(LineState[] states) => Reset(states);
+
+        public double TotalHeight => _count == 0 ? 0 : _heightTree[1];
+        public double MaxWidth => _count == 0 ? 0 : _widthTree[1];
+
+        public void Reset(LineState[] states)
+        {
+            _count = states.Length;
+            _leafBase = 1;
+            while (_leafBase < Math.Max(1, _count)) _leafBase <<= 1;
+            _heightTree = new double[_leafBase * 2];
+            _widthTree = new double[_leafBase * 2];
+            for (int index = 0; index < states.Length; index++)
+            {
+                _heightTree[_leafBase + index] = states[index].Height;
+                _widthTree[_leafBase + index] = states[index].ExtentWidth;
+            }
+            for (int node = _leafBase - 1; node > 0; node--)
+            {
+                _heightTree[node] = _heightTree[node * 2] + _heightTree[node * 2 + 1];
+                _widthTree[node] = Math.Max(_widthTree[node * 2], _widthTree[node * 2 + 1]);
+            }
+        }
+
+        public void Update(int index, double height, double width)
+        {
+            int node = _leafBase + index;
+            _heightTree[node] = height;
+            _widthTree[node] = width;
+            for (node >>= 1; node > 0; node >>= 1)
+            {
+                _heightTree[node] = _heightTree[node * 2] + _heightTree[node * 2 + 1];
+                _widthTree[node] = Math.Max(_widthTree[node * 2], _widthTree[node * 2 + 1]);
+            }
+        }
+
+        public double GetLineY(int lineNumber)
+        {
+            int left = _leafBase;
+            int right = _leafBase + Math.Clamp(lineNumber, 0, _count);
+            double sum = 0;
+            while (left < right)
+            {
+                if ((left & 1) != 0) sum += _heightTree[left++];
+                if ((right & 1) != 0) sum += _heightTree[--right];
+                left >>= 1;
+                right >>= 1;
+            }
+            return sum;
+        }
+
+        public int FindLineByY(double y)
+        {
+            if (_count == 0) return 0;
+            y = Math.Max(0, y);
+            if (y >= TotalHeight) return _count - 1;
+            int node = 1;
+            while (node < _leafBase)
+            {
+                int left = node * 2;
+                if (y < _heightTree[left])
+                {
+                    node = left;
+                }
+                else
+                {
+                    y -= _heightTree[left];
+                    node = left + 1;
+                }
+            }
+            return Math.Min(_count - 1, node - _leafBase);
         }
     }
 }

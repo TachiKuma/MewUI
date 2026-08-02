@@ -1,6 +1,7 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.Rendering.Gdi;
 using Aprillz.MewUI.Text;
+using Aprillz.MewUI.Text.Editing;
 using System.Diagnostics;
 
 namespace MewUI.Test.Rendering;
@@ -38,6 +39,34 @@ public sealed class TextViewLayoutTests
         Assert.IsGreaterThanOrEqualTo(1, factory.TextEngine.ManagedCache.Count);
         view.Dispose();
         Assert.AreEqual(0, factory.TextEngine.ManagedCache.Count);
+    }
+
+    [TestMethod]
+    [Timeout(30_000, CooperativeCancellation = true)]
+    public void RepeatedBottomViewportLookupDoesNotScanEveryLogicalLine()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        string text = string.Join('\n', Enumerable.Range(0, 100_000).Select(static index => $"line {index}"));
+        var document = new EditableTextDocument(text);
+        using var factory = new GdiGraphicsFactory();
+        using var view = CreateView(factory, document, width: 240);
+        double bottom = Math.Max(0, view.ExtentHeight - 100);
+        view.SetViewport(new TextViewport(240, 100, VerticalOffset: bottom));
+
+        var stopwatch = Stopwatch.StartNew();
+        for (int iteration = 0; iteration < 1_000; iteration++)
+        {
+            view.SetViewport(new TextViewport(240, 100, VerticalOffset: bottom));
+        }
+
+        Assert.IsLessThan(500L, stopwatch.ElapsedMilliseconds,
+            $"Repeated viewport lookup took {stopwatch.ElapsedMilliseconds}ms, indicating linear line scans.");
+        Assert.IsGreaterThan(99_000, view.MaterializedLines[0].LogicalLine.LineNumber);
     }
 
     [TestMethod]
