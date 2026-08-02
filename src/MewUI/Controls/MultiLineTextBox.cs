@@ -37,9 +37,6 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
     public static readonly MewProperty<int> MaxLengthProperty =
         MewProperty<int>.Register<MultiLineTextBox>(nameof(MaxLength), 0);
 
-    public static readonly MewProperty<ImeMode> ImeModeProperty =
-        MewProperty<ImeMode>.Register<MultiLineTextBox>(nameof(ImeMode), ImeMode.Auto);
-
     private static readonly MewPropertyKey<int> SelectionStartPropertyKey =
         MewProperty<int>.RegisterReadOnly<MultiLineTextBox>(nameof(SelectionStart), 0);
 
@@ -146,12 +143,6 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
     {
         get => GetValue(MaxLengthProperty);
         set => SetValue(MaxLengthProperty, Math.Max(0, value));
-    }
-
-    public ImeMode ImeMode
-    {
-        get => GetValue(ImeModeProperty);
-        set => SetValue(ImeModeProperty, value);
     }
 
     public int CaretPosition
