@@ -23,6 +23,11 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
             MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
             static (self, _, value) => self.OnWrapChanged(value));
 
+    public static readonly MewProperty<int> TabSizeProperty =
+        MewProperty<int>.Register<MultiLineTextBox>(nameof(TabSize), 4,
+            MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
+            static (self, _, _) => self.ResetView());
+
     private readonly ScrollBar _verticalScrollBar;
     private readonly ScrollBar _horizontalScrollBar;
     private TextViewLayout? _view;
@@ -74,6 +79,13 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     {
         get => GetValue(WrapProperty);
         set => SetValue(WrapProperty, value);
+    }
+
+    /// <summary>Tab width in space characters.</summary>
+    public int TabSize
+    {
+        get => GetValue(TabSizeProperty);
+        set => SetValue(TabSizeProperty, value);
     }
 
     public double HorizontalOffset => _horizontalOffset;
@@ -276,6 +288,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
             new TextParagraphStyle
             {
                 Wrapping = Wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+                TabSize = TabSize,
                 Culture = System.Globalization.CultureInfo.CurrentUICulture
             },
             Extensions,
@@ -348,6 +361,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
             {
                 MaxWidth = width,
                 Wrapping = wrapping,
+                TabSize = TabSize,
                 Culture = System.Globalization.CultureInfo.CurrentUICulture
             }
         };

@@ -17,6 +17,11 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
             MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
             static (self, _, _) => self.ResetView());
 
+    public static readonly MewProperty<int> TabSizeProperty =
+        MewProperty<int>.Register<SyntaxViewer>(nameof(TabSize), 4,
+            MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
+            static (self, _, _) => self.ResetView());
+
     private StringTextDocument _document = new(string.Empty);
     private TextViewLayout? _view;
     private IGraphicsFactory? _viewFactory;
@@ -53,6 +58,13 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
     {
         get => GetValue(WrapProperty);
         set => SetValue(WrapProperty, value);
+    }
+
+    /// <summary>Tab width in space characters.</summary>
+    public int TabSize
+    {
+        get => GetValue(TabSizeProperty);
+        set => SetValue(TabSizeProperty, value);
     }
 
     public TextViewExtensionPipeline Extensions { get; }
@@ -198,6 +210,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
             new TextParagraphStyle
             {
                 Wrapping = Wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+                TabSize = TabSize,
                 Culture = System.Globalization.CultureInfo.CurrentUICulture
             },
             Extensions,
