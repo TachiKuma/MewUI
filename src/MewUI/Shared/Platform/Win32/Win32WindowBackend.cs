@@ -2595,7 +2595,7 @@ internal sealed class Win32WindowBackend : IWindowBackend
             double dpiScale = GetDpiForWindow(Handle) / 96.0;
 
             // Composition window follows current caret (end of preedit text).
-            int caretPos = (client is Controls.LegacyTextBase tb) ? tb.CaretPosition : client.CompositionStartIndex;
+            int caretPos = (client is ITextCompositionEditor editor) ? editor.CaretPosition : client.CompositionStartIndex;
             var caretRect = client.GetCharRectInWindow(caretPos);
 
             // If layout hasn't been performed yet, use a fallback height to avoid skipping IME positioning entirely.

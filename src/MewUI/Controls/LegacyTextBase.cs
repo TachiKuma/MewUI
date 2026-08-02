@@ -7,7 +7,7 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// Base class for text input controls.
 /// </summary>
-public abstract partial class LegacyTextBase : Control, ITextCompositionClient, ITextInputClient
+public abstract partial class LegacyTextBase : Control, ITextCompositionClient, ITextCompositionEditor, ITextInputClient
 {
     public event Action<TextInputEventArgs>? TextInput;
 
@@ -230,6 +230,18 @@ public abstract partial class LegacyTextBase : Control, ITextCompositionClient, 
     bool ITextCompositionClient.IsComposing => _isTextComposing;
 
     int ITextCompositionClient.CompositionStartIndex => _compositionStart;
+
+    int ITextCompositionEditor.CompositionLength => _compositionLength;
+
+    (int Start, int End) ITextCompositionEditor.SelectionRange => SelectionRange;
+
+    void ITextCompositionEditor.SetSelectionRangeForPlatform(int start, int end) => SetSelectionRangeForPlatform(start, end);
+
+    int ITextCompositionEditor.TextLength => TextLengthInternal;
+
+    string ITextCompositionEditor.GetTextSubstring(int start, int length) => GetTextSubstringInternal(start, length);
+
+    void ITextCompositionEditor.CommitActiveComposition() => CommitTextCompositionInternal();
 
     protected internal bool IsComposing => _isTextComposing;
 

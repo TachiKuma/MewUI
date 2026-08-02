@@ -1856,11 +1856,11 @@ internal sealed class MacOSWindowBackend : IWindowBackend
             // If the platform provides a replacement range, align our selection/caret so the IME composition
             // replaces the correct portion of the document.
             // (AppKit's NSRange is UTF-16 based, which matches .NET string indexing.)
-            if (replacementRange.location != NSNotFound && _window.FocusManager.FocusedElement is Controls.LegacyTextBase tb2)
+            if (replacementRange.location != NSNotFound && _window.FocusManager.FocusedElement is ITextCompositionEditor markEditor)
             {
                 int start = (int)replacementRange.location;
                 int end = start + (int)replacementRange.length;
-                tb2.SetSelectionRangeForPlatform(start, end);
+                markEditor.SetSelectionRangeForPlatform(start, end);
             }
 
             _imeHasMarkedText = true;
@@ -1890,24 +1890,24 @@ internal sealed class MacOSWindowBackend : IWindowBackend
             }
         }
 
-        if (_window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
+        if (_window.FocusManager.FocusedElement is ITextCompositionEditor editor)
         {
-            ImeLogger.Write($"  LegacyTextBase composingStart={tb.CompositionStartIndex} composingLen={tb.CompositionLength} caret={tb.CaretPosition} textLen={tb.TextLengthInternal}");
+            ImeLogger.Write($"  editor composingStart={editor.CompositionStartIndex} composingLen={editor.CompositionLength} caret={editor.CaretPosition} textLen={editor.TextLength}");
             try
             {
-                int textLen = tb.TextLengthInternal;
-                int compStart = Math.Max(0, tb.CompositionStartIndex);
-                int compLen = Math.Max(0, tb.CompositionLength);
+                int textLen = editor.TextLength;
+                int compStart = Math.Max(0, editor.CompositionStartIndex);
+                int compLen = Math.Max(0, editor.CompositionLength);
 
                 string compText = (compLen > 0 && compStart + compLen <= textLen)
-                    ? tb.GetTextSubstringInternal(compStart, compLen)
+                    ? editor.GetTextSubstring(compStart, compLen)
                     : string.Empty;
 
                 int tailLen = Math.Min(32, textLen);
-                string tail = tailLen > 0 ? tb.GetTextSubstringInternal(textLen - tailLen, tailLen) : string.Empty;
+                string tail = tailLen > 0 ? editor.GetTextSubstring(textLen - tailLen, tailLen) : string.Empty;
 
-                var (selStart, selEnd) = tb.SelectionRange;
-                ImeLogger.Write($"    LegacyTextBase selection=({selStart},{selEnd}) compText='{Truncate(compText)}' tail='{Truncate(tail)}'");
+                var (selStart, selEnd) = editor.SelectionRange;
+                ImeLogger.Write($"    editor selection=({selStart},{selEnd}) compText='{Truncate(compText)}' tail='{Truncate(tail)}'");
             }
             catch
             {
@@ -1926,13 +1926,13 @@ internal sealed class MacOSWindowBackend : IWindowBackend
         // unmarkText means "accept the current preedit as committed text".
         // Use CommitTextCompositionInternal (which records undo) instead of
         // EndTextCompositionInternal (which removes the text and loses it).
-        if (_window.FocusManager.FocusedElement is Controls.LegacyTextBase tb && tb.IsComposing)
+        if (_window.FocusManager.FocusedElement is ITextCompositionEditor { IsComposing: true } unmarkEditor)
         {
             var endArgs = new TextCompositionEventArgs(_imeMarkedText);
             _window.RaisePreviewTextCompositionEnd(endArgs);
             if (!endArgs.Handled)
             {
-                tb.CommitTextCompositionInternal();
+                unmarkEditor.CommitActiveComposition();
             }
         }
         else
@@ -1966,7 +1966,7 @@ internal sealed class MacOSWindowBackend : IWindowBackend
         }
 
         // IME commit: AppKit typically calls insertText while we still have marked text (setMarkedText path).
-        if (_imeHasMarkedText && _window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
+        if (_imeHasMarkedText && _window.FocusManager.FocusedElement is ITextCompositionEditor insertEditor)
         {
             if (!string.Equals(text, _imeMarkedText, StringComparison.Ordinal))
             {
@@ -1977,7 +1977,7 @@ internal sealed class MacOSWindowBackend : IWindowBackend
             _window.RaisePreviewTextCompositionEnd(endArgs);
             if (!endArgs.Handled)
             {
-                tb.CommitTextCompositionInternal();
+                insertEditor.CommitActiveComposition();
             }
 
             _imeHasMarkedText = false;
@@ -1989,11 +1989,11 @@ internal sealed class MacOSWindowBackend : IWindowBackend
 
         // If the platform provides a replacement range, align our selection/caret so the inserted text
         // replaces the intended portion of the document.
-        if (replacementRange.location != NSNotFound && _window.FocusManager.FocusedElement is Controls.LegacyTextBase tbReplace)
+        if (replacementRange.location != NSNotFound && _window.FocusManager.FocusedElement is ITextCompositionEditor replaceEditor)
         {
             int start = (int)replacementRange.location;
             int end = start + (int)replacementRange.length;
-            tbReplace.SetSelectionRangeForPlatform(start, end);
+            replaceEditor.SetSelectionRangeForPlatform(start, end);
         }
 
         // Cocoa routes plain text input through insertText during keyDown handling.
@@ -2049,13 +2049,13 @@ internal sealed class MacOSWindowBackend : IWindowBackend
 
         _forwardKeyToAppThisKeyDown = true;
 
-        // If we are in preedit (setMarkedText path), commit the current composition so the LegacyTextBase
+        // If we are in preedit (setMarkedText path), commit the current composition so the editor
         // undo stack stays consistent, then reset IME state for key-up reporting.
         if (_imeHasMarkedText && _imeState == ImeState.Preedit)
         {
-            if (_window.FocusManager.FocusedElement is Controls.LegacyTextBase tb && tb.IsComposing)
+            if (_window.FocusManager.FocusedElement is ITextCompositionEditor { IsComposing: true } keyEditor)
             {
-                tb.CommitTextCompositionInternal();
+                keyEditor.CommitActiveComposition();
             }
             _imeHasMarkedText = false;
             _imeMarkedText = string.Empty;

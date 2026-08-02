@@ -11,7 +11,7 @@ namespace Aprillz.MewUI.Controls;
 /// Multi-line editor built on the extensible text view engine.
 /// It does not use the legacy Controls.Text formatter, view, or measurement caches.
 /// </summary>
-public sealed class MultiLineTextBox : Control, ITextCompositionClient, ITextInputClient, IVisualTreeHost
+public sealed class MultiLineTextBox : Control, ITextCompositionClient, ITextCompositionEditor, ITextInputClient, IVisualTreeHost
 {
     public static readonly MewProperty<string> TextProperty =
         MewProperty<string>.Register<MultiLineTextBox>(nameof(Text), string.Empty,
@@ -207,6 +207,21 @@ public sealed class MultiLineTextBox : Control, ITextCompositionClient, ITextInp
 
     bool ITextCompositionClient.IsComposing => _editor.IsComposing;
     int ITextCompositionClient.CompositionStartIndex => _compositionStart;
+
+    int ITextCompositionEditor.CompositionLength => _compositionLength;
+    (int Start, int End) ITextCompositionEditor.SelectionRange => (SelectionStart, SelectionStart + SelectionLength);
+    void ITextCompositionEditor.SetSelectionRangeForPlatform(int start, int end) => Select(Math.Min(start, end), Math.Abs(end - start));
+    int ITextCompositionEditor.TextLength => _document.TextLength;
+    string ITextCompositionEditor.GetTextSubstring(int start, int length) => _document.GetText(start, length);
+
+    void ITextCompositionEditor.CommitActiveComposition()
+    {
+        if (!_editor.IsComposing) return;
+        _editor.CommitComposition();
+        _compositionLength = 0;
+        _compositionAttributes = null;
+        EnsureCaretVisible();
+    }
 
     public void Select(int start, int length) => _editor.SetSelection(start, length);
     public void SelectAll() => _editor.SelectAll();

@@ -1435,24 +1435,24 @@ internal static unsafe class MacOSWindowInterop
                 return new NSRange(NSNotFound, 0);
             }
 
-            if (backend.Window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
+            if (backend.Window.FocusManager.FocusedElement is ITextCompositionEditor editor)
             {
                 // NSTextInputClient expects ranges in the document's coordinates.
-                // LegacyTextBase maintains the composition range inside the document.
-                int start = Math.Max(0, tb.CompositionStartIndex);
-                int len = Math.Max(0, tb.CompositionLength);
+                // The editor maintains the composition range inside the document.
+                int start = Math.Max(0, editor.CompositionStartIndex);
+                int len = Math.Max(0, editor.CompositionLength);
                 if (len == 0)
                 {
-                    // Composition started but LegacyTextBase may not have received the first update yet.
+                    // Composition started but the editor may not have received the first update yet.
                     // Report the current marked string length so IME treats the range as active.
                     len = backend.ImeMarkedText?.Length ?? 0;
                 }
                 var r = new NSRange((ulong)start, (ulong)len);
-                MacOSWindowBackend.ImeNativeLogger.Write($"objc markedRange view=0x{self:x} -> ({r.location},{r.length}) [LegacyTextBase]");
+                MacOSWindowBackend.ImeNativeLogger.Write($"objc markedRange view=0x{self:x} -> ({r.location},{r.length}) [editor]");
                 return r;
             }
 
-            // Fallback to a minimal "active marked range" when there is no focused LegacyTextBase.
+            // Fallback to a minimal "active marked range" when there is no focused composition editor.
             var rr = new NSRange(0, (ulong)(backend.ImeMarkedText?.Length ?? 0));
             MacOSWindowBackend.ImeNativeLogger.Write($"objc markedRange view=0x{self:x} -> ({rr.location},{rr.length}) [fallback]");
             return rr;
@@ -1474,13 +1474,13 @@ internal static unsafe class MacOSWindowInterop
         {
             if (TryGetActiveTextInputTarget(self, out var backend))
             {
-                if (backend.Window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
+                if (backend.Window.FocusManager.FocusedElement is ITextCompositionEditor editor)
                 {
-                    var (s, e) = tb.SelectionRange;
-                    int start = Math.Min(s, e);
-                    int end = Math.Max(s, e);
+                    var (selectionStart, selectionEnd) = editor.SelectionRange;
+                    int start = Math.Min(selectionStart, selectionEnd);
+                    int end = Math.Max(selectionStart, selectionEnd);
                     var r = new NSRange((ulong)Math.Max(0, start), (ulong)Math.Max(0, end - start));
-                    MacOSWindowBackend.ImeNativeLogger.Write($"objc selectedRange view=0x{self:x} -> ({r.location},{r.length}) [LegacyTextBase]");
+                    MacOSWindowBackend.ImeNativeLogger.Write($"objc selectedRange view=0x{self:x} -> ({r.location},{r.length}) [editor]");
                     return r;
                 }
 
@@ -1555,10 +1555,10 @@ internal static unsafe class MacOSWindowInterop
             MacOSWindowBackend.ImeNativeLogger.Write($"objc attributedSubstringForProposedRange view=0x{self:x} proposed=({proposedRange.location},{proposedRange.length}) actualRangePtr=0x{actualRange:x}");
             string text;
             int textLen;
-            if (backend.Window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
+            if (backend.Window.FocusManager.FocusedElement is ITextCompositionEditor editor)
             {
-                textLen = tb.TextLengthInternal;
-                text = textLen > 0 ? tb.GetTextSubstringInternal(0, textLen) : string.Empty;
+                textLen = editor.TextLength;
+                text = textLen > 0 ? editor.GetTextSubstring(0, textLen) : string.Empty;
             }
             else
             {
