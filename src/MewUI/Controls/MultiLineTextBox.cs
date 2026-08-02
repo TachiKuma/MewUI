@@ -601,10 +601,15 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
 
     private void ResetView()
     {
+        _horizontalOffset = 0;
+        RebuildView();
+    }
+
+    private void RebuildView()
+    {
         _view?.Dispose();
         _view = null;
         _viewFactory = null;
-        _horizontalOffset = 0;
         InvalidateMeasure();
         InvalidateVisual();
     }
@@ -630,6 +635,16 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     {
         base.OnDpiChanged(oldDpi, newDpi);
         ResetView();
+    }
+
+    protected override void OnThemeChanged(Theme oldTheme, Theme newTheme)
+    {
+        base.OnThemeChanged(oldTheme, newTheme);
+
+        // Classifier paint spans are cached per materialized line; theme-dependent
+        // classifiers must re-run against the new theme without losing scroll position.
+        Extensions.Revision++;
+        RebuildView();
     }
 
     protected override void OnDispose()

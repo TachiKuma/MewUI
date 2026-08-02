@@ -292,6 +292,16 @@ public abstract class SingleLineTextBase : TextBase
         ResetView();
     }
 
+    protected override void OnThemeChanged(Theme oldTheme, Theme newTheme)
+    {
+        base.OnThemeChanged(oldTheme, newTheme);
+
+        // Classifier paint spans are cached per materialized line; theme-dependent
+        // classifiers must re-run against the new theme without losing scroll position.
+        _extensions.Revision++;
+        RebuildView();
+    }
+
     protected override void OnDispose()
     {
         _view?.Dispose();
@@ -467,10 +477,15 @@ public abstract class SingleLineTextBase : TextBase
 
     private void ResetView()
     {
+        _horizontalOffset = 0;
+        RebuildView();
+    }
+
+    private void RebuildView()
+    {
         _view?.Dispose();
         _view = null;
         _viewFactory = null;
-        _horizontalOffset = 0;
         InvalidateMeasure();
         InvalidateVisual();
     }
