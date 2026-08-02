@@ -160,6 +160,8 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
         => _view?.MaterializedLines.Sum(static line => line.LogicalLine.Length) ?? 0;
     internal int MaterializedVisualLineCount
         => _view?.MaterializedLines.Sum(static line => line.VisualLines.Count) ?? 0;
+    internal bool IsVerticalScrollBarVisible => _verticalScrollBar.IsVisible;
+    internal bool IsHorizontalScrollBarVisible => _horizontalScrollBar.IsVisible;
 
     public event Action<string>? TextChanged;
     public event Action<bool>? WrapChanged;

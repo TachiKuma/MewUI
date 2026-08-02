@@ -16,7 +16,7 @@ partial class GalleryView
             .Height(120)
             .Width(290)
             .Wrap(false)
-            .Text("The quick brown fox jumps over the lazy dog.\n\n- Wrap supported\n- Selection supported\n- Scroll supported");
+            .Text("The quick brown fox jumps over the lazy dog, then keeps running far beyond the visible editor width.\n\n- Wrap supported\n- Selection supported\n- Scroll supported");
 
         return new StackPanel()
             .Vertical()

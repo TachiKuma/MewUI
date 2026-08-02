@@ -62,6 +62,7 @@ public static class DefaultStyles
             [typeof(ButtonGroup)] = CreateButtonGroupStyle,
             [typeof(MenuBar)] = CreateMenuBarStyle,
             [typeof(TextBase)] = CreateTextBaseStyle,
+            [typeof(NewMultiLineTextBox)] = CreateNewMultiLineTextBoxStyle,
             [typeof(CheckBox)] = CreateCheckBoxStyle,
             [typeof(RadioButton)] = CreateRadioButtonStyle,
             [typeof(ToggleSwitch)] = CreateToggleSwitchStyle,
@@ -830,8 +831,14 @@ public static class DefaultStyles
             ],
         };
 
-    private static Style CreateTextBaseStyle() =>
-        new(typeof(TextBase))
+    private static Style CreateTextBaseStyle()
+        => CreateTextInputStyle(typeof(TextBase));
+
+    private static Style CreateNewMultiLineTextBoxStyle()
+        => CreateTextInputStyle(typeof(NewMultiLineTextBox));
+
+    private static Style CreateTextInputStyle(Type targetType) =>
+        new(targetType)
         {
             Transitions = ColorTransitions,
             Setters =
