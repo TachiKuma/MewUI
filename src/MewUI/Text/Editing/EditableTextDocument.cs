@@ -98,17 +98,17 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
     public void SetText(string? text)
     {
         string normalized = NormalizeNewLines(text ?? string.Empty);
-        string previous = _text.ToString();
-        if (previous == normalized)
+        if (ContentEquals(normalized))
         {
             return;
         }
 
+        int previousLength = _text.Length;
         _text.Clear();
         _text.Append(normalized);
         Version++;
         RebuildLines();
-        Changed?.Invoke(new TextChange(0, previous.Length, normalized.Length));
+        Changed?.Invoke(new TextChange(0, previousLength, normalized.Length));
     }
 
     public void Insert(int offset, string text) => Replace(offset, 0, text);
@@ -159,6 +159,24 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
         {
             throw new ArgumentOutOfRangeException(nameof(offset));
         }
+    }
+
+    private bool ContentEquals(string value)
+    {
+        if (_text.Length != value.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (_text[index] != value[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     internal static string NormalizeNewLines(string text)

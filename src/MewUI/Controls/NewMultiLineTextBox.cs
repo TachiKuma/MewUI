@@ -515,19 +515,25 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
     private void OnDocumentChanged(TextChange change)
     {
         _view?.Invalidate(change);
+        string? currentText = null;
         if (!_syncingText)
         {
             _syncingText = true;
             try
             {
-                CommitTargetValue(TextProperty, _document.ToString());
+                currentText = _document.ToString();
+                CommitTargetValue(TextProperty, currentText);
             }
             finally
             {
                 _syncingText = false;
             }
         }
-        TextChanged?.Invoke(_document.ToString());
+        if (TextChanged is { } textChanged)
+        {
+            currentText ??= _document.ToString();
+            textChanged(currentText);
+        }
         InvalidateMeasure();
         InvalidateVisual();
     }

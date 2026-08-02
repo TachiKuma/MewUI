@@ -30,6 +30,27 @@ public sealed class NewMultiLineTextBoxTests
     }
 
     [TestMethod]
+    [Timeout(30_000, CooperativeCancellation = true)]
+    public void ReplacingTenMegabytesWithoutSubscriberAvoidsFullTextSnapshots()
+    {
+        string first = new('x', 10_000_000);
+        string second = new('y', 10_000_000);
+        var textBox = new NewMultiLineTextBox { Text = first };
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        textBox.Text = second;
+
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        Assert.AreSame(second, textBox.Text);
+        Assert.IsLessThan(32L * 1024 * 1024, allocatedBytes,
+            $"Replacing 10MB allocated {allocatedBytes:N0} bytes, indicating extra full document snapshots.");
+    }
+
+    [TestMethod]
     public void DefaultStyleDrawsEditorChromeAndNoWrapShowsHorizontalScrollBar()
     {
         if (!OperatingSystem.IsWindows())
