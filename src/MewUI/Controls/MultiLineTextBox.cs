@@ -13,25 +13,10 @@ namespace Aprillz.MewUI.Controls;
 /// </summary>
 public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
 {
-    public static readonly MewProperty<string> TextProperty =
-        MewProperty<string>.Register<MultiLineTextBox>(nameof(Text), string.Empty,
-            MewPropertyOptions.BindsTwoWayByDefault,
-            static (self, _, value) => self.ApplyExternalText(value));
-
     public static readonly MewProperty<bool> WrapProperty =
         MewProperty<bool>.Register<MultiLineTextBox>(nameof(Wrap), true,
             MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
             static (self, _, value) => self.OnWrapChanged(value));
-
-    private static readonly MewPropertyKey<int> SelectionStartPropertyKey =
-        MewProperty<int>.RegisterReadOnly<MultiLineTextBox>(nameof(SelectionStart), 0);
-
-    public static readonly MewProperty<int> SelectionStartProperty = SelectionStartPropertyKey.Property;
-
-    private static readonly MewPropertyKey<int> SelectionLengthPropertyKey =
-        MewProperty<int>.RegisterReadOnly<MultiLineTextBox>(nameof(SelectionLength), 0);
-
-    public static readonly MewProperty<int> SelectionLengthProperty = SelectionLengthPropertyKey.Property;
 
     private readonly ScrollBar _verticalScrollBar;
     private readonly ScrollBar _horizontalScrollBar;
@@ -41,12 +26,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     private double _verticalOffset;
     private double _horizontalOffset;
     private double _preferredCaretX = double.NaN;
-    private bool _syncingText;
     private bool _dragSelecting;
-    private string _textSnapshot = string.Empty;
-    private long _textSnapshotVersion = -1;
-    private DispatcherTimer? _caretTimer;
-    private bool _caretVisible = true;
 
     static MultiLineTextBox()
     {
@@ -71,25 +51,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
         _horizontalScrollBar.Parent = this;
         _verticalScrollBar.ValueChanged += value => SetVerticalOffset(value);
         _horizontalScrollBar.ValueChanged += value => SetHorizontalOffset(value);
-
-        if (_document.TextLength > 0)
-        {
-            _syncingText = true;
-            try
-            {
-                SetValue(TextProperty, GetTextSnapshot());
-            }
-            finally
-            {
-                _syncingText = false;
-            }
-        }
-    }
-
-    public string Text
-    {
-        get => GetTextSnapshot();
-        set => SetValue(TextProperty, value ?? string.Empty);
     }
 
     public bool Wrap
@@ -98,8 +59,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
         set => SetValue(WrapProperty, value);
     }
 
-    public int SelectionStart => GetValue(SelectionStartProperty);
-    public int SelectionLength => GetValue(SelectionLengthProperty);
     public double HorizontalOffset => _horizontalOffset;
     public double VerticalOffset => _verticalOffset;
     public EditableTextDocument Document => _document;
@@ -116,7 +75,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     internal bool IsVerticalScrollBarVisible => _verticalScrollBar.IsVisible;
     internal bool IsHorizontalScrollBarVisible => _horizontalScrollBar.IsVisible;
 
-    public event Action<string>? TextChanged;
     public event Action? EditingStateChanged;
     public event Action<bool>? WrapChanged;
 
@@ -442,71 +400,13 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
             GetDpi() / 96.0);
     }
 
-    private void ApplyExternalText(string value)
-    {
-        if (_syncingText)
-        {
-            return;
-        }
-        _syncingText = true;
-        try
-        {
-            _editor.CommitComposition();
-            string normalized = EditableTextDocument.NormalizeNewLines(value ?? string.Empty);
-            _document.SetText(normalized);
-            _textSnapshot = normalized;
-            _textSnapshotVersion = _document.Version;
-            _editor.ClearHistory();
-            _editor.SetCaret(Math.Min(_editor.CaretPosition, _document.TextLength));
-        }
-        finally
-        {
-            _syncingText = false;
-        }
-    }
-
     private void OnDocumentChanged(TextChange change)
     {
-        _textSnapshotVersion = -1;
         _view?.Invalidate(change);
-        string? currentText = null;
-        if (!_syncingText && (HasPropertyBinding(TextProperty.Id) || TextChanged is not null))
-        {
-            _syncingText = true;
-            try
-            {
-                currentText = _document.ToString();
-                CommitTargetValue(TextProperty, currentText);
-            }
-            finally
-            {
-                _syncingText = false;
-            }
-        }
-        if (TextChanged is { } textChanged)
-        {
-            currentText ??= _document.ToString();
-            textChanged(currentText);
-        }
-        InvalidateMeasure();
-        InvalidateVisual();
-    }
-
-    private string GetTextSnapshot()
-    {
-        if (_textSnapshotVersion != _document.Version)
-        {
-            _textSnapshot = _document.ToString();
-            _textSnapshotVersion = _document.Version;
-        }
-        return _textSnapshot;
     }
 
     private void OnEditorStateChanged()
     {
-        var selection = _editor.Selection;
-        SetValue(SelectionStartPropertyKey, selection.Start);
-        SetValue(SelectionLengthPropertyKey, selection.Length);
         _preferredCaretX = double.NaN;
         ResetCaretBlink();
         InvalidateVisual();
@@ -773,56 +673,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
         if (invalidate) InvalidateVisual();
     }
 
-    protected override void OnGotFocus()
-    {
-        base.OnGotFocus();
-        StartCaretBlink();
-        if (ImeMode != ImeMode.Auto && FindVisualRoot() is Window { Backend: not null } window)
-        {
-            window.Backend.SetImeMode(ImeMode);
-        }
-    }
-
-    protected override void OnLostFocus()
-    {
-        StopCaretBlink();
-        _caretVisible = true;
-        if (_editor.IsComposing) _editor.CommitComposition();
-        if (ImeMode != ImeMode.Auto && FindVisualRoot() is Window { Backend: not null } window)
-        {
-            window.Backend.SetImeMode(ImeMode.Auto);
-        }
-        base.OnLostFocus();
-    }
-
-    private void StartCaretBlink()
-    {
-        StopCaretBlink();
-        _caretVisible = true;
-        _caretTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500));
-        _caretTimer.Tick += OnCaretBlink;
-        _caretTimer.Start();
-    }
-
-    private void StopCaretBlink()
-    {
-        if (_caretTimer is null) return;
-        _caretTimer.Stop();
-        _caretTimer.Tick -= OnCaretBlink;
-    }
-
-    private void ResetCaretBlink()
-    {
-        if (IsFocused) StartCaretBlink();
-        else _caretVisible = true;
-    }
-
-    private void OnCaretBlink()
-    {
-        _caretVisible = !_caretVisible;
-        InvalidateVisual();
-    }
-
     private void ResetView()
     {
         _view?.Dispose();
@@ -858,7 +708,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
 
     protected override void OnDispose()
     {
-        StopCaretBlink();
         _view?.Dispose();
         _document.Changed -= OnDocumentChanged;
         _editor.StateChanged -= OnEditorStateChanged;

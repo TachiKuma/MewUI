@@ -2,6 +2,7 @@ using System.Globalization;
 
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Platform;
+using Aprillz.MewUI.Text;
 using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.Controls;
@@ -14,8 +15,23 @@ namespace Aprillz.MewUI.Controls;
 // PasswordBox move onto this base.
 public abstract class TextBase : Control, ITextCompositionClient, ITextCompositionEditor, ITextInputClient
 {
+    public static readonly MewProperty<string> TextProperty =
+        MewProperty<string>.Register<TextBase>(nameof(Text), string.Empty,
+            MewPropertyOptions.BindsTwoWayByDefault,
+            static (self, _, value) => self.ApplyExternalText(value));
+
     public static readonly MewProperty<ImeMode> ImeModeProperty =
         MewProperty<ImeMode>.Register<TextBase>(nameof(ImeMode), ImeMode.Auto);
+
+    private static readonly MewPropertyKey<int> SelectionStartPropertyKey =
+        MewProperty<int>.RegisterReadOnly<TextBase>(nameof(SelectionStart), 0);
+
+    public static readonly MewProperty<int> SelectionStartProperty = SelectionStartPropertyKey.Property;
+
+    private static readonly MewPropertyKey<int> SelectionLengthPropertyKey =
+        MewProperty<int>.RegisterReadOnly<TextBase>(nameof(SelectionLength), 0);
+
+    public static readonly MewProperty<int> SelectionLengthProperty = SelectionLengthPropertyKey.Property;
 
     public static readonly MewProperty<string> PlaceholderProperty =
         MewProperty<string>.Register<TextBase>(nameof(Placeholder), string.Empty,
@@ -40,6 +56,11 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     private protected int _compositionStart;
     private protected int _compositionLength;
     private protected CompositionAttr[]? _compositionAttributes;
+    private protected bool _caretVisible = true;
+    private protected bool _syncingText;
+    private string _textSnapshot = string.Empty;
+    private long _textSnapshotVersion = -1;
+    private DispatcherTimer? _caretTimer;
 
     static TextBase()
     {
@@ -56,7 +77,36 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _editor = new TextEditorSession(_document);
         Cursor = CursorType.IBeam;
+        _document.Changed += OnDocumentTextChanged;
+        _editor.StateChanged += SyncSelectionMirrors;
+
+        if (_document.TextLength > 0)
+        {
+            _syncingText = true;
+            try
+            {
+                SetValue(TextProperty, GetTextSnapshot());
+            }
+            finally
+            {
+                _syncingText = false;
+            }
+        }
     }
+
+    /// <summary>
+    /// Gets or sets the document text. Reads return a cached snapshot rebuilt only after changes.
+    /// </summary>
+    public string Text
+    {
+        get => GetTextSnapshot();
+        set => SetValue(TextProperty, value ?? string.Empty);
+    }
+
+    public int SelectionStart => GetValue(SelectionStartProperty);
+    public int SelectionLength => GetValue(SelectionLengthProperty);
+
+    public event Action<string>? TextChanged;
 
     /// <summary>
     /// Gets or sets the IME mode for this text control.
@@ -210,6 +260,130 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         {
             InsertText(text);
         }
+    }
+
+    private void ApplyExternalText(string value)
+    {
+        if (_syncingText)
+        {
+            return;
+        }
+        _syncingText = true;
+        try
+        {
+            _editor.CommitComposition();
+            string normalized = EditableTextDocument.NormalizeNewLines(value ?? string.Empty);
+            _document.SetText(normalized);
+            _textSnapshot = normalized;
+            _textSnapshotVersion = _document.Version;
+            _editor.ClearHistory();
+            _editor.SetCaret(Math.Min(_editor.CaretPosition, _document.TextLength));
+        }
+        finally
+        {
+            _syncingText = false;
+        }
+    }
+
+    private protected string GetTextSnapshot()
+    {
+        if (_textSnapshotVersion != _document.Version)
+        {
+            _textSnapshot = _document.ToString();
+            _textSnapshotVersion = _document.Version;
+        }
+        return _textSnapshot;
+    }
+
+    private void OnDocumentTextChanged(TextChange change)
+    {
+        _textSnapshotVersion = -1;
+        string? currentText = null;
+        if (!_syncingText && (HasPropertyBinding(TextProperty.Id) || TextChanged is not null))
+        {
+            _syncingText = true;
+            try
+            {
+                currentText = _document.ToString();
+                CommitTargetValue(TextProperty, currentText);
+            }
+            finally
+            {
+                _syncingText = false;
+            }
+        }
+        if (TextChanged is { } textChanged)
+        {
+            currentText ??= _document.ToString();
+            textChanged(currentText);
+        }
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    private void SyncSelectionMirrors()
+    {
+        var selection = _editor.Selection;
+        SetValue(SelectionStartPropertyKey, selection.Start);
+        SetValue(SelectionLengthPropertyKey, selection.Length);
+    }
+
+    protected override void OnGotFocus()
+    {
+        base.OnGotFocus();
+        StartCaretBlink();
+        if (ImeMode != ImeMode.Auto && FindVisualRoot() is Window { Backend: not null } window)
+        {
+            window.Backend.SetImeMode(ImeMode);
+        }
+    }
+
+    protected override void OnLostFocus()
+    {
+        StopCaretBlink();
+        _caretVisible = true;
+        if (_editor.IsComposing) _editor.CommitComposition();
+        if (ImeMode != ImeMode.Auto && FindVisualRoot() is Window { Backend: not null } window)
+        {
+            window.Backend.SetImeMode(ImeMode.Auto);
+        }
+        base.OnLostFocus();
+    }
+
+    private protected void StartCaretBlink()
+    {
+        StopCaretBlink();
+        _caretVisible = true;
+        _caretTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500));
+        _caretTimer.Tick += OnCaretBlink;
+        _caretTimer.Start();
+    }
+
+    private protected void StopCaretBlink()
+    {
+        if (_caretTimer is null) return;
+        _caretTimer.Stop();
+        _caretTimer.Tick -= OnCaretBlink;
+    }
+
+    private protected void ResetCaretBlink()
+    {
+        if (IsFocused) StartCaretBlink();
+        else _caretVisible = true;
+    }
+
+    private void OnCaretBlink()
+    {
+        _caretVisible = !_caretVisible;
+        InvalidateVisual();
+    }
+
+    protected override void OnDispose()
+    {
+        StopCaretBlink();
+        _document.Changed -= OnDocumentTextChanged;
+        _editor.StateChanged -= SyncSelectionMirrors;
+        base.OnDispose();
     }
 
     private ContextMenu? _defaultContextMenu;
