@@ -9,6 +9,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
 {
     // GDI DrawText stops reporting reliable extents above its 16-bit-era text limit.
     private const int FastPathSegmentLength = 32 * 1024;
+    private const string ELLIPSIS = "...";
     private readonly IGraphicsFactory _factory;
     private readonly Dictionary<FontKey, IFont> _fonts = [];
     private readonly ManagedTextLayoutCache _cache;
@@ -43,6 +44,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         bool fastPath = snapshot.Paragraph.Wrapping == TextWrapping.NoWrap &&
                         snapshot.Paragraph.FlowDirection == TextFlowDirection.LeftToRight &&
                         snapshot.Paragraph.LetterSpacing == 0 &&
+                        snapshot.Paragraph.Trimming == TextTrimming.None &&
                         snapshot.Runs.Length == 0 &&
                         snapshot.Inlines.Length == 0 &&
                         snapshot.Text.AsSpan().IndexOfAny('\r', '\n', '\t') < 0;
@@ -71,6 +73,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
 
         var clusters = MeasureClusters(context, snapshot, 0, snapshot.Text.Length);
         var lines = AssembleLines(context, snapshot, clusters);
+        ApplyTrimming(context, snapshot, lines);
         double measuredWidth = lines.Count == 0 ? 0 : lines.Max(static line => line.Metrics.Bounds.Width);
         double contentHeight = lines.Count == 0 ? 0 : lines[^1].Metrics.Bounds.Bottom;
         return new ManagedTextLayout(
@@ -530,6 +533,120 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             ? paragraph.LineHeight.Value
             : Math.Max(fontHeight, measuredHeight);
 
+    /// <summary>
+    /// Applies character-ellipsis trimming, matching the legacy rasterizer rules: without wrapping
+    /// every line that overflows the width is trimmed, and with wrapping the lines past the height
+    /// are dropped and the last visible line always takes an ellipsis.
+    /// </summary>
+    private void ApplyTrimming(
+        IGraphicsContext context,
+        TextLayoutRequestSnapshot snapshot,
+        List<ManagedTextLine> lines)
+    {
+        var paragraph = snapshot.Paragraph;
+        if (paragraph.Trimming != TextTrimming.CharacterEllipsis || lines.Count == 0)
+        {
+            return;
+        }
+
+        double maxWidth = NormalizeMaxWidth(paragraph.MaxWidth);
+        if (double.IsPositiveInfinity(maxWidth) || maxWidth <= 0)
+        {
+            return;
+        }
+
+        var defaultFont = GetFont(snapshot.DefaultStyle, snapshot.Dpi);
+        double ellipsisWidth = context.MeasureText(ELLIPSIS, defaultFont).Width;
+
+        if (paragraph.Wrapping == TextWrapping.NoWrap)
+        {
+            foreach (var line in lines)
+            {
+                if (line.Metrics.Bounds.Width > maxWidth)
+                {
+                    TrimLine(snapshot, line, maxWidth, ellipsisWidth, force: false);
+                }
+            }
+            return;
+        }
+
+        double maxHeight = paragraph.MaxHeight;
+        if (double.IsNaN(maxHeight) || double.IsPositiveInfinity(maxHeight) || maxHeight <= 0)
+        {
+            return;
+        }
+
+        int visibleCount = 0;
+        while (visibleCount < lines.Count && lines[visibleCount].Metrics.Bounds.Bottom <= maxHeight)
+        {
+            visibleCount++;
+        }
+        visibleCount = Math.Max(1, visibleCount);
+        if (visibleCount >= lines.Count)
+        {
+            return;
+        }
+
+        lines.RemoveRange(visibleCount, lines.Count - visibleCount);
+        TrimLine(snapshot, lines[^1], maxWidth, ellipsisWidth, force: true);
+    }
+
+    /// <summary>
+    /// Drops trailing clusters until the remaining content plus the ellipsis fits. <paramref name="force"/>
+    /// marks the line trimmed even when it already fits, which wrap overflow requires.
+    /// </summary>
+    private static void TrimLine(
+        TextLayoutRequestSnapshot snapshot,
+        ManagedTextLine line,
+        double maxWidth,
+        double ellipsisWidth,
+        bool force)
+    {
+        var clusters = line.Clusters;
+        if (clusters is null || clusters.Count == 0)
+        {
+            return;
+        }
+
+        double target = maxWidth - ellipsisWidth;
+        int keep = clusters.Count;
+        double width = clusters.Sum(static cluster => cluster.Width);
+        while (keep > 0 && width > target)
+        {
+            keep--;
+            width -= clusters[keep].Width;
+        }
+
+        if (keep == clusters.Count && !force)
+        {
+            return;
+        }
+
+        if (keep < clusters.Count)
+        {
+            clusters.RemoveRange(keep, clusters.Count - keep);
+        }
+
+        line.IsTrimmed = true;
+        var bounds = line.Metrics.Bounds;
+        double x = ResolveLineX(snapshot.Paragraph, width + ellipsisWidth);
+        double cursor = x;
+        foreach (var cluster in clusters)
+        {
+            cluster.X = cursor;
+            cursor += cluster.Width;
+        }
+
+        int textStart = clusters.Count == 0 ? line.Metrics.TextStart : clusters[0].Start;
+        int textLength = clusters.Count == 0 ? 0 : clusters[^1].End - textStart;
+        line.Metrics = new TextLayoutLineMetrics(
+            textStart,
+            textLength,
+            line.Metrics.NewLineLength,
+            new Rect(x, bounds.Y, width + ellipsisWidth, bounds.Height),
+            line.Metrics.Baseline);
+    }
+
     private static double GetSpaceWidth(IGraphicsContext context, IFont font, ref Dictionary<IFont, double>? cache)
     {
         cache ??= [];
@@ -832,9 +949,12 @@ internal sealed class ManagedTextLine(
     List<ManagedTextCluster>? clusters,
     IReadOnlyList<ManagedTextSegment>? fastSegments = null)
 {
-    public TextLayoutLineMetrics Metrics { get; } = metrics;
+    public TextLayoutLineMetrics Metrics { get; set; } = metrics;
     public List<ManagedTextCluster>? Clusters { get; set; } = clusters;
     public IReadOnlyList<ManagedTextSegment>? FastSegments { get; } = fastSegments;
+
+    /// <summary>True when trimming dropped trailing content and an ellipsis follows the clusters.</summary>
+    public bool IsTrimmed { get; set; }
 }
 
 internal sealed class ManagedTextLayoutCache : ITextLayoutCache, IDisposable

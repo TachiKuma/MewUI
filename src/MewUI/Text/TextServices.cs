@@ -46,6 +46,8 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
     internal int CachedLayoutCount => _layouts.Count;
     internal IReadOnlyCollection<Rendering.TextLayout> CachedLayouts => _layouts.Values;
 
+    private const string TextEllipsis = "...";
+
     public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -141,9 +143,47 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                 }
                 index = runEnd;
             }
+
+            if (line.IsTrimmed)
+            {
+                DrawEllipsis(managed, line, clusters, origin, options.Foreground, options.Owner);
+            }
         }
 
         DrawDecorations(managed, origin, options.PaintSpans.Span);
+    }
+
+    /// <summary>Draws the trimming ellipsis after the last surviving cluster of a trimmed line.</summary>
+    private void DrawEllipsis(
+        ManagedTextLayout managed,
+        ManagedTextLine line,
+        List<ManagedTextCluster> clusters,
+        Point origin,
+        Color color,
+        object? owner)
+    {
+        var lineBounds = line.Metrics.Bounds;
+        var font = clusters.Count > 0 ? clusters[^1].Font : managed.GetDefaultFont();
+        double x = clusters.Count > 0 ? clusters[^1].X + clusters[^1].Width : lineBounds.X;
+        double width = Math.Max(1, lineBounds.Right - x);
+        var format = new TextFormat
+        {
+            Font = font,
+            HorizontalAlignment = TextAlignment.Left,
+            VerticalAlignment = TextAlignment.Top,
+            Wrapping = TextWrapping.NoWrap,
+            Trimming = TextTrimming.None
+        };
+        var bounds = new Rect(origin.X + x, origin.Y + lineBounds.Y, width, lineBounds.Height);
+        var constraints = new TextLayoutConstraints(new Rect(0, 0, width, lineBounds.Height));
+        var layout = _context.CreateTextLayout(TextEllipsis, format, in constraints);
+        if (layout is null)
+        {
+            return;
+        }
+
+        layout.EffectiveBounds = bounds;
+        _context.DrawTextLayout(TextEllipsis, format, layout, color, owner);
     }
 
     internal static bool CanDrawFastPath(ManagedTextLayout layout, in TextDrawOptions options)

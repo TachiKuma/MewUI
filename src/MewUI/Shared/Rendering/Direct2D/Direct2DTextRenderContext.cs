@@ -6,6 +6,7 @@ namespace Aprillz.MewUI.Rendering.Direct2D;
 internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposable
 {
     private const int RealizationCapacity = 128;
+    private const string Ellipsis = "...";
     private readonly Direct2DGraphicsContext _context;
     private readonly LegacyTextRenderContext _fastPathRenderer;
     private readonly BoundedCache<RealizationKey, RealizedRun> _cache = new(
@@ -74,8 +75,42 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
                 DrawRunColorSegments(clusters, index, end, origin, bounds, line.Metrics.Baseline, realized, in options);
                 index = end;
             }
+
+            if (line.IsTrimmed)
+            {
+                DrawEllipsis(managed, line, clusters, origin, options.Foreground);
+            }
         }
         DrawDecorations(managed, origin, options.PaintSpans.Span);
+    }
+
+    /// <summary>Draws the trimming ellipsis after the last surviving cluster of a trimmed line.</summary>
+    private void DrawEllipsis(
+        ManagedTextLayout managed,
+        ManagedTextLine line,
+        List<ManagedTextCluster> clusters,
+        Point origin,
+        Color color)
+    {
+        var lineBounds = line.Metrics.Bounds;
+        var font = clusters.Count > 0 ? clusters[^1].Font : managed.GetDefaultFont();
+        double x = clusters.Count > 0 ? clusters[^1].X + clusters[^1].Width : lineBounds.X;
+        double width = Math.Max(1, lineBounds.Right - x);
+        var format = new TextFormat
+        {
+            Font = font,
+            HorizontalAlignment = TextAlignment.Left,
+            VerticalAlignment = TextAlignment.Top,
+            Wrapping = TextWrapping.NoWrap,
+            Trimming = TextTrimming.None
+        };
+        var constraints = new TextLayoutConstraints(new Rect(0, 0, width, lineBounds.Height));
+        var layout = _context.CreateTextLayout(Ellipsis, format, in constraints);
+        if (layout is null) return;
+
+        layout.EffectiveBounds = new Rect(origin.X + x, origin.Y + lineBounds.Y, width, lineBounds.Height);
+        _context.DrawTextLayout(Ellipsis, format, layout, color);
+        layout.ReleaseBackendHandle();
     }
 
     private RealizedRun GetOrCreate(
