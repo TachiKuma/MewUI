@@ -30,9 +30,60 @@ public class TextEditor : ContentControl
         Options.PropertyChanged += OnOptionsChanged;
         _document = new TextDocument();
         _document.Changed += OnDocumentTextChanged;
+        StyleSheet = new StyleSheet();
+        StyleSheet.Define<TextEditor>(CreateFrameStyle());
         BuildSurface();
         TextArea = new TextArea(this);
     }
+
+    /// <summary>
+    /// Frames the editor like the built-in text inputs. The style lives on the editor's own
+    /// StyleSheet because default styles are registered for core control types only; hover and
+    /// focus resolve from IsFocusWithin, so the frame reacts while the inner surface holds focus.
+    /// </summary>
+    private static Style CreateFrameStyle() =>
+        new(typeof(TextEditor))
+        {
+            Transitions =
+            [
+                Transition.Create(BackgroundProperty),
+                Transition.Create(BorderBrushProperty),
+            ],
+            Setters =
+            [
+                Setter.Create(BackgroundProperty, theme => theme.Palette.ControlBackground),
+                Setter.Create(BorderBrushProperty, theme => theme.Palette.ControlBorder),
+                Setter.Create(BorderThicknessProperty, theme => theme.Metrics.ControlBorderThickness),
+                Setter.Create(CornerRadiusProperty, theme => theme.Metrics.ControlCornerRadius),
+            ],
+            Triggers =
+            [
+                new StateTrigger
+                {
+                    Match = VisualStateFlags.Hot,
+                    Setters =
+                    [
+                        Setter.Create(BorderBrushProperty,
+                            theme => Color.Composite(theme.Palette.ControlBorder, theme.Palette.AccentBorderHotOverlay)),
+                    ],
+                },
+                new StateTrigger
+                {
+                    Match = VisualStateFlags.Focused,
+                    Setters = [Setter.Create(BorderBrushProperty, theme => theme.Palette.Accent)],
+                },
+                new StateTrigger
+                {
+                    Match = VisualStateFlags.None,
+                    Exclude = VisualStateFlags.Enabled,
+                    Setters =
+                    [
+                        Setter.Create(BackgroundProperty, theme => theme.Palette.DisabledControlBackground),
+                        Setter.Create(ForegroundProperty, theme => theme.Palette.DisabledText),
+                    ],
+                },
+            ],
+        };
 
     public TextDocument Document
     {
@@ -162,6 +213,10 @@ public class TextEditor : ContentControl
             previous.TextInput -= OnSurfaceTextInput;
         }
 
+        // The editor owns the frame so it encloses the line number margin, as AvalonEdit's
+        // templated ScrollViewer encloses TextArea's left margins. The surface paints neither
+        // border nor background: a square fill would cover the frame's rounded corners from the
+        // inside.
         _surface = new MultiLineTextBox(_document.CoreDocument)
         {
             Wrap = previous?.Wrap ?? false,
@@ -169,7 +224,10 @@ public class TextEditor : ContentControl
             AcceptTab = true,
             FontFamily = FontFamily,
             FontSize = FontSize,
-            FontWeight = FontWeight
+            FontWeight = FontWeight,
+            Background = Color.Transparent,
+            BorderThickness = 0,
+            CornerRadius = 0
         };
         _surface.TextInput += OnSurfaceTextInput;
         _surface.Extensions.Projections.Add(_spaceMarkers);

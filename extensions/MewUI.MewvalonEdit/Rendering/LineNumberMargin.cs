@@ -15,11 +15,6 @@ internal sealed class LineNumberMargin(TextEditor editor) : TextViewportMargin(e
         return new Size(digits * Math.Max(6, Editor.FontSize * 0.65) + 12, Math.Max(1, availableSize.Height));
     }
 
-    protected override void OnRenderMargin(IGraphicsContext context)
-    {
-        context.FillRectangle(Bounds, Theme.Palette.ControlBackground);
-    }
-
     protected override void OnRenderTextViewport(IGraphicsContext context, Rect textViewport)
     {
         var factory = GetGraphicsFactory();
