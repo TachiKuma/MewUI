@@ -5,7 +5,7 @@ using Aprillz.MewUI.Text;
 namespace Aprillz.MewUI.Controls;
 
 /// <summary>Read-only, virtualized text surface for syntax and diagnostic extensions.</summary>
-public sealed class SyntaxViewer : Control
+public sealed class SyntaxViewer : Control, IVisualTreeHost
 {
     public static readonly MewProperty<string> TextProperty =
         MewProperty<string>.Register<SyntaxViewer>(nameof(Text), string.Empty,
@@ -27,11 +27,19 @@ public sealed class SyntaxViewer : Control
     private int _caret;
     private long _documentVersion;
     private bool _dragSelecting;
+    private readonly ScrollBar _verticalScrollBar;
+    private readonly ScrollBar _horizontalScrollBar;
 
     public SyntaxViewer()
     {
         Cursor = CursorType.IBeam;
         Extensions = new TextViewExtensionPipeline();
+        _verticalScrollBar = new ScrollBar { Orientation = Orientation.Vertical, IsVisible = false };
+        _horizontalScrollBar = new ScrollBar { Orientation = Orientation.Horizontal, IsVisible = false };
+        _verticalScrollBar.Parent = this;
+        _horizontalScrollBar.Parent = this;
+        _verticalScrollBar.ValueChanged += value => SetVerticalOffset(value);
+        _horizontalScrollBar.ValueChanged += value => SetHorizontalOffset(value);
     }
 
     public string Text
@@ -56,6 +64,8 @@ public sealed class SyntaxViewer : Control
     public double HorizontalOffset => _horizontalOffset;
     public IClipboardService? ClipboardService { get; set; }
     internal int MaterializedLineCount => _view?.MaterializedLines.Count ?? 0;
+    internal bool IsVerticalScrollBarVisible => _verticalScrollBar.IsVisible;
+    internal bool IsHorizontalScrollBarVisible => _horizontalScrollBar.IsVisible;
 
     public void Select(int start, int length)
     {
@@ -100,6 +110,7 @@ public sealed class SyntaxViewer : Control
         base.ArrangeContent(bounds);
         _contentBounds = GetContentBounds();
         UpdateViewport();
+        ArrangeScrollBars();
     }
 
     protected override void OnRender(IGraphicsContext context)
@@ -144,6 +155,35 @@ public sealed class SyntaxViewer : Control
         }
     }
 
+    protected override void RenderSubtree(IGraphicsContext context)
+    {
+        if (_verticalScrollBar.IsVisible)
+        {
+            _verticalScrollBar.Render(context);
+        }
+        if (_horizontalScrollBar.IsVisible)
+        {
+            _horizontalScrollBar.Render(context);
+        }
+    }
+
+    protected override UIElement? OnHitTest(Point point)
+    {
+        if (!IsVisible || !IsHitTestVisible || !IsEffectivelyEnabled)
+        {
+            return null;
+        }
+        if (_verticalScrollBar.IsVisible && _verticalScrollBar.Bounds.Contains(point))
+        {
+            return _verticalScrollBar;
+        }
+        if (_horizontalScrollBar.IsVisible && _horizontalScrollBar.Bounds.Contains(point))
+        {
+            return _horizontalScrollBar;
+        }
+        return Bounds.Contains(point) ? this : null;
+    }
+
     private void EnsureView()
     {
         var factory = GetGraphicsFactory();
@@ -175,6 +215,96 @@ public sealed class SyntaxViewer : Control
             _contentBounds.Height,
             _horizontalOffset,
             _verticalOffset));
+        SetVerticalOffset(_verticalOffset, false);
+        SetHorizontalOffset(_horizontalOffset, false);
+    }
+
+    private void ArrangeScrollBars()
+    {
+        if (_view is null)
+        {
+            return;
+        }
+
+        double thickness = Theme.Metrics.ScrollBarHitThickness;
+        double extentHeight = _view.ExtentHeight;
+        double extentWidth = _view.MaterializedLines
+            .SelectMany(static line => line.VisualLines)
+            .Select(static line => line.Bounds.Right)
+            .DefaultIfEmpty(0)
+            .Max();
+        bool vertical = extentHeight > _contentBounds.Height + 0.5;
+        bool horizontal = !Wrap && extentWidth > _contentBounds.Width + 0.5;
+        _verticalScrollBar.IsVisible = vertical;
+        _horizontalScrollBar.IsVisible = horizontal;
+
+        if (vertical)
+        {
+            _verticalScrollBar.Minimum = 0;
+            _verticalScrollBar.Maximum = Math.Max(0, extentHeight - _contentBounds.Height);
+            _verticalScrollBar.ViewportSize = _contentBounds.Height;
+            _verticalScrollBar.Value = _verticalOffset;
+            _verticalScrollBar.Arrange(new Rect(Bounds.Right - thickness, Bounds.Y, thickness, Bounds.Height));
+        }
+        else
+        {
+            _verticalScrollBar.Arrange(Rect.Empty);
+        }
+
+        if (horizontal)
+        {
+            _horizontalScrollBar.Minimum = 0;
+            _horizontalScrollBar.Maximum = Math.Max(0, extentWidth - _contentBounds.Width);
+            _horizontalScrollBar.ViewportSize = _contentBounds.Width;
+            _horizontalScrollBar.Value = _horizontalOffset;
+            _horizontalScrollBar.Arrange(new Rect(Bounds.X, Bounds.Bottom - thickness, Bounds.Width, thickness));
+        }
+        else
+        {
+            _horizontalScrollBar.Arrange(Rect.Empty);
+        }
+    }
+
+    private void SetVerticalOffset(double value, bool invalidate = true)
+    {
+        double maximum = _verticalScrollBar.IsVisible
+            ? _verticalScrollBar.Maximum
+            : Math.Max(0, (_view?.ExtentHeight ?? 0) - _contentBounds.Height);
+        value = Math.Clamp(double.IsFinite(value) ? value : 0, 0, maximum);
+        if (Math.Abs(_verticalOffset - value) < 0.001)
+        {
+            return;
+        }
+        _verticalOffset = value;
+        if (_verticalScrollBar.IsVisible)
+        {
+            _verticalScrollBar.Value = value;
+        }
+        if (invalidate)
+        {
+            UpdateViewport();
+            InvalidateVisual();
+        }
+    }
+
+    private void SetHorizontalOffset(double value, bool invalidate = true)
+    {
+        double maximum = _horizontalScrollBar.IsVisible ? _horizontalScrollBar.Maximum : Math.Max(0, value);
+        value = Wrap ? 0 : Math.Clamp(double.IsFinite(value) ? value : 0, 0, maximum);
+        if (Math.Abs(_horizontalOffset - value) < 0.001)
+        {
+            return;
+        }
+        _horizontalOffset = value;
+        if (_horizontalScrollBar.IsVisible)
+        {
+            _horizontalScrollBar.Value = value;
+        }
+        if (invalidate)
+        {
+            UpdateViewport();
+            InvalidateVisual();
+        }
     }
 
     private Rect GetContentBounds()
@@ -234,12 +364,11 @@ public sealed class SyntaxViewer : Control
         base.OnMouseWheel(e);
         if (e.Handled || e.Delta.Y == 0 || _view is null) return;
         double maximum = Math.Max(0, _view.ExtentHeight - _contentBounds.Height);
-        _verticalOffset = Math.Clamp(
-            _verticalOffset - e.Delta.Y * Theme.Metrics.ScrollWheelStep,
-            0,
-            maximum);
-        UpdateViewport();
-        InvalidateVisual();
+        SetVerticalOffset(
+            Math.Clamp(
+                _verticalOffset - e.Delta.Y * Theme.Metrics.ScrollWheelStep,
+                0,
+                maximum));
         e.Handled = true;
     }
 
@@ -281,6 +410,11 @@ public sealed class SyntaxViewer : Control
     protected override void OnDispose()
     {
         _view?.Dispose();
+        _verticalScrollBar.Dispose();
+        _horizontalScrollBar.Dispose();
         base.OnDispose();
     }
+
+    bool IVisualTreeHost.VisitChildren(Func<Element, bool> visitor)
+        => visitor(_verticalScrollBar) && visitor(_horizontalScrollBar);
 }
