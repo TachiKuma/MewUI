@@ -280,7 +280,8 @@ internal sealed class ManagedTextLayout : ITextLayout, IManagedTextLayoutData
         {
             var metrics = _lines[i].Metrics;
             int lineEnd = metrics.TextEnd + metrics.NewLineLength;
-            if (insertion <= lineEnd || i == _lines.Count - 1)
+            bool ownsBoundary = metrics.NewLineLength > 0 || i == _lines.Count - 1;
+            if (insertion < lineEnd || (insertion == lineEnd && ownsBoundary) || i == _lines.Count - 1)
             {
                 return i;
             }

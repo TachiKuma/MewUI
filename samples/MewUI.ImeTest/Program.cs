@@ -20,7 +20,7 @@ Application.DispatcherUnhandledException += e =>
     e.Handled = true;
 };
 
-var logBox = new NewMultiLineTextBox
+var logBox = new MultiLineTextBox
 {
     Wrap = true,
     IsHitTestVisible = false,
@@ -51,7 +51,7 @@ var handleBubblingComposition = new ObservableValue<bool>(false);
 var handleTextInput = new ObservableValue<bool>(false);
 
 TextBox singleLine = null!;
-NewMultiLineTextBox multiLine = null!;
+MultiLineTextBox multiLine = null!;
 
 Application.Create()
     .UseAccent(Accent.Purple)
@@ -183,7 +183,7 @@ Application.Create()
 
                             new Label().Text("Multi-line TextBox").Bold(),
 
-                            new NewMultiLineTextBox()
+                            new MultiLineTextBox()
                                 .Ref(out multiLine)
                                 .Wrap(true)
                                 .Text("Type here...\n(try long composition and commits)")

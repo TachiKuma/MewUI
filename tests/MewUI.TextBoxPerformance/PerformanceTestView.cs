@@ -8,9 +8,9 @@ namespace Aprillz.MewUI.TextBoxPerformance;
 partial class PerformanceTestView : UserControl
 {
     private TextBox _singleLineTextBox = null!;
-    private NewMultiLineTextBox _multiLineTextBox = null!;
-    private NewMultiLineTextBox _emojiTextBox = null!;
-    private NewMultiLineTextBox _logOutput = null!;
+    private MultiLineTextBox _multiLineTextBox = null!;
+    private MultiLineTextBox _emojiTextBox = null!;
+    private MultiLineTextBox _logOutput = null!;
 
     public PerformanceTestView()
     {
@@ -28,7 +28,7 @@ partial class PerformanceTestView : UserControl
                     .DockBottom()
                     .Children(
                         new Label().Text("Log").Bold(),
-                        new NewMultiLineTextBox()
+                        new MultiLineTextBox()
                             .Ref(out _logOutput)
                             .IsReadOnly()
                             .Wrap()
@@ -88,7 +88,7 @@ partial class PerformanceTestView : UserControl
                         new Button().Content("Type Simulation (1000)").OnClick(OnTypeSimulationMultiLine)
                     ),
                 new Label().Text("Place multiline-test.zip in Resources/").DockTop().Margin(0, 0, 0, 8),
-                new NewMultiLineTextBox()
+                new MultiLineTextBox()
                     .Wrap()
                     .Ref(out _multiLineTextBox)
             );
@@ -104,7 +104,7 @@ partial class PerformanceTestView : UserControl
                         new Button().Content("Load emoji-test.zip").OnClick(OnLoadEmoji)
                     ),
                 new Label().Text("Place emoji-test.zip in Resources/").DockTop().Margin(0, 0, 0, 8),
-                new NewMultiLineTextBox()
+                new MultiLineTextBox()
                     .Wrap()
                     .FontFamily("Consolas")
                     .Ref(out _emojiTextBox)

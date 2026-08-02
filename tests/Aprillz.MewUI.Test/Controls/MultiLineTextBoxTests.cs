@@ -12,14 +12,14 @@ namespace MewUI.Test.Controls;
 
 [TestClass]
 [DoNotParallelize]
-public sealed class NewMultiLineTextBoxTests
+public sealed class MultiLineTextBoxTests
 {
     [TestMethod]
     public void Control_DoesNotDependOnLegacyControlsTextTypes()
     {
-        Assert.AreEqual(typeof(Control), typeof(NewMultiLineTextBox).BaseType);
+        Assert.AreEqual(typeof(Control), typeof(MultiLineTextBox).BaseType);
 
-        var legacyReferences = typeof(NewMultiLineTextBox)
+        var legacyReferences = typeof(MultiLineTextBox)
             .GetFields(System.Reflection.BindingFlags.Instance |
                        System.Reflection.BindingFlags.NonPublic |
                        System.Reflection.BindingFlags.Public)
@@ -34,7 +34,7 @@ public sealed class NewMultiLineTextBoxTests
     public void InjectedDocumentRemainsTheEditableSourceOfTruth()
     {
         var document = new EditableTextDocument("seed");
-        var textBox = new NewMultiLineTextBox(document);
+        var textBox = new MultiLineTextBox(document);
 
         Assert.AreSame(document, textBox.Document);
         Assert.AreEqual("seed", textBox.Text);
@@ -50,7 +50,7 @@ public sealed class NewMultiLineTextBoxTests
     {
         string first = new('x', 10_000_000);
         string second = new('y', 10_000_000);
-        var textBox = new NewMultiLineTextBox { Text = first };
+        var textBox = new MultiLineTextBox { Text = first };
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -70,7 +70,7 @@ public sealed class NewMultiLineTextBoxTests
     public void EditingLargeInjectedDocumentWithoutStringConsumerDefersSnapshot()
     {
         var document = new EditableTextDocument(new string('x', 10_000_000));
-        var textBox = new NewMultiLineTextBox(document);
+        var textBox = new MultiLineTextBox(document);
 
         GC.Collect();
         GC.WaitForPendingFinalizers();
@@ -101,7 +101,7 @@ public sealed class NewMultiLineTextBoxTests
         Application.DefaultGraphicsFactory = factory;
         try
         {
-            var textBox = new NewMultiLineTextBox
+            var textBox = new MultiLineTextBox
             {
                 Width = 290,
                 Height = 120,
@@ -131,7 +131,7 @@ public sealed class NewMultiLineTextBoxTests
     [TestMethod]
     public void TextInputCompositionUndoAndRedoUseNewEditingSession()
     {
-        var textBox = new NewMultiLineTextBox { Text = "before target after" };
+        var textBox = new MultiLineTextBox { Text = "before target after" };
         textBox.Select(7, 6);
 
         ((ITextCompositionClient)textBox).HandleTextCompositionStart(new TextCompositionEventArgs());
@@ -158,7 +158,7 @@ public sealed class NewMultiLineTextBoxTests
     public void CopyCutAndPasteUseClipboardServiceWithoutLegacyTextBase()
     {
         var clipboard = new TestClipboard();
-        var textBox = new NewMultiLineTextBox
+        var textBox = new MultiLineTextBox
         {
             Text = "copy target",
             ClipboardService = clipboard
@@ -184,7 +184,7 @@ public sealed class NewMultiLineTextBoxTests
     public void ReadOnlyBlocksMutationAndMaxLengthPreservesTextElementBoundaries()
     {
         var clipboard = new TestClipboard { Text = "paste" };
-        var textBox = new NewMultiLineTextBox
+        var textBox = new MultiLineTextBox
         {
             Text = "fixed",
             IsReadOnly = true,
@@ -224,7 +224,7 @@ public sealed class NewMultiLineTextBoxTests
             return;
         }
 
-        var textBox = new NewMultiLineTextBox
+        var textBox = new MultiLineTextBox
         {
             Width = 140,
             Height = 120,
@@ -259,7 +259,7 @@ public sealed class NewMultiLineTextBoxTests
             return;
         }
 
-        var textBox = new NewMultiLineTextBox
+        var textBox = new MultiLineTextBox
         {
             Width = 320,
             Height = 160,
@@ -294,7 +294,7 @@ public sealed class NewMultiLineTextBoxTests
         try
         {
             var stopwatch = Stopwatch.StartNew();
-            var textBox = new NewMultiLineTextBox
+            var textBox = new MultiLineTextBox
             {
                 Width = 320,
                 Height = 80,
@@ -346,7 +346,7 @@ public sealed class NewMultiLineTextBoxTests
         try
         {
             var stopwatch = Stopwatch.StartNew();
-            var textBox = new NewMultiLineTextBox
+            var textBox = new MultiLineTextBox
             {
                 Width = 320,
                 Height = 80,
@@ -395,7 +395,7 @@ public sealed class NewMultiLineTextBoxTests
         try
         {
             using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(240, 120, 1));
-            var textBox = new NewMultiLineTextBox
+            var textBox = new MultiLineTextBox
             {
                 Width = 240,
                 Height = 120,

@@ -16,7 +16,7 @@ using Aprillz.MewUI.Controls;
 Win32Platform.Register();
 Direct2DBackend.Register();
 
-var editor = new NewMultiLineTextBox { Wrap = true };
+var editor = new MultiLineTextBox { Wrap = true };
 var statusText = new TextBlock { Text = "10MB render sentinel" };
 var status = new Button { Content = statusText, Height = 36 };
 var window = new Window()
