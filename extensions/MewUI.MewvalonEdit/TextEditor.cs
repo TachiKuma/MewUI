@@ -213,6 +213,7 @@ public class TextEditor : ContentControl
             Wrap = previous?.Wrap ?? false,
             IsReadOnly = previous?.IsReadOnly ?? false,
             AcceptTab = true,
+            TabSize = Options.IndentationSize,
             Background = Color.Transparent,
             BorderThickness = 0,
             CornerRadius = 0
@@ -271,6 +272,7 @@ public class TextEditor : ContentControl
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs e)
     {
         _surface.AcceptTab = true;
+        _surface.TabSize = Options.IndentationSize;
         _surface.InvalidateTextView();
     }
 }
