@@ -11,31 +11,17 @@ namespace Aprillz.MewUI.Controls;
 /// Multi-line editor built on the extensible text view engine.
 /// It does not use the legacy Controls.Text formatter, view, or measurement caches.
 /// </summary>
-public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCompositionEditor, ITextInputClient, IVisualTreeHost
+public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
 {
     public static readonly MewProperty<string> TextProperty =
         MewProperty<string>.Register<MultiLineTextBox>(nameof(Text), string.Empty,
             MewPropertyOptions.BindsTwoWayByDefault,
             static (self, _, value) => self.ApplyExternalText(value));
 
-    public static readonly MewProperty<string> PlaceholderProperty =
-        MewProperty<string>.Register<MultiLineTextBox>(nameof(Placeholder), string.Empty,
-            MewPropertyOptions.AffectsRender);
-
-    public static readonly MewProperty<bool> IsReadOnlyProperty =
-        MewProperty<bool>.Register<MultiLineTextBox>(nameof(IsReadOnly), false,
-            MewPropertyOptions.AffectsRender);
-
-    public static readonly MewProperty<bool> AcceptTabProperty =
-        MewProperty<bool>.Register<MultiLineTextBox>(nameof(AcceptTab), false);
-
     public static readonly MewProperty<bool> WrapProperty =
         MewProperty<bool>.Register<MultiLineTextBox>(nameof(Wrap), true,
             MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
             static (self, _, value) => self.OnWrapChanged(value));
-
-    public static readonly MewProperty<int> MaxLengthProperty =
-        MewProperty<int>.Register<MultiLineTextBox>(nameof(MaxLength), 0);
 
     private static readonly MewPropertyKey<int> SelectionStartPropertyKey =
         MewProperty<int>.RegisterReadOnly<MultiLineTextBox>(nameof(SelectionStart), 0);
@@ -57,13 +43,8 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
     private double _preferredCaretX = double.NaN;
     private bool _syncingText;
     private bool _dragSelecting;
-    private bool _suppressNewLineInput;
-    private bool _suppressTabInput;
     private string _textSnapshot = string.Empty;
     private long _textSnapshotVersion = -1;
-    private int _compositionStart;
-    private int _compositionLength;
-    private CompositionAttr[]? _compositionAttributes;
     private DispatcherTimer? _caretTimer;
     private bool _caretVisible = true;
 
@@ -111,44 +92,10 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
         set => SetValue(TextProperty, value ?? string.Empty);
     }
 
-    public string Placeholder
-    {
-        get => GetValue(PlaceholderProperty);
-        set => SetValue(PlaceholderProperty, value ?? string.Empty);
-    }
-
-    public bool IsReadOnly
-    {
-        get => GetValue(IsReadOnlyProperty);
-        set => SetValue(IsReadOnlyProperty, value);
-    }
-
-    public bool AcceptTab
-    {
-        get => GetValue(AcceptTabProperty);
-        set => SetValue(AcceptTabProperty, value);
-    }
-
     public bool Wrap
     {
         get => GetValue(WrapProperty);
         set => SetValue(WrapProperty, value);
-    }
-
-    public int MaxLength
-    {
-        get => GetValue(MaxLengthProperty);
-        set => SetValue(MaxLengthProperty, Math.Max(0, value));
-    }
-
-    public int CaretPosition
-    {
-        get => _editor.CaretPosition;
-        set
-        {
-            _editor.SetCaret(value);
-            EnsureCaretVisible();
-        }
     }
 
     public int SelectionStart => GetValue(SelectionStartProperty);
@@ -180,34 +127,12 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
     public event Action<string>? TextChanged;
     public event Action? EditingStateChanged;
     public event Action<bool>? WrapChanged;
-    public event Action<TextInputEventArgs>? TextInput;
-    public event Action<TextCompositionEventArgs>? TextCompositionStart;
-    public event Action<TextCompositionEventArgs>? TextCompositionUpdate;
-    public event Action<TextCompositionEventArgs>? TextCompositionEnd;
 
     /// <summary>Re-runs registered classifiers, generators, projections, and adornments.</summary>
     public void InvalidateTextView()
     {
         Extensions.Revision++;
         ResetView();
-    }
-
-    bool ITextCompositionClient.IsComposing => _editor.IsComposing;
-    int ITextCompositionClient.CompositionStartIndex => _compositionStart;
-
-    int ITextCompositionEditor.CompositionLength => _compositionLength;
-    (int Start, int End) ITextCompositionEditor.SelectionRange => (SelectionStart, SelectionStart + SelectionLength);
-    void ITextCompositionEditor.SetSelectionRangeForPlatform(int start, int end) => Select(Math.Min(start, end), Math.Abs(end - start));
-    int ITextCompositionEditor.TextLength => _document.TextLength;
-    string ITextCompositionEditor.GetTextSubstring(int start, int length) => _document.GetText(start, length);
-
-    void ITextCompositionEditor.CommitActiveComposition()
-    {
-        if (!_editor.IsComposing) return;
-        _editor.CommitComposition();
-        _compositionLength = 0;
-        _compositionAttributes = null;
-        EnsureCaretVisible();
     }
 
     public void Select(int start, int length) => _editor.SetSelection(start, length);
@@ -281,7 +206,7 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
         }
     }
 
-    public Rect GetCharRectInWindow(int charIndex)
+    public override Rect GetCharRectInWindow(int charIndex)
     {
         EnsureView();
         if (_view is null)
@@ -607,27 +532,6 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
         EditingStateChanged?.Invoke();
     }
 
-    private void InsertText(string? value)
-    {
-        string text = EditableTextDocument.NormalizeNewLines(value ?? string.Empty);
-        if (MaxLength > 0)
-        {
-            int remaining = MaxLength - (_document.TextLength - _editor.Selection.Length);
-            if (remaining <= 0)
-            {
-                return;
-            }
-            if (text.Length > remaining)
-            {
-                text = TruncateAtTextElementBoundary(text, remaining);
-            }
-        }
-        if (text.Length > 0)
-        {
-            _editor.ReplaceSelection(text);
-        }
-    }
-
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -840,7 +744,7 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
         }
     }
 
-    private void EnsureCaretVisible()
+    private protected override void EnsureCaretVisible()
     {
         if (_contentBounds.IsEmpty)
         {
@@ -886,99 +790,6 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
         _horizontalOffset = value;
         if (_horizontalScrollBar.IsVisible) _horizontalScrollBar.Value = value;
         if (invalidate) InvalidateVisual();
-    }
-
-    void ITextInputClient.HandleTextInput(TextInputEventArgs e)
-    {
-        TextInput?.Invoke(e);
-        if (e.Handled || IsReadOnly) return;
-        string text = e.Text ?? string.Empty;
-        if (_suppressNewLineInput && (text.Contains('\r') || text.Contains('\n')))
-        {
-            _suppressNewLineInput = false;
-            e.Handled = true;
-            return;
-        }
-        if (_suppressTabInput && text.Contains('\t'))
-        {
-            _suppressTabInput = false;
-            e.Handled = true;
-            return;
-        }
-        if (_editor.IsComposing) _editor.CommitComposition();
-        InsertText(text);
-        EnsureCaretVisible();
-        e.Handled = true;
-    }
-
-    void ITextCompositionClient.HandleTextCompositionStart(TextCompositionEventArgs e)
-    {
-        TextCompositionStart?.Invoke(e);
-        if (e.Handled || IsReadOnly) return;
-        _editor.BeginComposition();
-        _compositionStart = _editor.CaretPosition;
-        _compositionLength = 0;
-    }
-
-    void ITextCompositionClient.HandleTextCompositionUpdate(TextCompositionEventArgs e)
-    {
-        TextCompositionUpdate?.Invoke(e);
-        if (e.Handled || IsReadOnly) return;
-        if (!_editor.IsComposing)
-        {
-            _editor.BeginComposition();
-            _compositionStart = _editor.CaretPosition;
-        }
-        UpdateCompositionText(e.Text);
-        _compositionAttributes = e.Attributes;
-        EnsureCaretVisible();
-    }
-
-    void ITextCompositionClient.HandleTextCompositionEnd(TextCompositionEventArgs e)
-    {
-        TextCompositionEnd?.Invoke(e);
-        if (e.Handled || IsReadOnly) return;
-        if (!string.IsNullOrEmpty(e.Text))
-        {
-            UpdateCompositionText(e.Text);
-        }
-        _editor.CommitComposition();
-        _compositionLength = 0;
-        _compositionAttributes = null;
-        EnsureCaretVisible();
-    }
-
-    private void UpdateCompositionText(string? value)
-    {
-        string text = EditableTextDocument.NormalizeNewLines(value ?? string.Empty);
-        if (MaxLength > 0)
-        {
-            int remaining = MaxLength - (_document.TextLength - _compositionLength);
-            text = remaining <= 0
-                ? string.Empty
-                : TruncateAtTextElementBoundary(text, remaining);
-        }
-        _editor.UpdateComposition(text);
-        _compositionLength = text.Length;
-    }
-
-    private static string TruncateAtTextElementBoundary(string text, int maximumLength)
-    {
-        if (maximumLength <= 0)
-        {
-            return string.Empty;
-        }
-        if (text.Length <= maximumLength)
-        {
-            return text;
-        }
-
-        int[] boundaries = StringInfo.ParseCombiningCharacters(text);
-        int boundaryIndex = Array.BinarySearch(boundaries, maximumLength);
-        int length = boundaryIndex >= 0
-            ? maximumLength
-            : boundaries[Math.Max(0, ~boundaryIndex - 1)];
-        return length == 0 ? string.Empty : text[..length];
     }
 
     protected override void OnGotFocus()
