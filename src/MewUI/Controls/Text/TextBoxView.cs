@@ -195,41 +195,6 @@ internal sealed class TextBoxView
         }
     }
 
-    /// <summary>
-    /// Draws composition underline using MultiLineTextView's cached line measurement.
-    /// Avoids closure allocation by taking the cache and offset parameters directly.
-    /// </summary>
-    internal static void DrawSegmentedCompositionUnderline(
-        MultiLineTextView.CachedLineMeasure cache, IGraphicsContext context, IFont font,
-        double y, Color color,
-        CompositionAttr[]? attrs, int attrOffset, int count,
-        int charStart, double baseX)
-    {
-        if (count <= 0) return;
-
-        if (attrs == null || attrs.Length == 0)
-        {
-            double x0 = baseX + MultiLineTextView.GetPrefixWidthCached(cache, charStart, context, font);
-            double x1 = baseX + MultiLineTextView.GetPrefixWidthCached(cache, charStart + count, context, font);
-            DrawCompositionUnderline(context, x0, x1, y, color, CompositionAttr.Input);
-            return;
-        }
-
-        int segStart = 0;
-        var segAttr = GetAttr(attrs, attrOffset);
-        for (int i = 1; i <= count; i++)
-        {
-            var a = i < count ? GetAttr(attrs, attrOffset + i) : (CompositionAttr)255;
-            if (a != segAttr)
-            {
-                double sx = baseX + MultiLineTextView.GetPrefixWidthCached(cache, charStart + segStart, context, font);
-                double ex = baseX + MultiLineTextView.GetPrefixWidthCached(cache, charStart + i, context, font);
-                DrawCompositionUnderline(context, sx, ex, y, color, segAttr);
-                segStart = i;
-                segAttr = a;
-            }
-        }
-    }
 
     private static CompositionAttr GetAttr(CompositionAttr[] attrs, int index)
         => index >= 0 && index < attrs.Length ? attrs[index] : CompositionAttr.Input;
