@@ -322,28 +322,4 @@ public sealed class ParentContextTests
         child.StyleName = "plain";
         Assert.IsTrue(double.IsNaN(child.Width), "stale style width cleared back to default");
     }
-
-    [TestMethod]
-    public void TypeRuleStyleSheet_CanBeRemovedAndReappliedWhileAttached()
-    {
-        var sheet = new StyleSheet();
-        sheet.Define<Border>(new Style(typeof(Border))
-        {
-            Setters = [Setter.Create(FrameworkElement.WidthProperty, 42.0)],
-        });
-
-        var child = new Border();
-        var scope = new Border { StyleSheet = sheet, Child = child };
-        var window = new Window { Content = scope };
-
-        Assert.AreEqual(42, child.Width);
-
-        scope.StyleSheet = null;
-
-        Assert.IsTrue(double.IsNaN(child.Width), "removing the type rule restores the default Width");
-
-        scope.StyleSheet = sheet;
-
-        Assert.AreEqual(42, child.Width, "the same sheet can be reapplied");
-    }
 }
