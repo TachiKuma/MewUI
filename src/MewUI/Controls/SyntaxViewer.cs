@@ -29,6 +29,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
     private bool _dragSelecting;
     private readonly ScrollBar _verticalScrollBar;
     private readonly ScrollBar _horizontalScrollBar;
+    private ContextMenu? _defaultContextMenu;
 
     public SyntaxViewer()
     {
@@ -332,7 +333,17 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
     protected override void OnMouseDown(MouseEventArgs e)
     {
         base.OnMouseDown(e);
-        if (e.Handled || e.Button != MouseButton.Left || !IsEffectivelyEnabled) return;
+        if (e.Handled || !IsEffectivelyEnabled) return;
+        if (e.Button == MouseButton.Right && ContextMenu == null)
+        {
+            var menu = _defaultContextMenu ??= new ContextMenu();
+            TextContextMenu.Show(menu, this, e.Position,
+                copy: new TextMenuCommand(Copy, SelectionLength > 0),
+                selectAll: new TextMenuCommand(SelectAll, _document.TextLength > 0));
+            e.Handled = true;
+            return;
+        }
+        if (e.Button != MouseButton.Left) return;
         SetCaretFromPoint(e.Position, e.ShiftKey);
         _dragSelecting = true;
         if (FindVisualRoot() is Window window) window.CaptureMouse(this);

@@ -212,6 +212,40 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         }
     }
 
+    private ContextMenu? _defaultContextMenu;
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (e.Handled || !IsEffectivelyEnabled || e.Button != MouseButton.Right)
+        {
+            return;
+        }
+
+        // A user-assigned context menu is shown by the shared Control path instead.
+        if (ContextMenu != null)
+        {
+            return;
+        }
+
+        ShowDefaultTextContextMenu(e.Position);
+        e.Handled = true;
+    }
+
+    private protected void ShowDefaultTextContextMenu(Point positionInWindow)
+    {
+        var menu = _defaultContextMenu ??= new ContextMenu();
+        bool hasSelection = _editor.Selection.Length > 0;
+        bool canPaste = !IsReadOnly && TryGetClipboardText(out string clip) && !string.IsNullOrEmpty(clip);
+        TextContextMenu.Show(menu, this, positionInWindow,
+            undo: new TextMenuCommand(Undo, !IsReadOnly && CanUndo),
+            redo: new TextMenuCommand(Redo, !IsReadOnly && CanRedo),
+            cut: new TextMenuCommand(Cut, !IsReadOnly && hasSelection),
+            copy: new TextMenuCommand(Copy, hasSelection),
+            paste: new TextMenuCommand(Paste, canPaste),
+            selectAll: new TextMenuCommand(SelectAll, _document.TextLength > 0));
+    }
+
     private protected bool TrySetClipboardText(string text)
         => (ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformHost.Clipboard : null))
             ?.TrySetText(text) == true;
