@@ -2,6 +2,7 @@ using System.Globalization;
 
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Platform;
+using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 using Aprillz.MewUI.Text.Editing;
 
@@ -168,9 +169,10 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     public IClipboardService? ClipboardService { get; set; }
 
     /// <summary>
-    /// Gets the currently selected text. Overridable so masking controls can withhold the raw document text.
+    /// Returns the raw selected document text. SelectedText is deliberately not exposed on the
+    /// base: only controls whose text is public (TextBox, MultiLineTextBox) surface it.
     /// </summary>
-    public virtual string SelectedText => _editor.Selection.Length == 0
+    private protected string GetSelectedDocumentText() => _editor.Selection.Length == 0
         ? string.Empty
         : _document.GetText(_editor.Selection.Start, _editor.Selection.Length);
 
@@ -255,7 +257,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     }
 
     /// <summary>Writes the selection to the clipboard. Masking controls override to withhold it.</summary>
-    private protected virtual void CopyToClipboardCore() => TrySetClipboardText(SelectedText);
+    private protected virtual void CopyToClipboardCore() => TrySetClipboardText(GetSelectedDocumentText());
 
     /// <summary>Cuts the selection. Masking controls override to withhold the clipboard write.</summary>
     private protected virtual void CutToClipboardCore()
@@ -273,6 +275,103 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     /// <summary>Per-control paste normalization (single-line controls convert newlines to spaces).</summary>
     private protected virtual string NormalizePastedText(string text) => text;
+
+    /// <summary>
+    /// Handles the shared primary-modifier editing shortcuts. Returns whether the key was consumed.
+    /// </summary>
+    private protected bool HandlePrimaryKey(KeyEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case Key.A:
+                SelectAll();
+                return true;
+            case Key.C:
+                Copy();
+                return true;
+            case Key.X:
+                Cut();
+                return true;
+            case Key.V:
+                Paste();
+                return true;
+            case Key.Z:
+                if (e.ShiftKey) Redo(); else Undo();
+                return true;
+            case Key.Y:
+                Redo();
+                return true;
+            case Key.Home:
+                _editor.SetCaret(0, e.ShiftKey);
+                return true;
+            case Key.End:
+                _editor.SetCaret(_document.TextLength, e.ShiftKey);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Draws clause-segmented IME composition underlines using caret geometry from the view.
+    /// Wrapped segments underline to <paramref name="wrapRightEdge"/> on their starting line.
+    /// </summary>
+    private protected void DrawCompositionUnderlines(IGraphicsContext context, double wrapRightEdge)
+    {
+        if (!_editor.IsComposing || _compositionLength <= 0)
+        {
+            return;
+        }
+
+        var color = Theme.Palette.WindowText;
+        int index = 0;
+        while (index < _compositionLength)
+        {
+            var attr = GetCompositionAttr(index);
+            var startRect = GetCharRectInWindow(_compositionStart + index);
+            double lineY = startRect.Y;
+
+            int segmentEnd = index + 1;
+            var endRect = GetCharRectInWindow(_compositionStart + segmentEnd);
+            while (segmentEnd < _compositionLength && GetCompositionAttr(segmentEnd) == attr && endRect.Y == lineY)
+            {
+                segmentEnd++;
+                endRect = GetCharRectInWindow(_compositionStart + segmentEnd);
+            }
+
+            double endX = endRect.Y == lineY ? endRect.X : wrapRightEdge;
+            DrawCompositionUnderline(context, startRect.X, endX, lineY + startRect.Height, color, attr);
+            index = segmentEnd;
+        }
+    }
+
+    private CompositionAttr GetCompositionAttr(int offsetInComposition)
+        => _compositionAttributes is { Length: > 0 } attrs && offsetInComposition < attrs.Length
+            ? attrs[offsetInComposition]
+            : CompositionAttr.Input;
+
+    private static void DrawCompositionUnderline(
+        IGraphicsContext context, double startX, double endX, double y, Color color, CompositionAttr attr)
+    {
+        double thickness = attr is CompositionAttr.TargetConverted or CompositionAttr.TargetNotConverted ? 2 : 1;
+        bool dashed = attr is CompositionAttr.Input or CompositionAttr.TargetNotConverted;
+
+        if (!dashed)
+        {
+            context.DrawLine(new Point(startX, y), new Point(endX, y), color, thickness, pixelSnap: true);
+            return;
+        }
+
+        const double DASH = 3;
+        const double GAP = 2;
+        double x = startX;
+        while (x < endX)
+        {
+            double dashEnd = Math.Min(x + DASH, endX);
+            context.DrawLine(new Point(x, y), new Point(dashEnd, y), color, thickness, pixelSnap: true);
+            x = dashEnd + GAP;
+        }
+    }
 
     /// <summary>Per-control typed-text normalization (single-line controls drop newline characters).</summary>
     private protected virtual string NormalizeTypedText(string text) => text;
