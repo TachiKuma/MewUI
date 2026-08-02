@@ -23,8 +23,24 @@ public sealed class LegacyTextSurfaceSnapshotTests
         => AssertSurface(typeof(LegacySingleLineTextBase), _legacySingleLineTextBaseSurface);
 
     [TestMethod]
-    public void TextBox_MatchesFrozenSurface()
-        => AssertSurface(typeof(TextBox), _textBoxSurface);
+    public void TextBox_CoversLegacyPublicSurface()
+    {
+        var chain = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var type in new[] { typeof(TextBox), typeof(SingleLineTextBase), typeof(TextBase) })
+        {
+            foreach (var entry in GetDeclaredSurface(type, publicOnly: true))
+            {
+                chain.Add(StripInheritanceModifiers(entry));
+            }
+        }
+
+        var missing = _textBoxPublicSurface.Where(entry => !chain.Contains(entry)).ToList();
+        Assert.IsTrue(missing.Count == 0,
+            $"Rebuilt TextBox chain lost legacy public surface.\nMissing:\n  {string.Join("\n  ", missing)}");
+    }
+
+    private static string StripInheritanceModifiers(string entry)
+        => entry.Replace(":abstract", "").Replace(":virtual", "");
 
     [TestMethod]
     public void PasswordBox_MatchesFrozenSurface()
@@ -43,12 +59,14 @@ public sealed class LegacyTextSurfaceSnapshotTests
     /// Formats the declared public/protected members of a type into stable snapshot entries.
     /// Declaring-type names are excluded so the entries survive class renames.
     /// </summary>
-    internal static HashSet<string> GetDeclaredSurface(Type type)
+    internal static HashSet<string> GetDeclaredSurface(Type type, bool publicOnly = false)
     {
         const BindingFlags FLAGS = BindingFlags.DeclaredOnly | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static;
         var entries = new HashSet<string>(StringComparer.Ordinal);
 
-        static bool Visible(MethodBase? method) => method != null && (method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly);
+        bool Visible(MethodBase? method) => method != null && (publicOnly
+            ? method.IsPublic
+            : method.IsPublic || method.IsFamily || method.IsFamilyOrAssembly);
         static string TypeName(Type memberType) => memberType.IsGenericType
             ? $"{memberType.Name.Split('`')[0]}<{string.Join(",", memberType.GetGenericArguments().Select(TypeName))}>"
             : memberType.Name;
@@ -57,7 +75,10 @@ public sealed class LegacyTextSurfaceSnapshotTests
 
         foreach (var field in type.GetFields(FLAGS))
         {
-            if (!(field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly)) continue;
+            bool fieldVisible = publicOnly
+                ? field.IsPublic
+                : field.IsPublic || field.IsFamily || field.IsFamilyOrAssembly;
+            if (!fieldVisible) continue;
             entries.Add($"F:{field.Name}:{TypeName(field.FieldType)}");
         }
 
@@ -233,11 +254,45 @@ public sealed class LegacyTextSurfaceSnapshotTests
         "M:SetCaretFromPoint(Point,Rect):Void:virtual",
     };
 
-    private static readonly string[] _textBoxSurface =
+    // Legacy public surface of TextBox and its legacy base chain, minus decided removals
+    // (WrapChanged: multiline-only; see agent/textBase/plan.md Breaking Changes).
+    // Inheritance modifiers are stripped because virtual-ness is free to change in the rebuild.
+    private static readonly string[] _textBoxPublicSurface =
     {
         "C:()",
+        "E:TextChanged:Action<String>",
+        "E:TextCompositionEnd:Action<TextCompositionEventArgs>",
+        "E:TextCompositionStart:Action<TextCompositionEventArgs>",
+        "E:TextCompositionUpdate:Action<TextCompositionEventArgs>",
+        "E:TextInput:Action<TextInputEventArgs>",
+        "F:AcceptTabProperty:MewProperty<Boolean>",
+        "F:ImeModeProperty:MewProperty<ImeMode>",
+        "F:IsReadOnlyProperty:MewProperty<Boolean>",
+        "F:MaxLengthProperty:MewProperty<Int32>",
+        "F:PlaceholderProperty:MewProperty<String>",
+        "F:SelectionLengthProperty:MewProperty<Int32>",
+        "F:SelectionStartProperty:MewProperty<Int32>",
         "F:TextProperty:MewProperty<String>",
-        "M:NotifyTextChanged():Void:virtual",
+        "M:AppendText(String,Boolean):Void",
+        "M:Copy():Void",
+        "M:Cut():Void",
+        "M:GetCharRectInWindow(Int32):Rect",
+        "M:Paste():Void",
+        "M:Redo():Void",
+        "M:ScrollToCaret():Void",
+        "M:SelectAll():Void",
+        "M:Undo():Void",
+        "P:AcceptTab:Boolean:getset",
+        "P:CanRedo:Boolean:get",
+        "P:CanUndo:Boolean:get",
+        "P:CaretPosition:Int32:getset",
+        "P:ImeMode:ImeMode:getset",
+        "P:IsReadOnly:Boolean:getset",
+        "P:MaxLength:Int32:getset",
+        "P:Placeholder:String:getset",
+        "P:SelectedText:String:get",
+        "P:SelectionLength:Int32:get",
+        "P:SelectionStart:Int32:get",
         "P:Text:String:getset",
     };
 

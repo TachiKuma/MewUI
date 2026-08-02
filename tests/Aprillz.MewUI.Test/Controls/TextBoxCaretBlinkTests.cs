@@ -10,7 +10,7 @@ namespace MewUI.Test.Controls;
 public sealed class TextBoxCaretBlinkTests
 {
     private static readonly FieldInfo CaretVisibleField =
-        typeof(LegacyTextBase).GetField("_caretVisible", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        typeof(TextBase).GetField("_caretVisible", BindingFlags.Instance | BindingFlags.NonPublic)!;
 
     [TestMethod]
     public void ShiftRight_RestartsBlinkWhenSelectionStartDoesNotChange()
@@ -101,6 +101,6 @@ public sealed class TextBoxCaretBlinkTests
         return (window, textBox);
     }
 
-    private static void SetCaretVisible(LegacyTextBase textBox, bool value)
+    private static void SetCaretVisible(TextBase textBox, bool value)
         => CaretVisibleField.SetValue(textBox, value);
 }

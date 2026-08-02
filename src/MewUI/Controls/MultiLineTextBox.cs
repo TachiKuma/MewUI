@@ -365,8 +365,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     private void OnEditorStateChanged()
     {
         _preferredCaretX = double.NaN;
-        ResetCaretBlink();
-        InvalidateVisual();
         EditingStateChanged?.Invoke();
     }
 

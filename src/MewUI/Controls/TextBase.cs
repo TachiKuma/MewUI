@@ -53,6 +53,8 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     private protected int _compositionLength;
     private protected CompositionAttr[]? _compositionAttributes;
     private protected bool _caretVisible = true;
+
+    internal bool CaretVisible => _caretVisible;
     private protected bool _syncingText;
     private string _textSnapshot = string.Empty;
     private long _textSnapshotVersion = -1;
@@ -454,6 +456,8 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         var selection = _editor.Selection;
         SetValue(SelectionStartPropertyKey, selection.Start);
         SetValue(SelectionLengthPropertyKey, selection.Length);
+        ResetCaretBlink();
+        InvalidateVisual();
     }
 
     protected override void OnGotFocus()
