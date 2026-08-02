@@ -17,14 +17,16 @@ public class TextEditor : ContentControl
     private LineNumberMargin _lineNumberMargin = null!;
     private IHighlightingDefinition? _syntaxHighlighting;
     private HighlightingColorizer? _colorizer;
-    private readonly WhitespaceProjection _whitespaceProjection;
+    private readonly SpaceMarkerProjection _spaceMarkers;
+    private readonly WhitespaceAdornmentProvider _whitespaceAdornments;
     private bool _showLineNumbers;
 
     public TextEditor()
     {
         Options = new TextEditorOptions();
         IndentationStrategy = new DefaultIndentationStrategy();
-        _whitespaceProjection = new WhitespaceProjection(Options);
+        _spaceMarkers = new SpaceMarkerProjection(Options);
+        _whitespaceAdornments = new WhitespaceAdornmentProvider(Options, this);
         Options.PropertyChanged += OnOptionsChanged;
         _document = new TextDocument();
         _document.Changed += OnDocumentTextChanged;
@@ -120,6 +122,7 @@ public class TextEditor : ContentControl
     public double HorizontalOffset => _surface.HorizontalOffset;
 
     internal MultiLineTextBox Surface => _surface;
+    internal Color WhitespaceMarkerColor => Theme.Palette.PlaceholderText;
     internal event Action<MultiLineTextBox, MultiLineTextBox>? SurfaceChanged;
 
     public event EventHandler? TextChanged;
@@ -169,7 +172,8 @@ public class TextEditor : ContentControl
             FontWeight = FontWeight
         };
         _surface.TextInput += OnSurfaceTextInput;
-        _surface.Extensions.Projections.Add(_whitespaceProjection);
+        _surface.Extensions.Projections.Add(_spaceMarkers);
+        _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
         _lineNumberMargin = new LineNumberMargin(this)
         {
             IsVisible = _showLineNumbers
