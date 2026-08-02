@@ -1615,8 +1615,11 @@ internal static unsafe class MacOSWindowInterop
     [UnmanagedCallersOnly]
     private static ulong MewUITextInputView_characterIndexForPoint(nint self, nint _cmd, NSPoint point)
     {
-        MacOSWindowBackend.ImeNativeLogger.Write($"objc characterIndexForPoint view=0x{self:x} pt=({point.x},{point.y}) -> 0");
-        return 0;
+        // Answering 0 here claims every click sits on character 0, which lets the input method
+        // consume/redirect clicks to the wrong place. NSNotFound is the honest "no character" answer
+        // until a real screen-point-to-index hit test is wired through the composition editor seam.
+        MacOSWindowBackend.ImeNativeLogger.Write($"objc characterIndexForPoint view=0x{self:x} pt=({point.x},{point.y}) -> NSNotFound");
+        return ulong.MaxValue;
     }
 
     [UnmanagedCallersOnly]
