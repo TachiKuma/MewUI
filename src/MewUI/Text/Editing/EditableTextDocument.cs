@@ -9,7 +9,7 @@ namespace Aprillz.MewUI.Text.Editing;
 public sealed class EditableTextDocument : IReadOnlyTextDocument
 {
     private readonly StringBuilder _text = new();
-    private readonly List<EditableDocumentLine> _lines = [];
+    private readonly EditableLineIndex _lines = new();
 
     public EditableTextDocument(string? text = null)
     {
@@ -47,7 +47,12 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
         {
             throw new ArgumentOutOfRangeException(nameof(lineNumber));
         }
-        return _lines[lineNumber];
+        var line = _lines.GetByNumber(lineNumber);
+        return new EditableDocumentLine(
+            line.LineNumber,
+            line.Offset,
+            line.Length,
+            line.DelimiterLength);
     }
 
     public IReadOnlyDocumentLine GetLineByOffset(int offset)
@@ -57,31 +62,17 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
             throw new ArgumentOutOfRangeException(nameof(offset));
         }
 
-        int low = 0;
-        int high = _lines.Count - 1;
-        while (low <= high)
-        {
-            int middle = low + (high - low) / 2;
-            var line = _lines[middle];
-            if (offset < line.Offset)
-            {
-                high = middle - 1;
-            }
-            else if (middle + 1 < _lines.Count && offset >= _lines[middle + 1].Offset)
-            {
-                low = middle + 1;
-            }
-            else
-            {
-                return line;
-            }
-        }
-        return _lines[^1];
+        var line = _lines.GetByOffset(offset, _text.Length);
+        return new EditableDocumentLine(
+            line.LineNumber,
+            line.Offset,
+            line.Length,
+            line.DelimiterLength);
     }
 
     public int GetOffset(int line, int column)
     {
-        var documentLine = (EditableDocumentLine)GetLineByNumber(line);
+        var documentLine = _lines.GetByNumber(line);
         if (column < 0 || column > documentLine.Length)
         {
             throw new ArgumentOutOfRangeException(nameof(column));
@@ -91,7 +82,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
 
     public TextLocation GetLocation(int offset)
     {
-        var line = (EditableDocumentLine)GetLineByOffset(offset);
+        var line = _lines.GetByOffset(offset, _text.Length);
         return new TextLocation(line.LineNumber, Math.Min(offset - line.Offset, line.Length));
     }
 
@@ -123,34 +114,78 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
         {
             return;
         }
-        if (length == normalized.Length &&
-            string.Equals(_text.ToString(offset, length), normalized, StringComparison.Ordinal))
+        if (length == normalized.Length && RangeEquals(offset, normalized))
         {
             return;
         }
 
+        var startLine = _lines.GetByOffset(offset, _text.Length);
+        var endLine = _lines.GetByOffset(offset + length, _text.Length);
+        bool changesLineStructure = normalized.Contains('\n') ||
+            offset + length > startLine.Offset + startLine.Length;
+        int affectedStart = startLine.Offset;
+        int affectedEnd = endLine.Offset + endLine.Length + endLine.DelimiterLength;
+        bool hasFollowingLine = endLine.LineNumber + 1 < _lines.Count;
+
         _text.Remove(offset, length);
         _text.Insert(offset, normalized);
+        if (!changesLineStructure)
+        {
+            _lines.SetLineLength(startLine.LineNumber, startLine.Length - length + normalized.Length);
+        }
+        else
+        {
+            int affectedLength = affectedEnd - affectedStart - length + normalized.Length;
+            string affectedText = _text.ToString(affectedStart, affectedLength);
+            var replacement = ParseLines(affectedText, includeFinalLine: !hasFollowingLine);
+            _lines.ReplaceRange(
+                startLine.LineNumber,
+                endLine.LineNumber - startLine.LineNumber + 1,
+                replacement);
+        }
         Version++;
-        RebuildLines();
         Changed?.Invoke(new TextChange(offset, length, normalized.Length));
     }
 
     private void RebuildLines()
     {
-        _lines.Clear();
-        int lineNumber = 0;
+        var lines = new List<EditableLineRecord>();
         int start = 0;
-        for (int i = 0; i < _text.Length; i++)
+        for (int index = 0; index < _text.Length; index++)
         {
-            if (_text[i] != '\n')
+            if (_text[index] != '\n')
             {
                 continue;
             }
-            _lines.Add(new EditableDocumentLine(lineNumber++, start, i - start, 1));
-            start = i + 1;
+            lines.Add(new EditableLineRecord(index - start, 1));
+            start = index + 1;
         }
-        _lines.Add(new EditableDocumentLine(lineNumber, start, _text.Length - start, 0));
+        lines.Add(new EditableLineRecord(_text.Length - start, 0));
+        _lines.Reset(lines);
+    }
+
+    private static List<EditableLineRecord> ParseLines(string text, bool includeFinalLine)
+    {
+        var lines = new List<EditableLineRecord>();
+        int start = 0;
+        for (int index = 0; index < text.Length; index++)
+        {
+            if (text[index] != '\n')
+            {
+                continue;
+            }
+            lines.Add(new EditableLineRecord(index - start, 1));
+            start = index + 1;
+        }
+        if (includeFinalLine || start < text.Length)
+        {
+            lines.Add(new EditableLineRecord(text.Length - start, 0));
+        }
+        if (lines.Count == 0)
+        {
+            lines.Add(new EditableLineRecord(0, 0));
+        }
+        return lines;
     }
 
     private void ValidateRange(int offset, int length)
@@ -176,6 +211,18 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
             }
         }
 
+        return true;
+    }
+
+    private bool RangeEquals(int offset, string value)
+    {
+        for (int index = 0; index < value.Length; index++)
+        {
+            if (_text[offset + index] != value[index])
+            {
+                return false;
+            }
+        }
         return true;
     }
 

@@ -9,6 +9,8 @@ public sealed class TextEditorSession
     private readonly Stack<EditCommand> _redo = new();
     private CompositionState? _composition;
     private long _textElementVersion = -1;
+    private int _textElementLineOffset = -1;
+    private int _textElementLineTotalLength = -1;
     private int[] _textElementStarts = [];
 
     public TextEditorSession(EditableTextDocument document)
@@ -269,7 +271,7 @@ public sealed class TextEditorSession
         {
             return 0;
         }
-        int[] starts = GetTextElementStarts();
+        int[] starts = GetTextElementStarts(position, backward: true);
         int index = Array.BinarySearch(starts, position);
         if (index >= 0)
         {
@@ -285,10 +287,12 @@ public sealed class TextEditorSession
         {
             return Document.TextLength;
         }
-        int[] starts = GetTextElementStarts();
+        int[] starts = GetTextElementStarts(position, backward: false);
         int index = Array.BinarySearch(starts, position);
         index = index >= 0 ? index + 1 : ~index;
-        return index < starts.Length ? starts[index] : Document.TextLength;
+        return index < starts.Length
+            ? starts[index]
+            : Math.Min(Document.TextLength, _textElementLineOffset + _textElementLineTotalLength);
     }
 
     private int FindPreviousWordBoundary(int position)
@@ -305,15 +309,27 @@ public sealed class TextEditorSession
         return current;
     }
 
-    private int[] GetTextElementStarts()
+    private int[] GetTextElementStarts(int position, bool backward)
     {
-        if (_textElementVersion == Document.Version)
+        int probe = backward && position > 0 ? position - 1 : position;
+        var line = Document.GetLineByOffset(Math.Clamp(probe, 0, Document.TextLength));
+        if (_textElementVersion == Document.Version &&
+            _textElementLineOffset == line.Offset &&
+            _textElementLineTotalLength == line.TotalLength)
         {
             return _textElementStarts;
         }
 
-        _textElementStarts = StringInfo.ParseCombiningCharacters(Document.ToString());
+        string lineText = Document.GetText(line.Offset, line.TotalLength);
+        int[] localStarts = StringInfo.ParseCombiningCharacters(lineText);
+        for (int index = 0; index < localStarts.Length; index++)
+        {
+            localStarts[index] += line.Offset;
+        }
+        _textElementStarts = localStarts;
         _textElementVersion = Document.Version;
+        _textElementLineOffset = line.Offset;
+        _textElementLineTotalLength = line.TotalLength;
         return _textElementStarts;
     }
 

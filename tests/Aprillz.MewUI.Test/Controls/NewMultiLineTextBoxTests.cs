@@ -60,9 +60,31 @@ public sealed class NewMultiLineTextBoxTests
         textBox.Text = second;
 
         long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
-        Assert.AreSame(second, textBox.Text);
+        Assert.AreEqual(second, textBox.Text);
         Assert.IsLessThan(32L * 1024 * 1024, allocatedBytes,
             $"Replacing 10MB allocated {allocatedBytes:N0} bytes, indicating extra full document snapshots.");
+    }
+
+    [TestMethod]
+    [Timeout(30_000, CooperativeCancellation = true)]
+    public void EditingLargeInjectedDocumentWithoutStringConsumerDefersSnapshot()
+    {
+        var document = new EditableTextDocument(new string('x', 10_000_000));
+        var textBox = new NewMultiLineTextBox(document);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        document.Insert(document.TextLength, "y");
+
+        long allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        Assert.AreEqual(10_000_001, document.TextLength);
+        Assert.IsLessThan(1L * 1024 * 1024, allocatedBytes,
+            $"A one-character edit allocated {allocatedBytes:N0} bytes, indicating a full text snapshot.");
+        Assert.AreEqual(10_000_001, textBox.Text.Length,
+            "The deferred snapshot was not materialized when Text was explicitly requested.");
     }
 
     [TestMethod]
