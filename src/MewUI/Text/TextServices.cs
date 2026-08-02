@@ -391,7 +391,13 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
             }
             else
             {
-                var clip = new Rect(left, runBounds.Y, Math.Max(0, right - left), runBounds.Height).Intersect(runBounds);
+                // Interior color boundaries floor to whole device pixels so adjacent clips agree
+                // on pixel ownership; backend clip rounding otherwise shifts the boundary column
+                // into the neighbor color depending on the fractional scroll offset.
+                double dpiScale = _context.DpiScale;
+                double clipLeft = segmentStart == firstCluster ? runBounds.X : Math.Floor(left * dpiScale) / dpiScale;
+                double clipRight = clusterIndex == endCluster ? runBounds.Right : Math.Floor(right * dpiScale) / dpiScale;
+                var clip = new Rect(clipLeft, runBounds.Y, Math.Max(0, clipRight - clipLeft), runBounds.Height).Intersect(runBounds);
                 if (!clip.IsEmpty)
                 {
                     _context.Save();
