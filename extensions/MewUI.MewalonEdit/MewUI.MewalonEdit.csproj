@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\build\MewUI.Common.props" />
+
+  <PropertyGroup>
+    <RootNamespace>ICSharpCode.AvalonEdit</RootNamespace>
+    <AssemblyName>Aprillz.MewUI.MewalonEdit</AssemblyName>
+    <PackageId>Aprillz.MewUI.MewalonEdit</PackageId>
+    <Description>AvalonEdit-compatible editing components built on the MewUI text engine.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MewUI\MewUI.csproj" />
+    <None Include="LICENSE.AvalonEdit" Pack="true" PackagePath="licenses\" />
+  </ItemGroup>
+
+</Project>
