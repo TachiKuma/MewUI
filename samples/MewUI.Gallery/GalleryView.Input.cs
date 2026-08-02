@@ -74,8 +74,13 @@ partial class GalleryView
                 }
                 """
         };
-        viewer.Extensions.Classifiers.Add(new GalleryCSharpClassifier());
-        viewer.InvalidateTextView();
+        var classifier = new GalleryCSharpClassifier();
+        viewer.Extensions.Classifiers.Add(classifier);
+        viewer.WithTheme((theme, target) =>
+        {
+            classifier.IsDark = theme.IsDark;
+            target.InvalidateTextView();
+        });
         return viewer;
     }
 
@@ -231,6 +236,15 @@ partial class GalleryView
 
     private sealed class GalleryCSharpClassifier : ITextClassifier
     {
+        public bool IsDark { get; set; } = true;
+
+        private string CommentColor => IsDark ? "#6A9955" : "#008000";
+        private string StringColor => IsDark ? "#CE9178" : "#A31515";
+        private string NumberColor => IsDark ? "#B5CEA8" : "#098658";
+        private string KeywordColor => IsDark ? "#569CD6" : "#0000FF";
+        private string TypeColor => IsDark ? "#4EC9B0" : "#267F99";
+        private string MemberColor => IsDark ? "#DCDCAA" : "#795E26";
+
         private static readonly HashSet<string> Keywords =
         [
             "async", "await", "class", "const", "default", "false", "namespace", "new", "null",
@@ -254,7 +268,7 @@ partial class GalleryView
 
                 if (index + 1 < text.Length && text[index] == '/' && text[index + 1] == '/')
                 {
-                    Add(output, index, text.Length - index, "#6A9955");
+                    Add(output, index, text.Length - index, CommentColor);
                     break;
                 }
 
@@ -272,7 +286,7 @@ partial class GalleryView
                         }
                         if (text[end++] == delimiter) break;
                     }
-                    Add(output, index, end - index, "#CE9178");
+                    Add(output, index, end - index, StringColor);
                     index = end;
                     continue;
                 }
@@ -281,7 +295,7 @@ partial class GalleryView
                 {
                     int end = index + 1;
                     while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] is '.' or '_')) end++;
-                    Add(output, index, end - index, "#B5CEA8");
+                    Add(output, index, end - index, NumberColor);
                     index = end;
                     continue;
                 }
@@ -292,11 +306,11 @@ partial class GalleryView
                     while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_')) end++;
                     string identifier = text[index..end].ToString();
                     if (Keywords.Contains(identifier) || BuiltInTypes.Contains(identifier))
-                        Add(output, index, end - index, "#569CD6");
+                        Add(output, index, end - index, KeywordColor);
                     else if (char.IsUpper(identifier[0]))
-                        Add(output, index, end - index, "#4EC9B0");
+                        Add(output, index, end - index, TypeColor);
                     else if (PreviousNonWhitespace(text, index) == '.')
-                        Add(output, index, end - index, "#DCDCAA");
+                        Add(output, index, end - index, MemberColor);
                     index = end;
                     continue;
                 }
