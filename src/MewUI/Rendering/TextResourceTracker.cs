@@ -6,21 +6,19 @@ namespace Aprillz.MewUI.Rendering;
 /// </summary>
 public sealed class TextResourceTracker
 {
-    private sealed class Entry(WeakReference<TextLayout> weakRef, nint handle)
+    private sealed class Entry(WeakReference<TextLayout> weakRef, NativeHandleLease lease)
     {
         public readonly WeakReference<TextLayout> WeakRef = weakRef;
-        public readonly nint Handle = handle;
+        public readonly NativeHandleLease Lease = lease;
     }
 
     private readonly LinkedList<Entry> _layouts = new();
 
-    public Action<nint>? ReleaseNativeHandle { get; set; }
-
     public void TrackLayout(TextLayout layout)
     {
-        if (layout.BackendHandle != 0)
+        if (layout.BackendLease is { } lease && lease.Handle != 0)
         {
-            _layouts.AddFirst(new Entry(new WeakReference<TextLayout>(layout), layout.BackendHandle));
+            _layouts.AddFirst(new Entry(new WeakReference<TextLayout>(layout), lease));
         }
     }
 
@@ -32,11 +30,7 @@ public sealed class TextResourceTracker
             var next = node.Next;
             if (!node.Value.WeakRef.TryGetTarget(out _))
             {
-                if (node.Value.Handle != 0)
-                {
-                    ReleaseNativeHandle?.Invoke(node.Value.Handle);
-                }
-
+                node.Value.Lease.Release();
                 _layouts.Remove(node);
             }
             node = next;
@@ -47,10 +41,7 @@ public sealed class TextResourceTracker
     {
         foreach (var entry in _layouts)
         {
-            if (entry.Handle != 0)
-            {
-                ReleaseNativeHandle?.Invoke(entry.Handle);
-            }
+            entry.Lease.Release();
         }
         _layouts.Clear();
     }
