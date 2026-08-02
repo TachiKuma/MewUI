@@ -1,4 +1,4 @@
-namespace ICSharpCode.AvalonEdit.MewUI.Sample;
+namespace MewvalonEdit.Sample;
 
 internal static class SampleText
 {
