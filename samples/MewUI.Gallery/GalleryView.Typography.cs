@@ -12,7 +12,7 @@ partial class GalleryView
             Width = 620,
             Height = 112,
             Wrap = true,
-            Text = "Normal text, bold text, italic text, accent text, and underlined text.\nMixed fonts: Segoe UI + Consolas + 22 pt."
+            Text = "Normal text, bold text, italic text, accent text, underlined text, and struck text.\nMixed fonts: Segoe UI + Consolas + 22 pt."
         };
         var runStyler = new RunLikeTextStyler();
         runDemo.Extensions.Classifiers.Add(runStyler);
@@ -141,6 +141,8 @@ partial class GalleryView
                 context.DefaultStyle with { Italic = true });
             AddGeometry(context.Text.Span, "underlined text", geometryRuns,
                 context.DefaultStyle with { Decoration = TextDecoration.Underline });
+            AddGeometry(context.Text.Span, "struck text", geometryRuns,
+                context.DefaultStyle with { Decoration = TextDecoration.Strikethrough });
             AddGeometry(context.Text.Span, "Consolas", geometryRuns,
                 context.DefaultStyle with { FontFamily = "Consolas" });
             AddGeometry(context.Text.Span, "22 pt", geometryRuns,
