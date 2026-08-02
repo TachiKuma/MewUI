@@ -290,7 +290,7 @@ public sealed class SearchPanel : ITextClassifier
 
     private static bool IsWordCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
 
-    private void OnSurfaceChanged(NewMultiLineTextBox previous, NewMultiLineTextBox current)
+    private void OnSurfaceChanged(MultiLineTextBox previous, MultiLineTextBox current)
     {
         previous.Extensions.Classifiers.Remove(this);
         _document.Changed -= OnDocumentChanged;

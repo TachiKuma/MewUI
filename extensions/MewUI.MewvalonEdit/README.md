@@ -2,7 +2,7 @@
 
 MewvalonEdit provides an AvalonEdit compatibility-oriented editor surface for MewUI. It uses
 `Aprillz.MewUI.Text` for layout, hit testing, viewport virtualization, syntax
-classification, projections, and adornments, and uses `NewMultiLineTextBox` for
+classification, projections, and adornments, and uses `MultiLineTextBox` for
 the editing baseline.
 
 The compatibility surface includes `TextEditor`, `TextDocument`, highlighting

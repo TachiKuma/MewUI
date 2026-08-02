@@ -148,8 +148,8 @@ public sealed class FoldingManager
     }
 
     private void OnSurfaceChanged(
-        Aprillz.MewUI.Controls.NewMultiLineTextBox previous,
-        Aprillz.MewUI.Controls.NewMultiLineTextBox current)
+        Aprillz.MewUI.Controls.MultiLineTextBox previous,
+        Aprillz.MewUI.Controls.MultiLineTextBox current)
     {
         previous.Extensions.Projections.Remove(_projection);
         previous.Extensions.LineCollapsers.Remove(_projection);
