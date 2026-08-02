@@ -47,8 +47,6 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
 
     public static readonly MewProperty<int> SelectionLengthProperty = SelectionLengthPropertyKey.Property;
 
-    private readonly EditableTextDocument _document;
-    private readonly TextEditorSession _editor;
     private readonly ScrollBar _verticalScrollBar;
     private readonly ScrollBar _horizontalScrollBar;
     private TextViewLayout? _view;
@@ -80,11 +78,9 @@ public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCo
     }
 
     public MultiLineTextBox(EditableTextDocument document)
+        : base(document)
     {
-        _document = document ?? throw new ArgumentNullException(nameof(document));
-        Cursor = CursorType.IBeam;
         Extensions = new TextViewExtensionPipeline();
-        _editor = new TextEditorSession(_document);
         _document.Changed += OnDocumentChanged;
         _editor.StateChanged += OnEditorStateChanged;
 

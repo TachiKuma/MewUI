@@ -1,4 +1,5 @@
 using Aprillz.MewUI.Input;
+using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -13,13 +14,25 @@ public abstract class TextBase : Control
     public static readonly MewProperty<ImeMode> ImeModeProperty =
         MewProperty<ImeMode>.Register<TextBase>(nameof(ImeMode), ImeMode.Auto);
 
+    // Shared editing state: derived controls access the document/session directly, matching
+    // the field names they used before the extraction.
+    private protected readonly EditableTextDocument _document;
+    private protected readonly TextEditorSession _editor;
+
     static TextBase()
     {
         FocusableProperty.OverrideDefaultValue<TextBase>(true);
     }
 
     protected TextBase()
+        : this(new EditableTextDocument())
     {
+    }
+
+    protected TextBase(EditableTextDocument document)
+    {
+        _document = document ?? throw new ArgumentNullException(nameof(document));
+        _editor = new TextEditorSession(_document);
         Cursor = CursorType.IBeam;
     }
 
