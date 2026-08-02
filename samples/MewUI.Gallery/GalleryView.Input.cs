@@ -43,13 +43,38 @@ partial class GalleryView
     {
         var viewer = new SyntaxViewer
         {
-            Width = 290,
-            Height = 150,
+            Width = 620,
+            Height = 330,
             Wrap = false,
             FontFamily = "Consolas",
-            Text = "public sealed class GreetingService\n{\n    public string Create(string name)\n    {\n        return $\"Hello, {name}! This deliberately long source line demonstrates horizontal syntax-view scrolling.\";\n    }\n}"
+            Text = """
+                using System.Collections.Generic;
+                using System.Linq;
+
+                namespace Gallery.Syntax;
+
+                [Obsolete("Use CreateAsync instead")]
+                public sealed record Result(int Id, string Name);
+
+                public static class ResultService
+                {
+                    // Keywords, types, numbers, members, strings, and interpolation.
+                    public static async Task<IReadOnlyList<Result>> CreateAsync(
+                        IEnumerable<string?> names,
+                        CancellationToken cancellationToken = default)
+                    {
+                        const int minimumLength = 3;
+                        await Task.Delay(42, cancellationToken);
+
+                        return names
+                            .Where(name => !string.IsNullOrWhiteSpace(name) && name.Length >= minimumLength)
+                            .Select((name, index) => new Result(index + 1, $"Item {index}: {name!.Trim()}"))
+                            .ToArray();
+                    }
+                }
+                """
         };
-        viewer.Extensions.Classifiers.Add(new GalleryKeywordClassifier());
+        viewer.Extensions.Classifiers.Add(new GalleryCSharpClassifier());
         viewer.InvalidateTextView();
         return viewer;
     }
@@ -159,7 +184,8 @@ partial class GalleryView
 
                 Card(
                     "SyntaxViewer",
-                    SyntaxViewerDemo()
+                    SyntaxViewerDemo(),
+                    minWidth: 650
                 ),
 
                 Card(
@@ -203,24 +229,94 @@ partial class GalleryView
                  )
              );
 
-    private sealed class GalleryKeywordClassifier : ITextClassifier
+    private sealed class GalleryCSharpClassifier : ITextClassifier
     {
-        private static readonly string[] Keywords = ["public", "sealed", "class", "string", "return"];
+        private static readonly HashSet<string> Keywords =
+        [
+            "async", "await", "class", "const", "default", "false", "namespace", "new", "null",
+            "public", "record", "return", "sealed", "static", "true", "using"
+        ];
+
+        private static readonly HashSet<string> BuiltInTypes =
+            ["bool", "double", "int", "object", "string", "var", "void"];
 
         public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
         {
-            string text = context.Text.ToString();
-            foreach (string keyword in Keywords)
+            ReadOnlySpan<char> text = context.Text.Span;
+            int index = 0;
+            while (index < text.Length)
             {
-                int start = 0;
-                while ((start = text.IndexOf(keyword, start, StringComparison.Ordinal)) >= 0)
+                if (char.IsWhiteSpace(text[index]))
                 {
-                    output.Add(new TextPaintSpan(
-                        new TextRange(start, keyword.Length),
-                        Foreground: Color.FromRgb(86, 156, 214)));
-                    start += keyword.Length;
+                    index++;
+                    continue;
                 }
+
+                if (index + 1 < text.Length && text[index] == '/' && text[index + 1] == '/')
+                {
+                    Add(output, index, text.Length - index, "#6A9955");
+                    break;
+                }
+
+                int stringPrefix = text[index] == '$' && index + 1 < text.Length && text[index + 1] == '"' ? 1 : 0;
+                if (text[index + stringPrefix] is '"' or '\'')
+                {
+                    char delimiter = text[index + stringPrefix];
+                    int end = index + stringPrefix + 1;
+                    while (end < text.Length)
+                    {
+                        if (text[end] == '\\')
+                        {
+                            end = Math.Min(text.Length, end + 2);
+                            continue;
+                        }
+                        if (text[end++] == delimiter) break;
+                    }
+                    Add(output, index, end - index, "#CE9178");
+                    index = end;
+                    continue;
+                }
+
+                if (char.IsDigit(text[index]))
+                {
+                    int end = index + 1;
+                    while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] is '.' or '_')) end++;
+                    Add(output, index, end - index, "#B5CEA8");
+                    index = end;
+                    continue;
+                }
+
+                if (char.IsLetter(text[index]) || text[index] == '_')
+                {
+                    int end = index + 1;
+                    while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_')) end++;
+                    string identifier = text[index..end].ToString();
+                    if (Keywords.Contains(identifier) || BuiltInTypes.Contains(identifier))
+                        Add(output, index, end - index, "#569CD6");
+                    else if (char.IsUpper(identifier[0]))
+                        Add(output, index, end - index, "#4EC9B0");
+                    else if (PreviousNonWhitespace(text, index) == '.')
+                        Add(output, index, end - index, "#DCDCAA");
+                    index = end;
+                    continue;
+                }
+
+                index++;
             }
         }
+
+        private static char PreviousNonWhitespace(ReadOnlySpan<char> text, int index)
+        {
+            for (int current = index - 1; current >= 0; current--)
+            {
+                if (!char.IsWhiteSpace(text[current])) return text[current];
+            }
+            return '\0';
+        }
+
+        private static void Add(IList<TextPaintSpan> output, int start, int length, string color)
+            => output.Add(new TextPaintSpan(
+                new TextRange(start, length),
+                Foreground: Color.FromHex(color)));
     }
 }
