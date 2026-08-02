@@ -1856,7 +1856,7 @@ internal sealed class MacOSWindowBackend : IWindowBackend
             // If the platform provides a replacement range, align our selection/caret so the IME composition
             // replaces the correct portion of the document.
             // (AppKit's NSRange is UTF-16 based, which matches .NET string indexing.)
-            if (replacementRange.location != NSNotFound && _window.FocusManager.FocusedElement is Controls.TextBase tb2)
+            if (replacementRange.location != NSNotFound && _window.FocusManager.FocusedElement is Controls.LegacyTextBase tb2)
             {
                 int start = (int)replacementRange.location;
                 int end = start + (int)replacementRange.length;
@@ -1890,9 +1890,9 @@ internal sealed class MacOSWindowBackend : IWindowBackend
             }
         }
 
-        if (_window.FocusManager.FocusedElement is Controls.TextBase tb)
+        if (_window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
         {
-            ImeLogger.Write($"  TextBase composingStart={tb.CompositionStartIndex} composingLen={tb.CompositionLength} caret={tb.CaretPosition} textLen={tb.TextLengthInternal}");
+            ImeLogger.Write($"  LegacyTextBase composingStart={tb.CompositionStartIndex} composingLen={tb.CompositionLength} caret={tb.CaretPosition} textLen={tb.TextLengthInternal}");
             try
             {
                 int textLen = tb.TextLengthInternal;
@@ -1907,7 +1907,7 @@ internal sealed class MacOSWindowBackend : IWindowBackend
                 string tail = tailLen > 0 ? tb.GetTextSubstringInternal(textLen - tailLen, tailLen) : string.Empty;
 
                 var (selStart, selEnd) = tb.SelectionRange;
-                ImeLogger.Write($"    TextBase selection=({selStart},{selEnd}) compText='{Truncate(compText)}' tail='{Truncate(tail)}'");
+                ImeLogger.Write($"    LegacyTextBase selection=({selStart},{selEnd}) compText='{Truncate(compText)}' tail='{Truncate(tail)}'");
             }
             catch
             {
@@ -1926,7 +1926,7 @@ internal sealed class MacOSWindowBackend : IWindowBackend
         // unmarkText means "accept the current preedit as committed text".
         // Use CommitTextCompositionInternal (which records undo) instead of
         // EndTextCompositionInternal (which removes the text and loses it).
-        if (_window.FocusManager.FocusedElement is Controls.TextBase tb && tb.IsComposing)
+        if (_window.FocusManager.FocusedElement is Controls.LegacyTextBase tb && tb.IsComposing)
         {
             var endArgs = new TextCompositionEventArgs(_imeMarkedText);
             _window.RaisePreviewTextCompositionEnd(endArgs);
@@ -1966,7 +1966,7 @@ internal sealed class MacOSWindowBackend : IWindowBackend
         }
 
         // IME commit: AppKit typically calls insertText while we still have marked text (setMarkedText path).
-        if (_imeHasMarkedText && _window.FocusManager.FocusedElement is Controls.TextBase tb)
+        if (_imeHasMarkedText && _window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
         {
             if (!string.Equals(text, _imeMarkedText, StringComparison.Ordinal))
             {
@@ -1989,7 +1989,7 @@ internal sealed class MacOSWindowBackend : IWindowBackend
 
         // If the platform provides a replacement range, align our selection/caret so the inserted text
         // replaces the intended portion of the document.
-        if (replacementRange.location != NSNotFound && _window.FocusManager.FocusedElement is Controls.TextBase tbReplace)
+        if (replacementRange.location != NSNotFound && _window.FocusManager.FocusedElement is Controls.LegacyTextBase tbReplace)
         {
             int start = (int)replacementRange.location;
             int end = start + (int)replacementRange.length;
@@ -2049,11 +2049,11 @@ internal sealed class MacOSWindowBackend : IWindowBackend
 
         _forwardKeyToAppThisKeyDown = true;
 
-        // If we are in preedit (setMarkedText path), commit the current composition so the TextBase
+        // If we are in preedit (setMarkedText path), commit the current composition so the LegacyTextBase
         // undo stack stays consistent, then reset IME state for key-up reporting.
         if (_imeHasMarkedText && _imeState == ImeState.Preedit)
         {
-            if (_window.FocusManager.FocusedElement is Controls.TextBase tb && tb.IsComposing)
+            if (_window.FocusManager.FocusedElement is Controls.LegacyTextBase tb && tb.IsComposing)
             {
                 tb.CommitTextCompositionInternal();
             }

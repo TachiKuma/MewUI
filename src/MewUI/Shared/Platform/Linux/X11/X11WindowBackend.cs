@@ -1647,7 +1647,7 @@ internal sealed class X11WindowBackend : IWindowBackend
 
         try
         {
-            int caretPos = (client is Controls.TextBase tb) ? tb.CaretPosition : client.CompositionStartIndex;
+            int caretPos = (client is Controls.LegacyTextBase tb) ? tb.CaretPosition : client.CompositionStartIndex;
             var rect = client.GetCharRectInWindow(caretPos);
 
             if (rect.Width <= 0 && rect.Height <= 0)
@@ -2984,7 +2984,7 @@ internal sealed class X11WindowBackend : IWindowBackend
         // Instead, commit the current composition so text is preserved with undo.
         if (Window.FocusManager.FocusedElement is ITextCompositionClient { IsComposing: true } client)
         {
-            if (client is Controls.TextBase tb)
+            if (client is Controls.LegacyTextBase tb)
             {
                 tb.CommitTextCompositionInternal();
             }

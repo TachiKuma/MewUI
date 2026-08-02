@@ -7,18 +7,18 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// Base class for text input controls.
 /// </summary>
-public abstract partial class TextBase : Control, ITextCompositionClient, ITextInputClient
+public abstract partial class LegacyTextBase : Control, ITextCompositionClient, ITextInputClient
 {
     public event Action<TextInputEventArgs>? TextInput;
 
     public event Action<TextCompositionEventArgs>? TextCompositionStart;
 
     public static readonly MewProperty<ImeMode> ImeModeProperty =
-        MewProperty<ImeMode>.Register<TextBase>(nameof(ImeMode), ImeMode.Auto, MewPropertyOptions.None);
+        MewProperty<ImeMode>.Register<LegacyTextBase>(nameof(ImeMode), ImeMode.Auto, MewPropertyOptions.None);
 
-    static TextBase()
+    static LegacyTextBase()
     {
-        FocusableProperty.OverrideDefaultValue<TextBase>(true);
+        FocusableProperty.OverrideDefaultValue<LegacyTextBase>(true);
     }
 
     /// <summary>
@@ -69,9 +69,9 @@ public abstract partial class TextBase : Control, ITextCompositionClient, ITextI
     protected int DocumentVersion { get; private set; }
 
     /// <summary>
-    /// Initializes a new instance of the TextBase class.
+    /// Initializes a new instance of the LegacyTextBase class.
     /// </summary>
-    protected TextBase()
+    protected LegacyTextBase()
     {
         Cursor = CursorType.IBeam;
         _editor = new TextEditorCore(
@@ -166,13 +166,13 @@ public abstract partial class TextBase : Control, ITextCompositionClient, ITextI
 
 
     public static readonly MewProperty<string> PlaceholderProperty =
-        MewProperty<string>.Register<TextBase>(nameof(Placeholder), string.Empty, MewPropertyOptions.AffectsRender);
+        MewProperty<string>.Register<LegacyTextBase>(nameof(Placeholder), string.Empty, MewPropertyOptions.AffectsRender);
 
     public static readonly MewProperty<bool> IsReadOnlyProperty =
-        MewProperty<bool>.Register<TextBase>(nameof(IsReadOnly), false, MewPropertyOptions.AffectsRender);
+        MewProperty<bool>.Register<LegacyTextBase>(nameof(IsReadOnly), false, MewPropertyOptions.AffectsRender);
 
     public static readonly MewProperty<bool> AcceptTabProperty =
-        MewProperty<bool>.Register<TextBase>(nameof(AcceptTab), false, MewPropertyOptions.None);
+        MewProperty<bool>.Register<LegacyTextBase>(nameof(AcceptTab), false, MewPropertyOptions.None);
 
     /// <summary>
     /// Gets or sets the placeholder text shown when the control is empty.
@@ -184,7 +184,7 @@ public abstract partial class TextBase : Control, ITextCompositionClient, ITextI
     }
 
     public static readonly MewProperty<int> MaxLengthProperty =
-        MewProperty<int>.Register<TextBase>(nameof(MaxLength), 0);
+        MewProperty<int>.Register<LegacyTextBase>(nameof(MaxLength), 0);
 
     /// <summary>
     /// Gets or sets the maximum number of characters allowed. 0 means no limit.
@@ -248,7 +248,7 @@ public abstract partial class TextBase : Control, ITextCompositionClient, ITextI
     }
 
     private static readonly MewPropertyKey<int> SelectionStartPropertyKey =
-        MewProperty<int>.RegisterReadOnly<TextBase>(nameof(SelectionStart), 0);
+        MewProperty<int>.RegisterReadOnly<LegacyTextBase>(nameof(SelectionStart), 0);
 
     /// <summary>Start index of the current selection (caret index when nothing is selected). Read-only.</summary>
     public static readonly MewProperty<int> SelectionStartProperty = SelectionStartPropertyKey.Property;
@@ -256,7 +256,7 @@ public abstract partial class TextBase : Control, ITextCompositionClient, ITextI
     public int SelectionStart => GetValue(SelectionStartProperty);
 
     private static readonly MewPropertyKey<int> SelectionLengthPropertyKey =
-        MewProperty<int>.RegisterReadOnly<TextBase>(nameof(SelectionLength), 0);
+        MewProperty<int>.RegisterReadOnly<LegacyTextBase>(nameof(SelectionLength), 0);
 
     /// <summary>Length of the current selection (0 when nothing is selected). Read-only.</summary>
     public static readonly MewProperty<int> SelectionLengthProperty = SelectionLengthPropertyKey.Property;

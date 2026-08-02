@@ -6,7 +6,7 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// Base class for single-line text input controls (TextBox, PasswordBox).
 /// </summary>
-public abstract class SingleLineTextBase : TextBase
+public abstract class LegacySingleLineTextBase : LegacyTextBase
 {
     private readonly TextBoxView _view = new();
     private Action<char[], int, int>? _cachedCopyDocumentTo;

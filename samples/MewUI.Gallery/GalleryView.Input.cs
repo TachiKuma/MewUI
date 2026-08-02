@@ -30,11 +30,11 @@ partial class GalleryView
                 box,
                 new TextBlock()
                     .FontSize(11)
-                    .Bind(TextBlock.TextProperty, box, TextBase.SelectionStartProperty,
+                    .Bind(TextBlock.TextProperty, box, LegacyTextBase.SelectionStartProperty,
                         (int start) => $"SelectionStart: {start}"),
                 new TextBlock()
                     .FontSize(11)
-                    .Bind(TextBlock.TextProperty, box, TextBase.SelectionLengthProperty,
+                    .Bind(TextBlock.TextProperty, box, LegacyTextBase.SelectionLengthProperty,
                         (int length) => $"SelectionLength: {length}")
             );
     }

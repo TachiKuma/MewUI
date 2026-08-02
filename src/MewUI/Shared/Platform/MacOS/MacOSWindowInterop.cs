@@ -1435,24 +1435,24 @@ internal static unsafe class MacOSWindowInterop
                 return new NSRange(NSNotFound, 0);
             }
 
-            if (backend.Window.FocusManager.FocusedElement is Controls.TextBase tb)
+            if (backend.Window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
             {
                 // NSTextInputClient expects ranges in the document's coordinates.
-                // TextBase maintains the composition range inside the document.
+                // LegacyTextBase maintains the composition range inside the document.
                 int start = Math.Max(0, tb.CompositionStartIndex);
                 int len = Math.Max(0, tb.CompositionLength);
                 if (len == 0)
                 {
-                    // Composition started but TextBase may not have received the first update yet.
+                    // Composition started but LegacyTextBase may not have received the first update yet.
                     // Report the current marked string length so IME treats the range as active.
                     len = backend.ImeMarkedText?.Length ?? 0;
                 }
                 var r = new NSRange((ulong)start, (ulong)len);
-                MacOSWindowBackend.ImeNativeLogger.Write($"objc markedRange view=0x{self:x} -> ({r.location},{r.length}) [TextBase]");
+                MacOSWindowBackend.ImeNativeLogger.Write($"objc markedRange view=0x{self:x} -> ({r.location},{r.length}) [LegacyTextBase]");
                 return r;
             }
 
-            // Fallback to a minimal "active marked range" when there is no focused TextBase.
+            // Fallback to a minimal "active marked range" when there is no focused LegacyTextBase.
             var rr = new NSRange(0, (ulong)(backend.ImeMarkedText?.Length ?? 0));
             MacOSWindowBackend.ImeNativeLogger.Write($"objc markedRange view=0x{self:x} -> ({rr.location},{rr.length}) [fallback]");
             return rr;
@@ -1474,13 +1474,13 @@ internal static unsafe class MacOSWindowInterop
         {
             if (TryGetActiveTextInputTarget(self, out var backend))
             {
-                if (backend.Window.FocusManager.FocusedElement is Controls.TextBase tb)
+                if (backend.Window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
                 {
                     var (s, e) = tb.SelectionRange;
                     int start = Math.Min(s, e);
                     int end = Math.Max(s, e);
                     var r = new NSRange((ulong)Math.Max(0, start), (ulong)Math.Max(0, end - start));
-                    MacOSWindowBackend.ImeNativeLogger.Write($"objc selectedRange view=0x{self:x} -> ({r.location},{r.length}) [TextBase]");
+                    MacOSWindowBackend.ImeNativeLogger.Write($"objc selectedRange view=0x{self:x} -> ({r.location},{r.length}) [LegacyTextBase]");
                     return r;
                 }
 
@@ -1555,7 +1555,7 @@ internal static unsafe class MacOSWindowInterop
             MacOSWindowBackend.ImeNativeLogger.Write($"objc attributedSubstringForProposedRange view=0x{self:x} proposed=({proposedRange.location},{proposedRange.length}) actualRangePtr=0x{actualRange:x}");
             string text;
             int textLen;
-            if (backend.Window.FocusManager.FocusedElement is Controls.TextBase tb)
+            if (backend.Window.FocusManager.FocusedElement is Controls.LegacyTextBase tb)
             {
                 textLen = tb.TextLengthInternal;
                 text = textLen > 0 ? tb.GetTextSubstringInternal(0, textLen) : string.Empty;

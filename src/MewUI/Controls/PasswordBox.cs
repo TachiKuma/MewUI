@@ -3,7 +3,7 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// A single-line password input control that masks entered text.
 /// </summary>
-public sealed class PasswordBox : SingleLineTextBase
+public sealed class PasswordBox : LegacySingleLineTextBase
 {
     public static readonly MewProperty<string> PasswordProperty =
         MewProperty<string>.Register<PasswordBox>(nameof(Password), string.Empty,

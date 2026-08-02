@@ -290,7 +290,7 @@ public sealed class StyleSheetTests
         Assert.AreEqual(typeof(Button), sheet.Get(BuiltInStyles.FlatButton)!.BasedOn!.TargetType);
         Assert.AreEqual(typeof(ListBox), sheet.Get(BuiltInStyles.ComboBoxPopup)!.BasedOn!.TargetType);
         Assert.AreEqual(typeof(Calendar), sheet.Get(BuiltInStyles.DatePickerPopup)!.BasedOn!.TargetType);
-        Assert.AreEqual(typeof(TextBase), sheet.Get(FileDialogStyles.NullTextBox)!.BasedOn!.TargetType);
+        Assert.AreEqual(typeof(LegacyTextBase), sheet.Get(FileDialogStyles.NullTextBox)!.BasedOn!.TargetType);
     }
 
     [TestMethod]
@@ -333,7 +333,7 @@ public sealed class StyleSheetTests
             typeof(NumericUpDown),
             typeof(Slider),
             typeof(Calendar),
-            typeof(TextBase),
+            typeof(LegacyTextBase),
             typeof(DropDownBase),
             typeof(ListBox),
             typeof(SegmentedControl),

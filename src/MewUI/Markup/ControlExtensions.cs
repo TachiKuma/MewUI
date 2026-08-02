@@ -518,7 +518,7 @@ public static class ControlExtensions
     /// <param name="element">Target element.</param>
     /// <param name="handler">Event handler.</param>
     /// <returns>The element for chaining.</returns>
-    public static T OnTextInput<T>(this T element, Action<TextInputEventArgs> handler) where T : TextBase
+    public static T OnTextInput<T>(this T element, Action<TextInputEventArgs> handler) where T : LegacyTextBase
     {
         element.TextInput += handler;
         return element;
@@ -540,7 +540,7 @@ public static class ControlExtensions
     /// <param name="element">Target element.</param>
     /// <param name="handler">Event handler.</param>
     /// <returns>The element for chaining.</returns>
-    public static T OnTextCompositionStart<T>(this T element, Action<TextCompositionEventArgs> handler) where T : TextBase
+    public static T OnTextCompositionStart<T>(this T element, Action<TextCompositionEventArgs> handler) where T : LegacyTextBase
     {
         element.TextCompositionStart += handler;
         return element;
@@ -562,7 +562,7 @@ public static class ControlExtensions
     /// <param name="element">Target element.</param>
     /// <param name="handler">Event handler.</param>
     /// <returns>The element for chaining.</returns>
-    public static T OnTextCompositionUpdate<T>(this T element, Action<TextCompositionEventArgs> handler) where T : TextBase
+    public static T OnTextCompositionUpdate<T>(this T element, Action<TextCompositionEventArgs> handler) where T : LegacyTextBase
     {
         element.TextCompositionUpdate += handler;
         return element;
@@ -584,7 +584,7 @@ public static class ControlExtensions
     /// <param name="element">Target element.</param>
     /// <param name="handler">Event handler.</param>
     /// <returns>The element for chaining.</returns>
-    public static T OnTextCompositionEnd<T>(this T element, Action<TextCompositionEventArgs> handler) where T : TextBase
+    public static T OnTextCompositionEnd<T>(this T element, Action<TextCompositionEventArgs> handler) where T : LegacyTextBase
     {
         element.TextCompositionEnd += handler;
         return element;
@@ -1481,7 +1481,7 @@ public static class ControlExtensions
     /// <param name="textBox">Target text box.</param>
     /// <param name="placeholder">Placeholder text.</param>
     /// <returns>The text box for chaining.</returns>
-    public static T Placeholder<T>(this T textBox, string placeholder) where T : TextBase
+    public static T Placeholder<T>(this T textBox, string placeholder) where T : LegacyTextBase
     {
         textBox.Placeholder = placeholder;
         return textBox;
@@ -1494,7 +1494,7 @@ public static class ControlExtensions
     /// <param name="textBox">Target text box.</param>
     /// <param name="isReadOnly">Read-only state.</param>
     /// <returns>The text box for chaining.</returns>
-    public static T IsReadOnly<T>(this T textBox, bool isReadOnly = true) where T : TextBase
+    public static T IsReadOnly<T>(this T textBox, bool isReadOnly = true) where T : LegacyTextBase
     {
         textBox.IsReadOnly = isReadOnly;
         return textBox;
@@ -1513,7 +1513,7 @@ public static class ControlExtensions
     /// <param name="textBox">Target text box.</param>
     /// <param name="acceptTab">Accept tab flag.</param>
     /// <returns>The text box for chaining.</returns>
-    public static T AcceptTab<T>(this T textBox, bool acceptTab = true) where T : TextBase
+    public static T AcceptTab<T>(this T textBox, bool acceptTab = true) where T : LegacyTextBase
     {
         textBox.AcceptTab = acceptTab;
         return textBox;
@@ -1532,7 +1532,7 @@ public static class ControlExtensions
     /// <param name="textBox">Target text input.</param>
     /// <param name="value">Caret position.</param>
     /// <returns>The text input for chaining.</returns>
-    public static T CaretPosition<T>(this T textBox, int value) where T : TextBase
+    public static T CaretPosition<T>(this T textBox, int value) where T : LegacyTextBase
     {
         textBox.CaretPosition = value;
         return textBox;
@@ -1554,7 +1554,7 @@ public static class ControlExtensions
     public static T ImeMode<T>(
         this T textBox,
         global::Aprillz.MewUI.Input.ImeMode value)
-        where T : TextBase
+        where T : LegacyTextBase
     {
         textBox.ImeMode = value;
         return textBox;
@@ -1575,7 +1575,7 @@ public static class ControlExtensions
     /// <param name="textBox">Target text input.</param>
     /// <param name="value">Maximum text length.</param>
     /// <returns>The text input for chaining.</returns>
-    public static T MaxLength<T>(this T textBox, int value) where T : TextBase
+    public static T MaxLength<T>(this T textBox, int value) where T : LegacyTextBase
     {
         textBox.MaxLength = value;
         return textBox;
@@ -1594,7 +1594,7 @@ public static class ControlExtensions
     /// <param name="textBox">Target text input.</param>
     /// <param name="handler">Event handler.</param>
     /// <returns>The text input for chaining.</returns>
-    public static T OnWrapChanged<T>(this T textBox, Action<bool> handler) where T : TextBase
+    public static T OnWrapChanged<T>(this T textBox, Action<bool> handler) where T : LegacyTextBase
     {
         textBox.WrapChanged += handler;
         return textBox;
@@ -1607,7 +1607,7 @@ public static class ControlExtensions
     /// <param name="textBox">Target text box.</param>
     /// <param name="handler">Event handler.</param>
     /// <returns>The text box for chaining.</returns>
-    public static T OnTextChanged<T>(this T textBox, Action<string> handler) where T : TextBase
+    public static T OnTextChanged<T>(this T textBox, Action<string> handler) where T : LegacyTextBase
     {
         textBox.TextChanged += handler;
         return textBox;

@@ -61,7 +61,7 @@ public static class DefaultStyles
             [typeof(SegmentButton)] = CreateSegmentButtonStyle,
             [typeof(ButtonGroup)] = CreateButtonGroupStyle,
             [typeof(MenuBar)] = CreateMenuBarStyle,
-            [typeof(TextBase)] = CreateTextBaseStyle,
+            [typeof(LegacyTextBase)] = CreateTextBaseStyle,
             [typeof(MultiLineTextBox)] = CreateMultiLineTextBoxStyle,
             [typeof(SyntaxViewer)] = CreateSyntaxViewerStyle,
             [typeof(CheckBox)] = CreateCheckBoxStyle,
@@ -833,7 +833,7 @@ public static class DefaultStyles
         };
 
     private static Style CreateTextBaseStyle()
-        => CreateTextInputStyle(typeof(TextBase));
+        => CreateTextInputStyle(typeof(LegacyTextBase));
 
     private static Style CreateMultiLineTextBoxStyle()
         => CreateTextInputStyle(typeof(MultiLineTextBox));
