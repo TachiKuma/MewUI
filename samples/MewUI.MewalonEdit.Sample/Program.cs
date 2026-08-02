@@ -1,14 +1,19 @@
 using Aprillz.MewUI;
-using ICSharpCode.AvalonEdit.MewUI.Sample;
+using MewvalonEdit.Sample;
 
 if (!OperatingSystem.IsWindows())
     throw new PlatformNotSupportedException("The initial MewalonEdit sample uses the Windows Direct2D backend.");
 
-Win32Platform.Register();
-Direct2DBackend.Register();
-
-var window = new MainWindow();
-if (args.Contains("--smoke", StringComparer.OrdinalIgnoreCase))
-    window.EnableSmokeTest();
-
-Application.Run(window);
+bool smoke = args.Contains("--smoke", StringComparer.OrdinalIgnoreCase);
+Application
+    .Create()
+    .UseAccent(Accent.Purple)
+    .UseWin32()
+    .UseDirect2D()
+    .BuildMainWindow(() =>
+    {
+        var window = new MainWindow();
+        if (smoke) window.EnableSmokeTest();
+        return window;
+    })
+    .Run();

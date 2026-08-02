@@ -5,7 +5,7 @@ using ICSharpCode.AvalonEdit.Folding;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Search;
 
-namespace ICSharpCode.AvalonEdit.MewUI.Sample;
+namespace MewvalonEdit.Sample;
 
 public sealed class MainWindow : Window
 {
@@ -17,6 +17,7 @@ public sealed class MainWindow : Window
     private readonly TextBlock _selection = new();
     private readonly TextBlock _documentState = new();
     private readonly TextBlock _searchState = new();
+    private readonly TextBlock _encoding = new() { Text = "UTF-8" };
     private readonly Border _optionsPanel;
     private DispatcherTimer? _smokeTimer;
 
@@ -39,7 +40,11 @@ public sealed class MainWindow : Window
 
         _editor.TextArea.Caret.PositionChanged += (_, _) => UpdateStatus();
         _editor.TextArea.SelectionChanged += (_, _) => UpdateStatus();
-        _editor.TextChanged += (_, _) => UpdateDocumentState();
+        _editor.TextChanged += (_, _) =>
+        {
+            UpdateDocumentState();
+            if (_editor.SyntaxHighlighting?.Name == "C#") UpdateFoldings(braces: true);
+        };
 
         LoadSample(SampleText.CSharp, "C#");
         Content = new DockPanel()
@@ -115,7 +120,9 @@ public sealed class MainWindow : Window
             }),
             new Button().Content("Toggle fold").OnClick(ToggleFirstFolding),
             new Button().Content("Complete").OnClick(CompleteCurrentWord),
-            new Button().Content("Options").OnClick(() => _optionsPanel.IsVisible = !_optionsPanel.IsVisible));
+            new Button().Content("Insert template").OnClick(InsertCodeTemplate),
+            new Button().Content("Options").OnClick(() => _optionsPanel.IsVisible = !_optionsPanel.IsVisible),
+            new Button().Content("Theme").OnClick(ToggleTheme));
     }
 
     private Border CreateOptionsPanel()
@@ -125,9 +132,20 @@ public sealed class MainWindow : Window
                 .Content(title)
                 .OnCheckedChanged(value => apply(value == true));
 
+        var indentationSize = new NumericUpDown
+        {
+            Minimum = 1,
+            Maximum = 16,
+            Step = 1,
+            Format = "0",
+            Value = _editor.Options.IndentationSize,
+            Width = 80
+        };
+        indentationSize.ValueChanged += value => _editor.Options.IndentationSize = (int)value;
+
         return new Border
         {
-            Width = 240,
+            Width = 340,
             Padding = new Thickness(12),
             BorderThickness = 1,
             Child = new StackPanel
@@ -143,6 +161,8 @@ public sealed class MainWindow : Window
                 Toggle("Show end-of-line", _editor.Options.ShowEndOfLine, value => _editor.Options.ShowEndOfLine = value),
                 Toggle("Convert tabs to spaces", _editor.Options.ConvertTabsToSpaces,
                     value => _editor.Options.ConvertTabsToSpaces = value),
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }
+                    .Children(new TextBlock().Text("Indentation size").Width(180), indentationSize),
                 Toggle("Read only", _editor.IsReadOnly, value => _editor.IsReadOnly = value))
         }.WithTheme((theme, border) => border
             .Background(theme.Palette.ContainerBackground)
@@ -157,7 +177,7 @@ public sealed class MainWindow : Window
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 18
-            }.Children(_position, _selection, _documentState, _searchState));
+            }.Children(_position, _selection, _documentState, _encoding, _searchState));
 
     private void LoadSample(string text, string highlightingName)
     {
@@ -190,13 +210,22 @@ public sealed class MainWindow : Window
         int start = end;
         while (start > 0 && char.IsLetterOrDigit(_editor.Document.GetCharAt(start - 1))) start--;
         var session = new CompletionSession(_editor, start);
-        session.SetItems([
-            new CompletionData("Console", "System.Console", 5),
-            new CompletionData("CancellationToken", "Cancellation support", 4),
-            new CompletionData("CreateAsync", "Async factory method", 3),
-            new CompletionData("class", "C# keyword", 2),
-            new CompletionData("const", "C# keyword", 1)]);
+        session.SetItems(SampleCompletionData.All);
         session.Complete();
+    }
+
+    private void InsertCodeTemplate()
+    {
+        const string template = "for (int index = 0; index < count; index++)\n{\n    \n}";
+        int start = _editor.SelectionStart;
+        _editor.TextArea.ReplaceSelection(template);
+        _editor.CaretOffset = Math.Min(_editor.Document.TextLength, start + template.IndexOf("    ", StringComparison.Ordinal) + 4);
+    }
+
+    private static void ToggleTheme()
+    {
+        var application = Application.Current;
+        application.SetThemeMode(application.Theme.IsDark ? ThemeVariant.Light : ThemeVariant.Dark);
     }
 
     private void UpdateStatus()
