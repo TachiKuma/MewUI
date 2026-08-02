@@ -255,7 +255,10 @@ public class TextEditor : ContentControl
     }
 
     private void OnDocumentTextChanged(object? sender, DocumentChangeEventArgs e)
-        => TextChanged?.Invoke(this, EventArgs.Empty);
+    {
+        _lineNumberMargin?.SyncWidthToLineCount();
+        TextChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     private void OnSurfaceTextInput(TextInputEventArgs e)
     {
