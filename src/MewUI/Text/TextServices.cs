@@ -46,6 +46,11 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
     internal int CachedLayoutCount => _layouts.Count;
     internal IReadOnlyCollection<Rendering.TextLayout> CachedLayouts => _layouts.Values;
 
+    private static readonly bool _traceRuns = Environment.GetEnvironmentVariable("MEWUI_TEXT_DEBUG") is "1";
+
+    private static string Truncate(string text)
+        => text.Length <= 48 ? text : text[..48];
+
     public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -56,8 +61,17 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
 
         if (CanDrawFastPath(managed, in options))
         {
+            if (_traceRuns && managed.Snapshot.Runs.Length > 0)
+            {
+                Console.Error.WriteLine($"[Text] FASTPATH with {managed.Snapshot.Runs.Length} style runs dropped: '{Truncate(managed.Snapshot.Text)}'");
+            }
             DrawFastPath(managed, origin, options.Foreground, options.Owner);
             return;
+        }
+
+        if (_traceRuns)
+        {
+            Console.Error.WriteLine($"[Text] Draw '{Truncate(managed.Snapshot.Text)}' snapshotRuns={managed.Snapshot.Runs.Length}");
         }
 
         DrawBackgrounds(managed, origin, options.PaintSpans.Span);
@@ -135,6 +149,10 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                 if (legacyLayout is not null)
                 {
                     legacyLayout.EffectiveBounds = bounds;
+                    if (_traceRuns)
+                    {
+                        Console.Error.WriteLine($"[Text]   run [{textStart},{textLength}] style={cluster.Style.FontFamily}/{cluster.Style.FontSize}pt w={cluster.Style.Weight} i={cluster.Style.Italic} font={cluster.Font.Family}/{cluster.Font.Size} '{Truncate(managed.Snapshot.Text.Substring(textStart, textLength))}'");
+                    }
                     DrawLegacyRun(managed, textStart, textLength, format, legacyLayout, options.Foreground, options.Owner);
                     DrawForegroundSpans(
                         managed,
