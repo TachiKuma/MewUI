@@ -168,9 +168,9 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     public IClipboardService? ClipboardService { get; set; }
 
     /// <summary>
-    /// Gets the currently selected text.
+    /// Gets the currently selected text. Overridable so masking controls can withhold the raw document text.
     /// </summary>
-    public string SelectedText => _editor.Selection.Length == 0
+    public virtual string SelectedText => _editor.Selection.Length == 0
         ? string.Empty
         : _document.GetText(_editor.Selection.Start, _editor.Selection.Length);
 
@@ -233,7 +233,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     {
         if (_editor.Selection.Length > 0)
         {
-            TrySetClipboardText(SelectedText);
+            CopyToClipboardCore();
         }
     }
 
@@ -243,17 +243,42 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         {
             return;
         }
-        Copy();
-        _editor.ReplaceSelection(string.Empty);
+        CutToClipboardCore();
     }
 
     public void Paste()
     {
         if (!IsReadOnly && TryGetClipboardText(out string text))
         {
-            InsertText(text);
+            PasteFromClipboardCore(text);
         }
     }
+
+    /// <summary>Writes the selection to the clipboard. Masking controls override to withhold it.</summary>
+    private protected virtual void CopyToClipboardCore() => TrySetClipboardText(SelectedText);
+
+    /// <summary>Cuts the selection. Masking controls override to withhold the clipboard write.</summary>
+    private protected virtual void CutToClipboardCore()
+    {
+        CopyToClipboardCore();
+        _editor.ReplaceSelection(string.Empty);
+    }
+
+    /// <summary>Inserts clipboard text at the selection after per-control normalization.</summary>
+    private protected virtual void PasteFromClipboardCore(string text)
+    {
+        InsertText(NormalizePastedText(text));
+        EnsureCaretVisible();
+    }
+
+    /// <summary>Per-control paste normalization (single-line controls convert newlines to spaces).</summary>
+    private protected virtual string NormalizePastedText(string text) => text;
+
+    /// <summary>Per-control typed-text normalization (single-line controls drop newline characters).</summary>
+    private protected virtual string NormalizeTypedText(string text) => text;
+
+    /// <summary>Per-control normalization of externally assigned mirror-property text.</summary>
+    private protected virtual string NormalizeExternalText(string text) => text;
 
     /// <summary>
     /// Applies an externally assigned mirror-property value to the document. Control text
@@ -269,7 +294,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         try
         {
             _editor.CommitComposition();
-            string normalized = EditableTextDocument.NormalizeNewLines(value ?? string.Empty);
+            string normalized = NormalizeExternalText(EditableTextDocument.NormalizeNewLines(value ?? string.Empty));
             _document.SetText(normalized);
             _textSnapshot = normalized;
             _textSnapshotVersion = _document.Version;
@@ -297,7 +322,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         _textSnapshotVersion = -1;
         string? currentText = null;
         var mirror = TextSyncProperty;
-        if (!_syncingText && mirror is not null && (HasPropertyBinding(mirror.Id) || TextChanged is not null))
+        if (!_syncingText && mirror is not null && (HasPropertyBinding(mirror.Id) || HasTextChangedSubscribers))
         {
             _syncingText = true;
             try
@@ -310,14 +335,20 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
                 _syncingText = false;
             }
         }
-        if (TextChanged is { } textChanged)
+        if (HasTextChangedSubscribers)
         {
             currentText ??= _document.ToString();
-            textChanged(currentText);
+            RaiseTextChanged(currentText);
         }
         InvalidateMeasure();
         InvalidateVisual();
     }
+
+    /// <summary>Whether raising the text-changed notification is worth materializing the full text.</summary>
+    private protected virtual bool HasTextChangedSubscribers => TextChanged is not null;
+
+    /// <summary>Raises the text-changed notification. Masking controls redirect it (e.g. PasswordChanged).</summary>
+    private protected virtual void RaiseTextChanged(string text) => TextChanged?.Invoke(text);
 
     private void SyncSelectionMirrors()
     {
@@ -404,7 +435,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         e.Handled = true;
     }
 
-    private protected void ShowDefaultTextContextMenu(Point positionInWindow)
+    private protected virtual void ShowDefaultTextContextMenu(Point positionInWindow)
     {
         var menu = _defaultContextMenu ??= new ContextMenu();
         bool hasSelection = _editor.Selection.Length > 0;
@@ -471,6 +502,12 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         if (_suppressTabInput && text.Contains('\t'))
         {
             _suppressTabInput = false;
+            e.Handled = true;
+            return;
+        }
+        text = NormalizeTypedText(text);
+        if (text.Length == 0)
+        {
             e.Handled = true;
             return;
         }
