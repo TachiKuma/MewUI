@@ -7,10 +7,12 @@ namespace Aprillz.MewUI.Rendering.Direct2D;
 /// <summary>Positioned-glyph realization of managed text layouts for Direct2D.</summary>
 internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposable
 {
+    private const int RealizationCapacity = 128;
     private readonly Direct2DGraphicsContext _context;
     private readonly LegacyTextRenderContext _fastPathRenderer;
-    private readonly ConditionalWeakTable<ManagedTextLayout, Dictionary<RealizationKey, RealizedRun>> _cache = new();
-    private readonly HashSet<RealizedRun> _ownedRuns = [];
+    private readonly BoundedCache<RealizationKey, RealizedRun> _cache = new(
+        RealizationCapacity,
+        static run => run.Dispose());
 
     public Direct2DTextRenderContext(Direct2DGraphicsContext context)
     {
@@ -18,9 +20,9 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
         _fastPathRenderer = new LegacyTextRenderContext(context);
     }
 
-    internal int CachedRunCount => _ownedRuns.Count;
+    internal int CachedRunCount => _cache.Count;
     internal IEnumerable<DWriteGlyphRunExtractor.GlyphRun> CachedGlyphRuns
-        => _ownedRuns.SelectMany(static run => run.GlyphRuns);
+        => _cache.Values.SelectMany(static run => run.GlyphRuns);
 
     public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options)
     {
@@ -86,9 +88,8 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
         double width,
         double height)
     {
-        var dictionary = _cache.GetValue(layout, static _ => []);
-        var key = new RealizationKey(first.Start, textLength, first.Font, Math.Round(width, 6), Math.Round(height, 6));
-        if (dictionary.TryGetValue(key, out var cached)) return cached;
+        var key = new RealizationKey(layout, first.Start, textLength, first.Font, Math.Round(width, 6), Math.Round(height, 6));
+        if (_cache.TryGetValue(key, out var cached)) return cached;
 
         var format = new TextFormat
         {
@@ -114,8 +115,7 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
         }
 
         var created = new RealizedRun(glyphRuns);
-        dictionary.Add(key, created);
-        _ownedRuns.Add(created);
+        _cache.Add(key, created);
         return created;
     }
 
@@ -210,12 +210,12 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
 
     public void Dispose()
     {
-        foreach (var run in _ownedRuns) run.Dispose();
-        _ownedRuns.Clear();
+        _cache.Dispose();
         _fastPathRenderer.Dispose();
     }
 
     private readonly record struct RealizationKey(
+        ManagedTextLayout Layout,
         int TextStart,
         int TextLength,
         IFont Font,

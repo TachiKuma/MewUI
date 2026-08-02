@@ -105,6 +105,23 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             GetFont(snapshot.DefaultStyle, snapshot.Dpi)).Width;
     }
 
+    internal double[]? MeasureFastPathAdvances(TextLayoutRequestSnapshot snapshot, int start, int length)
+    {
+        start = Math.Clamp(start, 0, snapshot.Text.Length);
+        length = Math.Clamp(length, 0, snapshot.Text.Length - start);
+        if (length == 0)
+        {
+            return [];
+        }
+
+        using var context = _factory.CreateMeasurementContext(snapshot.Dpi);
+        return context is ITextAdvanceSource advanceSource
+            ? advanceSource.GetUtf16PrefixAdvances(
+                snapshot.Text.AsSpan(start, length),
+                GetFont(snapshot.DefaultStyle, snapshot.Dpi))
+            : null;
+    }
+
     private static List<ManagedTextSegment> MeasureFastPathSegments(
         IGraphicsContext context,
         string text,

@@ -228,11 +228,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
 
         double thickness = Theme.Metrics.ScrollBarHitThickness;
         double extentHeight = _view.ExtentHeight;
-        double extentWidth = _view.MaterializedLines
-            .SelectMany(static line => line.VisualLines)
-            .Select(static line => line.Bounds.Right)
-            .DefaultIfEmpty(0)
-            .Max();
+        double extentWidth = _view.ExtentWidth;
         bool vertical = extentHeight > _contentBounds.Height + 0.5;
         bool horizontal = !Wrap && extentWidth > _contentBounds.Width + 0.5;
         _verticalScrollBar.IsVisible = vertical;

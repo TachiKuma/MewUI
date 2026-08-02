@@ -111,6 +111,47 @@ public sealed class TextViewLayoutTests
     }
 
     [TestMethod]
+    [Timeout(30_000, CooperativeCancellation = true)]
+    public void TenMegabyteNoWrapLogicalLine_MaterializesOnlyHorizontalViewportSlice()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument(new string('x', 10_000_000));
+        using var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            document,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.NoWrap });
+
+        view.SetViewport(new TextViewport(320, 80));
+
+        Assert.HasCount(1, view.MaterializedLines);
+        Assert.IsLessThan(4 * 1024, view.MaterializedLines[0].LogicalLine.Length,
+            "The no-wrap view materialized the complete logical line instead of a horizontal slice.");
+        Assert.IsLessThan(64 * 1024, document.MaxRequestedLength,
+            "The no-wrap view requested the complete 10MB logical line from the document.");
+        Assert.IsGreaterThan(320, view.ExtentWidth);
+
+        double middleX = view.ExtentWidth * 0.5;
+        view.SetViewport(new TextViewport(320, 80, HorizontalOffset: middleX));
+        var middle = view.MaterializedLines[0];
+        Assert.IsGreaterThan(1_000_000, middle.LogicalLine.Offset,
+            "Horizontal scrolling did not move the materialized slice into the logical line.");
+        Assert.IsLessThan(4 * 1024, middle.LogicalLine.Length);
+        var hit = view.HitTest(new Point(20, 20));
+        Assert.IsGreaterThan(1_000_000, hit.DocumentOffset);
+
+        Rect endCaret = view.GetCaretBounds(document.TextLength);
+        Assert.IsGreaterThan(middleX, endCaret.X);
+        Assert.IsLessThan(4 * 1024, view.MaterializedLines[0].LogicalLine.Length);
+    }
+
+    [TestMethod]
     public void Invalidate_RebuildsChangedLineAndFollowingHeightMap()
     {
         if (!OperatingSystem.IsWindows())
