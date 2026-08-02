@@ -152,6 +152,7 @@ partial class GalleryView
                         new ProgressBar().Value(20),
                         new ProgressBar().Value(65),
                         new ProgressBar().Value(65).Disable(),
+                        new ProgressBar().IsIndeterminate(),
                         new Slider().Minimum(0).Maximum(100).Value(25),
                         new Slider().Minimum(0).Maximum(100).Value(25).Disable()
                     )
