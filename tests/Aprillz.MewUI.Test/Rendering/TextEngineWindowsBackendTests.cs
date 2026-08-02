@@ -8,6 +8,7 @@ using Aprillz.MewUI.Text;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Native.DirectWrite;
 using MewUI.Test.Infrastructure;
+using System.Text;
 
 using MewVGWin32GraphicsFactory = MewVGWin32::Aprillz.MewUI.Rendering.MewVG.MewVGWin32GraphicsFactory;
 
@@ -17,6 +18,57 @@ namespace MewUI.Test.Rendering;
 [DoNotParallelize]
 public sealed class TextEngineWindowsBackendTests
 {
+    [TestMethod]
+    [Timeout(60_000, CooperativeCancellation = true)]
+    public void Direct2D_TenMegabyteEditorTransitionsRemainRenderable()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Direct2D is Windows-only.");
+            return;
+        }
+
+        var previousFactory = Application.DefaultGraphicsFactory;
+        using var factory = new Direct2DGraphicsFactory();
+        Application.DefaultGraphicsFactory = factory;
+        try
+        {
+            const int width = 640;
+            const int height = 300;
+            var editor = new NewMultiLineTextBox { Width = width, Height = height, Wrap = true };
+            using var window = HeadlessWindow.Create(width, height);
+            window.Content = editor;
+            using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(width, height, 1));
+
+            const string line = "The quick brown fox jumps over the lazy dog. 0123456789 ABCDEFGHIJKLMNOPQRSTUVWXYZ\n";
+            var builder = new StringBuilder(10_000_000 + line.Length);
+            while (builder.Length < 10_000_000)
+            {
+                builder.Append(line);
+            }
+            editor.Text = builder.ToString(0, 10_000_000);
+            window.PerformLayout();
+            window.RenderFrameToSurface(surface);
+
+            string singleLine = new('x', 10_000_000);
+            editor.Wrap = false;
+            editor.Text = singleLine;
+            window.PerformLayout();
+            window.RenderFrameToSurface(surface);
+
+            editor.Wrap = true;
+            window.PerformLayout();
+            window.RenderFrameToSurface(surface);
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            window.RenderFrameToSurface(surface);
+        }
+        finally
+        {
+            Application.DefaultGraphicsFactory = previousFactory;
+        }
+    }
+
     [TestMethod]
     public void Direct2D_FullPathMeasureHitAndDrawAreSelfConsistent()
     {
