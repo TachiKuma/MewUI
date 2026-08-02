@@ -63,11 +63,6 @@ partial class GalleryView
             ),
 
             Card(
-                "Scoped StyleSheet type rule",
-                TypeRuleDemo()
-            ),
-
-            Card(
                 "MenuBar dropdown font",
                 new StackPanel()
                     .Vertical()
@@ -171,41 +166,6 @@ partial class GalleryView
                 Setter.Create(Control.PaddingProperty, new Thickness(18, 8, 18, 8)),
                 Setter.Create(TextElement.FontWeightProperty, FontWeight.Bold),
             ]));
-
-        return new StackPanel()
-            .Vertical()
-            .Spacing(8)
-            .Children(
-                new TextBlock()
-                    .Text("The first button is outside the local sheet. The second is inside a Border that owns a Button type rule, so it receives the square, padded, bold style without a StyleName.")
-                    .TextWrapping(TextWrapping.Wrap)
-                    .FontSize(11),
-                new Button()
-                    .Content("Outside scope: default Button")
-                    .HorizontalAlignment(HorizontalAlignment.Left),
-                new Border()
-                    .Apply(b => b.StyleSheet = sheet)
-                    .Child(
-                        new Button()
-                            .Content("Inside scope: Define<Button>")
-                            .HorizontalAlignment(HorizontalAlignment.Left)
-                    )
-            );
-    }
-
-    private FrameworkElement TypeRuleDemo()
-    {
-        var sheet = new StyleSheet();
-        sheet.Define<Button>(new Style(typeof(Button))
-        {
-            BasedOn = Style.ForType<Button>(),
-            Setters =
-            [
-                Setter.Create(Control.CornerRadiusProperty, 0.0),
-                Setter.Create(Control.PaddingProperty, new Thickness(18, 8, 18, 8)),
-                Setter.Create(TextElement.FontWeightProperty, FontWeight.Bold),
-            ],
-        });
 
         Border scope = null!;
         var status = new TextBlock()
