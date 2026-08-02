@@ -72,7 +72,8 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
                     line.Metrics.Bounds.Height);
                 var realized = GetOrCreate(managed, first, textLength, width, line.Metrics.Bounds.Height);
                 DrawRealized(realized, bounds.Position, options.Foreground);
-                DrawForegroundSpans(managed, origin, bounds, first.Start, textLength, realized, options.PaintSpans.Span);
+                DrawRunDecoration(first.Style, bounds, line.Metrics.Baseline, options.Foreground);
+                DrawForegroundSpans(managed, origin, bounds, first.Start, textLength, realized, options.PaintSpans.Span, first.Style, line.Metrics.Baseline);
                 index = end;
             }
         }
@@ -129,7 +130,9 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
         int textStart,
         int textLength,
         RealizedRun realization,
-        ReadOnlySpan<TextPaintSpan> spans)
+        ReadOnlySpan<TextPaintSpan> spans,
+        TextRunStyle style,
+        double baseline)
     {
         foreach (var span in spans)
         {
@@ -150,12 +153,37 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
                 {
                     _context.IntersectClip(clip);
                     DrawRealized(realization, runBounds.Position, color);
+                    DrawRunDecoration(style, runBounds, baseline, color);
                 }
                 finally
                 {
                     _context.Restore();
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Draws style-run underline/strikethrough as renderer geometry so decorations match the
+    /// engine-drawn path used by the other render contexts.
+    /// </summary>
+    private void DrawRunDecoration(TextRunStyle style, in Rect runBounds, double baseline, Color color)
+    {
+        if (style.Decoration == TextDecoration.None) return;
+
+        // Pixel-snap the line position and thickness so antialiasing does not smear the stroke.
+        double dpiScale = _context.DpiScale;
+        double thickness = LayoutRounding.SnapThicknessToPixels(1, dpiScale, 1);
+        if (style.Decoration.HasFlag(TextDecoration.Underline))
+        {
+            double y = LayoutRounding.RoundToPixel(Math.Min(runBounds.Y + baseline + 1, runBounds.Bottom - thickness), dpiScale);
+            _context.FillRectangle(new Rect(runBounds.X, y, runBounds.Width, thickness), color);
+        }
+        if (style.Decoration.HasFlag(TextDecoration.Strikethrough))
+        {
+            // FontSize is in points; 4/3 converts to DIPs, strike sits ~30% of the em above baseline.
+            double y = LayoutRounding.RoundToPixel(runBounds.Y + baseline - style.FontSize * (4.0 / 3.0) * 0.3, dpiScale);
+            _context.FillRectangle(new Rect(runBounds.X, y, runBounds.Width, thickness), color);
         }
     }
 
