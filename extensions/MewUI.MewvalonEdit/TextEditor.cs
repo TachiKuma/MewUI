@@ -27,6 +27,7 @@ public class TextEditor : ContentControl
         _whitespaceProjection = new WhitespaceProjection(Options);
         Options.PropertyChanged += OnOptionsChanged;
         _document = new TextDocument();
+        _document.Changed += OnDocumentTextChanged;
         BuildSurface();
         TextArea = new TextArea(this);
     }
@@ -38,7 +39,9 @@ public class TextEditor : ContentControl
         {
             ArgumentNullException.ThrowIfNull(value);
             if (ReferenceEquals(_document, value)) return;
+            _document.Changed -= OnDocumentTextChanged;
             _document = value;
+            _document.Changed += OnDocumentTextChanged;
             BuildSurface();
             DocumentChanged?.Invoke(this, EventArgs.Empty);
             TextChanged?.Invoke(this, EventArgs.Empty);
@@ -144,6 +147,7 @@ public class TextEditor : ContentControl
     protected override void OnDispose()
     {
         Options.PropertyChanged -= OnOptionsChanged;
+        _document.Changed -= OnDocumentTextChanged;
         base.OnDispose();
     }
 
@@ -152,7 +156,6 @@ public class TextEditor : ContentControl
         var previous = _surface;
         if (previous is not null)
         {
-            previous.TextChanged -= OnSurfaceTextChanged;
             previous.TextInput -= OnSurfaceTextInput;
         }
 
@@ -165,7 +168,6 @@ public class TextEditor : ContentControl
             FontSize = FontSize,
             FontWeight = FontWeight
         };
-        _surface.TextChanged += OnSurfaceTextChanged;
         _surface.TextInput += OnSurfaceTextInput;
         _surface.Extensions.Projections.Add(_whitespaceProjection);
         _lineNumberMargin = new LineNumberMargin(this)
@@ -202,7 +204,7 @@ public class TextEditor : ContentControl
         _surface.InvalidateTextView();
     }
 
-    private void OnSurfaceTextChanged(string _)
+    private void OnDocumentTextChanged(object? sender, DocumentChangeEventArgs e)
         => TextChanged?.Invoke(this, EventArgs.Empty);
 
     private void OnSurfaceTextInput(TextInputEventArgs e)

@@ -4,10 +4,12 @@ using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Indentation;
 using Aprillz.MewUI.MewvalonEdit.Search;
 using Aprillz.MewUI.MewvalonEdit.Folding;
+using System.Diagnostics;
 
 namespace Aprillz.MewUI.MewvalonEdit.Test;
 
 [TestClass]
+[DoNotParallelize]
 public sealed class EditorExtensionTests
 {
     [TestMethod]
@@ -26,6 +28,34 @@ public sealed class EditorExtensionTests
         editor.Document = new TextDocument("alpha replacement");
         Assert.HasCount(1, search.Results);
 
+        SearchPanel.Uninstall(search);
+    }
+
+    [TestMethod]
+    [Timeout(30_000, CooperativeCancellation = true)]
+    public void PlainSearchUpdatesOnlyTheChangedNeighborhood()
+    {
+        string text = "needle " + new string('x', 2_000_000) + " needle";
+        var editor = new TextEditor { Text = text };
+        var search = SearchPanel.Install(editor);
+        search.SearchPattern = "needle";
+        Assert.HasCount(2, search.Results);
+
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        var stopwatch = Stopwatch.StartNew();
+
+        editor.Document.Insert(100, "x");
+
+        long allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        Assert.IsLessThan(100L, stopwatch.ElapsedMilliseconds,
+            $"Incremental search refresh took {stopwatch.ElapsedMilliseconds}ms.");
+        Assert.IsLessThan(1L * 1024 * 1024, allocated,
+            $"Incremental search allocated {allocated:N0} bytes, indicating a whole-document rescan.");
+        Assert.HasCount(2, search.Results);
+        Assert.AreEqual(text.LastIndexOf("needle", StringComparison.Ordinal) + 1, search.Results[1].Offset);
         SearchPanel.Uninstall(search);
     }
 
@@ -88,5 +118,25 @@ public sealed class EditorExtensionTests
         Assert.AreEqual(-1, firstErrorOffset);
         Assert.HasCount(2, foldings);
         Assert.IsLessThan(foldings[1].StartOffset, foldings[0].StartOffset);
+    }
+
+    [TestMethod]
+    [Timeout(30_000, CooperativeCancellation = true)]
+    public void FoldingRefreshReusesLargeExistingSetWithoutQuadraticLookup()
+    {
+        var editor = new TextEditor { Text = new string('x', 120_000) };
+        var manager = FoldingManager.Install(editor);
+        var foldings = Enumerable.Range(0, 10_000)
+            .Select(static index => new NewFolding(index * 10, index * 10 + 5))
+            .ToArray();
+        manager.UpdateFoldings(foldings, -1);
+
+        var stopwatch = Stopwatch.StartNew();
+        manager.UpdateFoldings(foldings, -1);
+
+        Assert.IsLessThan(500L, stopwatch.ElapsedMilliseconds,
+            $"Updating 10,000 existing foldings took {stopwatch.ElapsedMilliseconds}ms.");
+        Assert.AreEqual(10_000, manager.AllFoldings.Count());
+        FoldingManager.Uninstall(manager);
     }
 }

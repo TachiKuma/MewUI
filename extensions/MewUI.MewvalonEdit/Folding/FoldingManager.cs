@@ -7,6 +7,8 @@ public sealed class FoldingManager
     private readonly TextEditor _editor;
     private readonly FoldingProjection _projection;
     private readonly List<FoldingSection> _foldings = [];
+    private readonly List<FoldingSection> _collapsed = [];
+    private readonly List<(int Start, int End)> _collapsedRanges = [];
     private bool _uninstalled;
 
     private FoldingManager(TextEditor editor)
@@ -49,6 +51,11 @@ public sealed class FoldingManager
         ObjectDisposedException.ThrowIf(_uninstalled, this);
         ArgumentNullException.ThrowIfNull(newFoldings);
         var ordered = newFoldings.OrderBy(static item => item.StartOffset).ThenBy(static item => item.EndOffset).ToArray();
+        var existingByRange = new Dictionary<(int Start, int End), FoldingSection>(_foldings.Count);
+        foreach (var existing in _foldings)
+        {
+            existingByRange.TryAdd((existing.StartOffset, existing.EndOffset), existing);
+        }
         int previousStart = -1;
         var replacement = new List<FoldingSection>(ordered.Length);
         foreach (var folding in ordered)
@@ -63,9 +70,7 @@ public sealed class FoldingManager
                 throw new ArgumentException("Foldings must be sorted by start offset.", nameof(newFoldings));
             }
             previousStart = folding.StartOffset;
-            var existing = _foldings.FirstOrDefault(item =>
-                item.StartOffset == folding.StartOffset && item.EndOffset == folding.EndOffset);
-            if (existing is null)
+            if (!existingByRange.TryGetValue((folding.StartOffset, folding.EndOffset), out var existing))
             {
                 existing = new FoldingSection(this, folding);
             }
@@ -85,16 +90,61 @@ public sealed class FoldingManager
         => _foldings.Where(item => item.StartOffset <= offset && offset <= item.EndOffset);
 
     public FoldingSection? GetNextFolding(int startOffset)
-        => _foldings.FirstOrDefault(item => item.StartOffset >= startOffset);
+    {
+        int low = 0;
+        int high = _foldings.Count;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (_foldings[middle].StartOffset < startOffset) low = middle + 1;
+            else high = middle;
+        }
+        return low < _foldings.Count ? _foldings[low] : null;
+    }
 
     internal IReadOnlyList<FoldingSection> Collapsed
-        => _foldings.Where(static item => item.IsFolded).ToArray();
+        => _collapsed;
 
     internal void NotifyChanged()
     {
         if (_uninstalled) return;
+        RebuildCollapsedIndex();
         FoldingsChanged?.Invoke(this, EventArgs.Empty);
         _editor.InvalidateTextView();
+    }
+
+    private void RebuildCollapsedIndex()
+    {
+        _collapsed.Clear();
+        _collapsed.AddRange(_foldings.Where(static item => item.IsFolded));
+        _collapsedRanges.Clear();
+        foreach (var folding in _collapsed)
+        {
+            if (_collapsedRanges.Count > 0 && folding.StartOffset <= _collapsedRanges[^1].End)
+            {
+                var current = _collapsedRanges[^1];
+                _collapsedRanges[^1] = (current.Start, Math.Max(current.End, folding.EndOffset));
+            }
+            else
+            {
+                _collapsedRanges.Add((folding.StartOffset, folding.EndOffset));
+            }
+        }
+    }
+
+    private bool IsLineCollapsed(LogicalTextLine line)
+    {
+        int low = 0;
+        int high = _collapsedRanges.Count;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (_collapsedRanges[middle].Start < line.Offset) low = middle + 1;
+            else high = middle;
+        }
+        if (low == 0) return false;
+        var range = _collapsedRanges[low - 1];
+        return line.Offset > range.Start && line.Offset + line.Length <= range.End;
     }
 
     private void OnSurfaceChanged(
@@ -111,9 +161,7 @@ public sealed class FoldingManager
     private sealed class FoldingProjection(FoldingManager manager) : ITextProjection, ITextLineCollapser
     {
         public bool IsCollapsed(LogicalTextLine line)
-            => manager.Collapsed.Any(folding =>
-                line.Offset > folding.StartOffset &&
-                line.Offset + line.Length <= folding.EndOffset);
+            => manager.IsLineCollapsed(line);
 
         public ProjectedText Project(in TextProjectionContext context)
         {

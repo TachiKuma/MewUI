@@ -16,13 +16,14 @@ public sealed class SearchPanel : ITextClassifier
     private bool _useRegex;
     private bool _wholeWords;
     private bool _uninstalled;
+    private bool _suspendDocumentRefresh;
 
     private SearchPanel(TextEditor editor)
     {
         _editor = editor;
         _document = editor.Document;
         _editor.Surface.Extensions.Classifiers.Add(this);
-        _document.TextChanged += OnDocumentTextChanged;
+        _document.Changed += OnDocumentChanged;
         _editor.SurfaceChanged += OnSurfaceChanged;
     }
 
@@ -44,7 +45,7 @@ public sealed class SearchPanel : ITextClassifier
         if (panel._uninstalled) return;
         panel._uninstalled = true;
         panel._editor.Surface.Extensions.Classifiers.Remove(panel);
-        panel._document.TextChanged -= panel.OnDocumentTextChanged;
+        panel._document.Changed -= panel.OnDocumentChanged;
         panel._editor.SurfaceChanged -= panel.OnSurfaceChanged;
         panel._editor.InvalidateTextView();
     }
@@ -86,8 +87,8 @@ public sealed class SearchPanel : ITextClassifier
     {
         if (_results.Count == 0) return null;
         if (startOffset < 0) startOffset = _editor.SelectionStart + _editor.SelectionLength;
-        var result = _results.FirstOrDefault(item => item.Offset >= startOffset);
-        if (result.Length == 0) result = _results[0];
+        int index = LowerBoundByOffset(startOffset);
+        var result = index < _results.Count ? _results[index] : _results[0];
         _editor.Select(result.Offset, result.Length);
         return result;
     }
@@ -96,11 +97,20 @@ public sealed class SearchPanel : ITextClassifier
     {
         replacement ??= string.Empty;
         int count = _results.Count;
-        for (int index = _results.Count - 1; index >= 0; index--)
+        _suspendDocumentRefresh = true;
+        try
         {
-            var result = _results[index];
-            _editor.Document.Replace(result.Offset, result.Length, replacement);
+            for (int index = _results.Count - 1; index >= 0; index--)
+            {
+                var result = _results[index];
+                _editor.Document.Replace(result.Offset, result.Length, replacement);
+            }
         }
+        finally
+        {
+            _suspendDocumentRefresh = false;
+        }
+        Refresh();
         return count;
     }
 
@@ -114,9 +124,15 @@ public sealed class SearchPanel : ITextClassifier
             return;
         }
 
-        string pattern = UseRegex ? _searchPattern : Regex.Escape(_searchPattern);
-        if (WholeWords) pattern = $@"\b(?:{pattern})\b";
-        RegexOptions options = RegexOptions.CultureInvariant;
+        if (!UseRegex)
+        {
+            FindPlainTextMatches(0, _editor.Document.TextLength, _results);
+            _editor.InvalidateTextView();
+            return;
+        }
+
+        string pattern = WholeWords ? $@"\b(?:{_searchPattern})\b" : _searchPattern;
+        RegexOptions options = RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture;
         if (!MatchCase) options |= RegexOptions.IgnoreCase;
         try
         {
@@ -131,6 +147,11 @@ public sealed class SearchPanel : ITextClassifier
         {
             // An incomplete interactive regular expression has no results until it becomes valid.
         }
+        catch (RegexMatchTimeoutException)
+        {
+            // An expensive interactive expression yields no results instead of blocking input.
+            _results.Clear();
+        }
         _editor.InvalidateTextView();
     }
 
@@ -138,8 +159,11 @@ public sealed class SearchPanel : ITextClassifier
     {
         int lineStart = context.LogicalLine.Offset;
         int lineEnd = lineStart + context.LogicalLine.Length;
-        foreach (var result in _results)
+        int index = LowerBoundByEnd(lineStart);
+        for (; index < _results.Count; index++)
         {
+            var result = _results[index];
+            if (result.Offset >= lineEnd) break;
             int start = Math.Max(lineStart, result.Offset);
             int end = Math.Min(lineEnd, result.EndOffset);
             if (end > start)
@@ -151,14 +175,127 @@ public sealed class SearchPanel : ITextClassifier
         }
     }
 
-    private void OnDocumentTextChanged(object? sender, EventArgs e) => Refresh();
+    private void OnDocumentChanged(object? sender, DocumentChangeEventArgs e)
+    {
+        if (_suspendDocumentRefresh) return;
+        if (UseRegex || string.IsNullOrEmpty(_searchPattern))
+        {
+            Refresh();
+            return;
+        }
+
+        int delta = e.InsertionLength - e.RemovalLength;
+        int scanPadding = _searchPattern.Length + (WholeWords ? 1 : 0);
+        int scanStart = Math.Max(0, e.Offset - scanPadding);
+        int scanEnd = Math.Min(_editor.Document.TextLength, e.Offset + e.InsertionLength + scanPadding);
+        var retained = new List<SearchResult>(_results.Count);
+        foreach (var result in _results)
+        {
+            SearchResult adjusted;
+            if (result.EndOffset <= e.Offset)
+            {
+                adjusted = result;
+            }
+            else if (result.Offset >= e.Offset + e.RemovalLength)
+            {
+                adjusted = result with { Offset = result.Offset + delta };
+            }
+            else
+            {
+                continue;
+            }
+
+            if (adjusted.EndOffset <= scanStart || adjusted.Offset >= scanEnd)
+            {
+                retained.Add(adjusted);
+            }
+        }
+
+        FindPlainTextMatches(scanStart, scanEnd, retained);
+        retained.Sort(static (left, right) => left.Offset.CompareTo(right.Offset));
+        _results.Clear();
+        _results.AddRange(retained);
+        _editor.InvalidateTextView();
+    }
+
+    private void FindPlainTextMatches(int scanStart, int scanEnd, List<SearchResult> output)
+    {
+        const int BlockSize = 64 * 1024;
+        int patternLength = _searchPattern.Length;
+        int documentLength = _editor.Document.TextLength;
+        int lastStart = Math.Min(documentLength - patternLength, scanEnd);
+        int blockStart = Math.Max(0, scanStart);
+        while (blockStart <= lastStart)
+        {
+            int primaryLength = Math.Min(BlockSize, lastStart - blockStart + 1);
+            int textLength = Math.Min(documentLength - blockStart, primaryLength + patternLength - 1);
+            string block = _editor.Document.GetText(blockStart, textLength);
+            for (int localOffset = 0; localOffset < primaryLength; localOffset++)
+            {
+                int offset = blockStart + localOffset;
+                if (!MatchesAt(block, localOffset)) continue;
+                if (WholeWords &&
+                    ((offset > 0 && IsWordCharacter(_editor.Document.GetCharAt(offset - 1))) ||
+                     (offset + patternLength < documentLength &&
+                      IsWordCharacter(_editor.Document.GetCharAt(offset + patternLength)))))
+                {
+                    continue;
+                }
+                output.Add(new SearchResult(offset, patternLength));
+                localOffset += Math.Max(0, patternLength - 1);
+            }
+            blockStart += primaryLength;
+        }
+    }
+
+    private bool MatchesAt(string block, int offset)
+    {
+        for (int index = 0; index < _searchPattern.Length; index++)
+        {
+            char actual = block[offset + index];
+            char expected = _searchPattern[index];
+            if (MatchCase ? actual != expected : char.ToUpperInvariant(actual) != char.ToUpperInvariant(expected))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private int LowerBoundByOffset(int offset)
+    {
+        int low = 0;
+        int high = _results.Count;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (_results[middle].Offset < offset) low = middle + 1;
+            else high = middle;
+        }
+        return low;
+    }
+
+    private int LowerBoundByEnd(int offset)
+    {
+        int low = 0;
+        int high = _results.Count;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (_results[middle].EndOffset <= offset) low = middle + 1;
+            else high = middle;
+        }
+        return low;
+    }
+
+    private static bool IsWordCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
 
     private void OnSurfaceChanged(NewMultiLineTextBox previous, NewMultiLineTextBox current)
     {
         previous.Extensions.Classifiers.Remove(this);
-        _document.TextChanged -= OnDocumentTextChanged;
+        _document.Changed -= OnDocumentChanged;
         _document = _editor.Document;
-        _document.TextChanged += OnDocumentTextChanged;
+        _document.Changed += OnDocumentChanged;
         current.Extensions.Classifiers.Add(this);
         Refresh();
     }
