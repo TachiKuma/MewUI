@@ -56,6 +56,9 @@ public sealed record TextParagraphStyle
     public CultureInfo Culture { get; init; } = CultureInfo.CurrentUICulture;
     public string? Language { get; init; }
     public IReadOnlyList<double> TabStops { get; init; } = [];
+
+    /// <summary>Tab width in space characters, used where <see cref="TabStops"/> defines no stop ahead.</summary>
+    public int TabSize { get; init; } = 4;
     public double? LineHeight { get; init; }
     public double LineSpacing { get; init; }
     public double LetterSpacing { get; init; }

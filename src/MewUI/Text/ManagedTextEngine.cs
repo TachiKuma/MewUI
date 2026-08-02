@@ -70,7 +70,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         }
 
         var clusters = MeasureClusters(context, snapshot, 0, snapshot.Text.Length);
-        var lines = AssembleLines(snapshot, clusters);
+        var lines = AssembleLines(context, snapshot, clusters);
         double measuredWidth = lines.Count == 0 ? 0 : lines.Max(static line => line.Metrics.Bounds.Width);
         double contentHeight = lines.Count == 0 ? 0 : lines[^1].Metrics.Bounds.Bottom;
         return new ManagedTextLayout(
@@ -316,6 +316,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     }
 
     private List<ManagedTextLine> AssembleLines(
+        IGraphicsContext context,
         TextLayoutRequestSnapshot snapshot,
         List<ManagedTextCluster> clusters)
     {
@@ -324,6 +325,9 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         int lineStart = 0;
         int index = 0;
         double maxWidth = NormalizeMaxWidth(snapshot.Paragraph.MaxWidth);
+        // Measured once per font rather than per tab: a deeply indented document would otherwise
+        // create a measurement context and re-measure a space for every tab character.
+        Dictionary<IFont, double>? spaceWidths = null;
 
         while (index < clusters.Count)
         {
@@ -342,7 +346,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                 }
 
                 double clusterWidth = cluster.Kind == ManagedTextClusterKind.Tab
-                    ? GetTabWidth(snapshot.Paragraph, width, cluster.Font, snapshot.Dpi, context: null)
+                    ? GetTabWidth(snapshot.Paragraph, width, GetSpaceWidth(context, cluster.Font, ref spaceWidths))
                     : cluster.Width;
                 bool exceeds = snapshot.Paragraph.Wrapping != TextWrapping.NoWrap &&
                                !double.IsPositiveInfinity(maxWidth) &&
@@ -518,7 +522,22 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             ? paragraph.LineHeight.Value
             : Math.Max(fontHeight, measuredHeight);
 
-    private double GetTabWidth(TextParagraphStyle paragraph, double x, IFont font, uint dpi, IGraphicsContext? context)
+    private static double GetSpaceWidth(IGraphicsContext context, IFont font, ref Dictionary<IFont, double>? cache)
+    {
+        cache ??= [];
+        if (!cache.TryGetValue(font, out double width))
+        {
+            width = Math.Max(1, context.MeasureText(" ", font).Width);
+            cache.Add(font, width);
+        }
+        return width;
+    }
+
+    /// <summary>
+    /// Distance from <paramref name="x"/> to the next tab stop: the first explicit stop ahead of
+    /// the pen, otherwise a repeating stop every <see cref="TextParagraphStyle.TabSize"/> spaces.
+    /// </summary>
+    private static double GetTabWidth(TextParagraphStyle paragraph, double x, double spaceWidth)
     {
         foreach (double stop in paragraph.TabStops)
         {
@@ -528,21 +547,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             }
         }
 
-        bool ownsContext = context is null;
-        context ??= _factory.CreateMeasurementContext(dpi);
-        try
-        {
-            double space = Math.Max(1, context.MeasureText(" ", font).Width);
-            double interval = space * 4;
-            return interval - x % interval;
-        }
-        finally
-        {
-            if (ownsContext)
-            {
-                context.Dispose();
-            }
-        }
+        double interval = spaceWidth * Math.Max(1, paragraph.TabSize);
+        return interval - x % interval;
     }
 
     public void Dispose()
@@ -718,7 +724,8 @@ internal sealed class TextLayoutRequestSnapshot
             .Append('\u001f').Append(Paragraph.Culture.Name).Append('\u001f').Append(Paragraph.Language)
             .Append('\u001f').Append(Paragraph.LineHeight?.ToString("R", CultureInfo.InvariantCulture))
             .Append('\u001f').Append(Paragraph.LineSpacing.ToString("R", CultureInfo.InvariantCulture))
-            .Append('\u001f').Append(Paragraph.LetterSpacing.ToString("R", CultureInfo.InvariantCulture));
+            .Append('\u001f').Append(Paragraph.LetterSpacing.ToString("R", CultureInfo.InvariantCulture))
+            .Append(':').Append(Paragraph.TabSize);
         AppendStyle(builder, DefaultStyle);
         foreach (double tab in Paragraph.TabStops)
         {
