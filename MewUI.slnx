@@ -9,7 +9,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/MewDock.Sample/MewDock.Sample.csproj" />
     <Project Path="samples/MewUI.Gallery/MewUI.Gallery.csproj" />
-    <Project Path="samples/MewUI.MewalonEdit.Sample/MewUI.MewalonEdit.Sample.csproj" />
+    <Project Path="samples/MewUI.MewvalonEdit.Sample/MewUI.MewvalonEdit.Sample.csproj" />
     <Project Path="samples/MewUI.MewCharts.Sample/MewUI.MewCharts.Sample.csproj" />
     <Project Path="samples/MewUI.Sample/MewUI.Sample.csproj" />
     <Project Path="samples/MewUI.Skia.Sample/MewUI.Skia.Sample.csproj" />
@@ -35,7 +35,7 @@
     <Project Path="src/MewUI/MewUI.csproj" />
   </Folder>
   <Folder Name="/extensions/">
-    <Project Path="extensions/MewUI.MewalonEdit/MewUI.MewalonEdit.csproj" />
+    <Project Path="extensions/MewUI.MewvalonEdit/MewUI.MewvalonEdit.csproj" />
     <Project Path="extensions/MewUI.MewCharts/MewUI.MewCharts.csproj" />
     <Project Path="extensions/MewUI.MewDock/MewUI.MewDock.csproj" />
     <Project Path="extensions/MewUI.Skia.Interop.Direct2D/MewUI.Skia.Interop.Direct2D.csproj" />
@@ -62,6 +62,6 @@
     <Project Path="tests/Aprillz.MewUI.Benchmarks/Aprillz.MewUI.Benchmarks.csproj" />
     <Project Path="tests/MewUI.GraphicsBackendTest/MewUI.GraphicsBackendTest.csproj" />
     <Project Path="tests/Aprillz.MewUI.Test/Aprillz.MewUI.Test.csproj" />
-    <Project Path="tests/MewUI.MewalonEdit.Test/MewUI.MewalonEdit.Test.csproj" />
+    <Project Path="tests/MewUI.MewvalonEdit.Test/MewUI.MewvalonEdit.Test.csproj" />
   </Folder>
 </Solution>
