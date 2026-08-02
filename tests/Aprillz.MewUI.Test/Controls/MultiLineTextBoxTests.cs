@@ -17,7 +17,7 @@ public sealed class MultiLineTextBoxTests
     [TestMethod]
     public void Control_DoesNotDependOnLegacyControlsTextTypes()
     {
-        Assert.AreEqual(typeof(Control), typeof(MultiLineTextBox).BaseType);
+        Assert.AreEqual(typeof(TextBase), typeof(MultiLineTextBox).BaseType);
 
         var legacyReferences = typeof(MultiLineTextBox)
             .GetFields(System.Reflection.BindingFlags.Instance |

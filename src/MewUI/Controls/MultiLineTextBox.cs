@@ -11,7 +11,7 @@ namespace Aprillz.MewUI.Controls;
 /// Multi-line editor built on the extensible text view engine.
 /// It does not use the legacy Controls.Text formatter, view, or measurement caches.
 /// </summary>
-public sealed class MultiLineTextBox : Control, ITextCompositionClient, ITextCompositionEditor, ITextInputClient, IVisualTreeHost
+public sealed class MultiLineTextBox : TextBase, ITextCompositionClient, ITextCompositionEditor, ITextInputClient, IVisualTreeHost
 {
     public static readonly MewProperty<string> TextProperty =
         MewProperty<string>.Register<MultiLineTextBox>(nameof(Text), string.Empty,
