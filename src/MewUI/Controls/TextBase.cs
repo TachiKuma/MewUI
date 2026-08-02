@@ -11,9 +11,8 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// Base class for text input controls built on the managed text engine.
 /// </summary>
-// Rebuilt hierarchy (agent/textBase/plan.md): shared editing members migrate here from
-// MultiLineTextBox slice by slice; LegacyTextBase remains frozen until TextBox and
-// PasswordBox move onto this base.
+// Rebuilt hierarchy (agent/textBase/plan.md). Text-surface exposure is deferred to leaves:
+// the base owns document/session/IME/clipboard machinery but no public Text/SelectedText.
 public abstract class TextBase : Control, ITextCompositionClient, ITextCompositionEditor, ITextInputClient
 {
     public static readonly MewProperty<ImeMode> ImeModeProperty =

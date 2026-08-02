@@ -61,7 +61,6 @@ public static class DefaultStyles
             [typeof(SegmentButton)] = CreateSegmentButtonStyle,
             [typeof(ButtonGroup)] = CreateButtonGroupStyle,
             [typeof(MenuBar)] = CreateMenuBarStyle,
-            [typeof(LegacyTextBase)] = CreateLegacyTextBaseStyle,
             [typeof(TextBase)] = CreateTextBaseStyle,
             [typeof(MultiLineTextBox)] = CreateMultiLineTextBoxStyle,
             [typeof(SyntaxViewer)] = CreateSyntaxViewerStyle,
@@ -832,9 +831,6 @@ public static class DefaultStyles
                 CreateValidationBorderTrigger(),
             ],
         };
-
-    private static Style CreateLegacyTextBaseStyle()
-        => CreateTextInputStyle(typeof(LegacyTextBase));
 
     private static Style CreateTextBaseStyle()
         => CreateTextInputStyle(typeof(TextBase));

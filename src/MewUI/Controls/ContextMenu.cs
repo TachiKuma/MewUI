@@ -409,7 +409,7 @@ public sealed class ContextMenu : Control, IPopupOwner
         base.OnMouseDown(e);
         if (!e.Handled)
         {
-            // Prevent bubbling to the popup owner (e.g. LegacyTextBase captures the mouse on left-click,
+            // Prevent bubbling to the popup owner (e.g. text inputs capture the mouse on left-click,
             // which would swallow the subsequent mouse-up that activates the menu item).
             e.Handled = true;
         }

@@ -333,7 +333,7 @@ public sealed class StyleSheetTests
             typeof(NumericUpDown),
             typeof(Slider),
             typeof(Calendar),
-            typeof(LegacyTextBase),
+            typeof(TextBase),
             typeof(DropDownBase),
             typeof(ListBox),
             typeof(SegmentedControl),
