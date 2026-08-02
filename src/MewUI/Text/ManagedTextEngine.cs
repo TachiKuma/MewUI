@@ -449,14 +449,15 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         var key = new FontKey(style.FontFamily, style.FontSize, style.Weight, style.Italic, dpi);
         if (!_fonts.TryGetValue(key, out var font))
         {
+            // Decorations are drawn by the text renderer as geometry; baking them into the
+            // backend font would double-draw where fonts render them natively (and the cache
+            // key intentionally ignores them).
             font = _factory.CreateFont(
                 style.FontFamily,
                 style.FontSize,
                 dpi,
                 style.Weight,
-                style.Italic,
-                style.Decoration.HasFlag(TextDecoration.Underline),
-                style.Decoration.HasFlag(TextDecoration.Strikethrough));
+                style.Italic);
             _fonts.Add(key, font);
         }
 

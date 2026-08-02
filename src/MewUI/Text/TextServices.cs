@@ -155,7 +155,7 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                     }
                     DrawRunColorSegments(
                         managed, clusters, index, runEnd, origin, bounds,
-                        textStart, textLength, format, legacyLayout, in options);
+                        line.Metrics.Baseline, textStart, textLength, format, legacyLayout, in options);
                 }
                 index = runEnd;
             }
@@ -376,6 +376,7 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
         int endCluster,
         Point origin,
         Rect runBounds,
+        double baseline,
         int textStart,
         int textLength,
         TextFormat format,
@@ -423,8 +424,44 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                     }
                 }
             }
+            DrawRunDecoration(startCluster.Style, left, right, runBounds, baseline, segmentColor);
+
             segmentStart = clusterIndex;
             segmentColor = nextColor;
+        }
+    }
+
+    /// <summary>
+    /// Draws style-run underline/strikethrough as renderer geometry so every backend matches;
+    /// font-level decoration support varies by backend and is not relied on.
+    /// </summary>
+    private void DrawRunDecoration(TextRunStyle style, double left, double right, in Rect runBounds, double baseline, Color color)
+    {
+        if (style.Decoration == TextDecoration.None)
+        {
+            return;
+        }
+
+        double clampedLeft = Math.Max(left, runBounds.X);
+        double width = Math.Min(right, runBounds.Right) - clampedLeft;
+        if (width <= 0)
+        {
+            return;
+        }
+
+        // Pixel-snap the line position and thickness so antialiasing does not smear the stroke.
+        double dpiScale = _context.DpiScale;
+        double thickness = LayoutRounding.SnapThicknessToPixels(1, dpiScale, 1);
+        if (style.Decoration.HasFlag(TextDecoration.Underline))
+        {
+            double y = LayoutRounding.RoundToPixel(Math.Min(runBounds.Y + baseline + 1, runBounds.Bottom - thickness), dpiScale);
+            _context.FillRectangle(new Rect(clampedLeft, y, width, thickness), color);
+        }
+        if (style.Decoration.HasFlag(TextDecoration.Strikethrough))
+        {
+            // FontSize is in points; 4/3 converts to DIPs, strike sits ~30% of the em above baseline.
+            double y = LayoutRounding.RoundToPixel(runBounds.Y + baseline - style.FontSize * (4.0 / 3.0) * 0.3, dpiScale);
+            _context.FillRectangle(new Rect(clampedLeft, y, width, thickness), color);
         }
     }
 
