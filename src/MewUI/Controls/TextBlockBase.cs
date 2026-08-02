@@ -1,6 +1,6 @@
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Diagnostics;
-using Aprillz.MewUI.Controls.Text;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -30,15 +30,18 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
             MewPropertyOptions.AffectsLayout,
             static (self, _, _) => self.OnTextTrimmingChanged());
 
-    private IFont? _font;
     private double? _lastWrapMeasureWidth;
-    private readonly FormattedTextStore _textStore = new();
+    private readonly List<TextPaintSpan> _paintSpans = [];
 
-    private uint _lastFontDpi;
-    private Theme? _lastFontTheme;
-    private string? _lastFontFamily;
-    private double _lastFontSize;
-    private FontWeight _lastFontWeight;
+    private ITextLayout? _layout;
+    private double _layoutMaxWidth;
+    private double _layoutMaxHeight;
+    private TextRunStyle _layoutStyle;
+    private TextWrapping _layoutWrapping;
+    private uint _layoutDpi;
+    private long _textRevision;
+    private long _breaksRevision = -1;
+    private bool _hasExplicitLineBreaks;
 
     /// <summary>
     /// The string actually measured and rendered. Subclasses map their own content onto it.
@@ -87,109 +90,113 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
     protected void InvalidateTextLayout()
     {
         _lastWrapMeasureWidth = null;
-        _textStore.InvalidateLayout();
+        _layout = null;
+
+        // The owner cache key excludes the text, so the revision is what tells the engine that a
+        // layout built for the same constraints is stale.
+        _textRevision++;
     }
 
-    private bool HasExplicitLineBreaks => DisplayText.AsSpan().IndexOfAny('\r', '\n') >= 0;
-
-    private void InvalidateFont()
+    // Rendering resolves wrapping every frame, so the scan is kept until the text revision moves.
+    private bool HasExplicitLineBreaks
     {
-        _font?.Dispose();
-        _font = null;
-        _lastFontDpi = 0;
-        _lastFontTheme = null;
-        _lastFontFamily = null;
-        _lastFontSize = 0;
-        _lastFontWeight = default;
+        get
+        {
+            if (_breaksRevision != _textRevision)
+            {
+                _hasExplicitLineBreaks = DisplayText.AsSpan().IndexOfAny('\r', '\n') >= 0;
+                _breaksRevision = _textRevision;
+            }
+            return _hasExplicitLineBreaks;
+        }
     }
 
     protected override void OnMewPropertyChanged(MewProperty property)
     {
         base.OnMewPropertyChanged(property);
 
+        // Everything the layout request carries: the font style, and the alignment the engine
+        // resolves per line. VerticalTextAlignment only moves the draw origin.
         if (property.Id == TextElement.FontFamilyProperty.Id ||
             property.Id == TextElement.FontSizeProperty.Id ||
-            property.Id == TextElement.FontWeightProperty.Id)
+            property.Id == TextElement.FontWeightProperty.Id ||
+            property.Id == TextAlignmentProperty.Id)
         {
-            InvalidateFont();
+            InvalidateTextLayout();
         }
     }
 
-    protected IFont EnsureFont(IGraphicsFactory factory)
-    {
-        var dpi = GetDpi();
-        var family = FontFamily;
-        var size = FontSize;
-        var weight = FontWeight;
+    /// <summary>Explicit line breaks need line assembly, which only the wrapping paths run.</summary>
+    private TextWrapping ResolveWrapping()
+        => TextWrapping == TextWrapping.NoWrap && HasExplicitLineBreaks ? TextWrapping.Wrap : TextWrapping;
 
-        if (_font != null &&
-            _lastFontDpi == dpi &&
-            ReferenceEquals(_lastFontTheme, Theme) &&
-            _lastFontFamily == family &&
-            _lastFontSize == size &&
-            _lastFontWeight == weight)
+    private ITextLayout GetOrCreateTextLayout(TextWrapping wrapping, double maxWidth, double maxHeight)
+    {
+        // Render runs every frame; rebuilding the request would copy the text and rebuild a cache
+        // key each time, so the resolved layout is held until an input actually changes. The inputs
+        // are compared rather than trusted to invalidation because inherited font values change
+        // without notifying this element.
+        var style = new TextRunStyle(FontFamily, FontSize, FontWeight);
+        uint dpi = GetDpi();
+        if (_layout is not null &&
+            _layoutMaxWidth.Equals(maxWidth) &&
+            _layoutMaxHeight.Equals(maxHeight) &&
+            _layoutWrapping == wrapping &&
+            _layoutDpi == dpi &&
+            _layoutStyle == style)
         {
-            return _font;
+            return _layout;
         }
 
-        _font?.Dispose();
-        _font = factory.CreateFont(family, size, dpi, weight);
-        _lastFontDpi = dpi;
-        _lastFontTheme = Theme;
-        _lastFontFamily = family;
-        _lastFontSize = size;
-        _lastFontWeight = weight;
-        return _font;
+        _layoutMaxWidth = maxWidth;
+        _layoutMaxHeight = maxHeight;
+        _layoutWrapping = wrapping;
+        _layoutDpi = dpi;
+        _layoutStyle = style;
+        _layout = GetGraphicsFactory().TextEngine.GetOrCreateLayout(
+            new TextLayoutRequest
+            {
+                Text = DisplayText.AsMemory(),
+                Dpi = dpi,
+                DefaultStyle = style,
+                Paragraph = new TextParagraphStyle
+                {
+                    MaxWidth = maxWidth,
+                    MaxHeight = maxHeight,
+                    Wrapping = wrapping,
+                    Trimming = TextTrimming,
+                    Alignment = TextAlignment,
+                    Culture = System.Globalization.CultureInfo.CurrentUICulture
+                },
+                Revision = _textRevision
+            },
+            TextLayoutCachePolicy.Owner,
+            this);
+        return _layout;
     }
 
     protected override Size MeasureContent(Size availableSize)
     {
         if (string.IsNullOrEmpty(DisplayText))
         {
-            _textStore.Invalidate();
             return Size.Empty;
         }
 
-        var wrapping = TextWrapping;
-        if (wrapping == TextWrapping.NoWrap && HasExplicitLineBreaks)
-        {
-            wrapping = TextWrapping.Wrap;
-        }
-
-        var factory = GetGraphicsFactory();
-        var font = EnsureFont(factory);
-
-        double maxWidth = 0;
+        var wrapping = ResolveWrapping();
+        double maxWidth = double.PositiveInfinity;
         if (wrapping != TextWrapping.NoWrap)
         {
             maxWidth = availableSize.Width;
-            if (double.IsNaN(maxWidth) || maxWidth <= 0)
-                maxWidth = 0;
-            if (double.IsPositiveInfinity(maxWidth))
+            if (double.IsNaN(maxWidth) || maxWidth <= 0 || double.IsPositiveInfinity(maxWidth))
+            {
                 maxWidth = 1_000_000;
-            maxWidth = maxWidth > 0 ? maxWidth : 1_000_000;
+            }
             _lastWrapMeasureWidth = maxWidth;
         }
 
-        var constraintWidth = wrapping != TextWrapping.NoWrap ? maxWidth : double.PositiveInfinity;
-        var constraints = new TextLayoutConstraints(new Rect(0, 0, constraintWidth, 0));
-
-        _textStore.SetFormat(new TextFormat
-        {
-            Font = font,
-            HorizontalAlignment = TextAlignment,
-            VerticalAlignment = VerticalTextAlignment,
-            Wrapping = wrapping,
-            Trimming = TextTrimming
-        });
-
-        if (_textStore.TryGetMeasuredSize(in constraints, out var measuredSize))
-        {
-            return measuredSize;
-        }
-
-        using var ctx = factory.CreateMeasurementContext(GetDpi());
-        return _textStore.Measure(ctx, DisplayText, in constraints);
+        // Measuring against an unbounded height keeps trimming out of the desired size; it applies
+        // at render time, where the arranged bounds are known.
+        return GetOrCreateTextLayout(wrapping, maxWidth, double.PositiveInfinity).MeasuredSize;
     }
 
     protected override void ArrangeContent(Rect bounds)
@@ -216,48 +223,57 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
 
     protected override void OnRender(IGraphicsContext context)
     {
-        if (_textStore.Format == null)
+        if (string.IsNullOrEmpty(DisplayText))
         {
             return;
         }
-        TextLayout? layout;
+
+        var bounds = Bounds;
+        ITextLayout layout;
         using (ProfilerMarkers.TextLayout.Auto())
         {
-            layout = _textStore.EnsureRenderLayout(context, DisplayText, Bounds);
+            layout = GetOrCreateTextLayout(ResolveWrapping(), bounds.Width, bounds.Height);
         }
-        if (layout == null) return;
-        layout.EffectiveBounds = Bounds;
+
+        double y = VerticalTextAlignment switch
+        {
+            TextAlignment.Center => bounds.Y + Math.Max(0, (bounds.Height - layout.ContentHeight) * 0.5),
+            TextAlignment.Bottom => bounds.Y + Math.Max(0, bounds.Height - layout.ContentHeight),
+            _ => bounds.Y
+        };
+
+        // Recomputed per frame rather than cached with the layout: the access-key underline appears
+        // and disappears with the Alt state while the layout itself is unchanged.
+        _paintSpans.Clear();
+        OnGetTextPaintSpans(_paintSpans);
+        var spans = _paintSpans.Count == 0
+            ? ReadOnlyMemory<TextPaintSpan>.Empty
+            : _paintSpans.ToArray();
+
         using (ProfilerMarkers.TextDraw.Auto())
         {
-            context.DrawTextLayout(DisplayText, _textStore.Format, layout, Foreground, owner: this);
+            var options = new TextDrawOptions(Foreground, spans, Owner: this);
+            context.Text.Draw(layout, new Point(bounds.X, y), in options);
         }
-        OnRenderTextDecorations(context, _textStore.Format, layout, DisplayText, Bounds);
     }
 
-    protected virtual void OnRenderTextDecorations(
-        IGraphicsContext context,
-        TextFormat format,
-        TextLayout layout,
-        string text,
-        Rect bounds)
+    /// <summary>
+    /// Contributes paint spans applied to the rendered text, such as the access-key underline.
+    /// Offsets index <see cref="DisplayText"/>.
+    /// </summary>
+    protected virtual void OnGetTextPaintSpans(IList<TextPaintSpan> output)
     {
     }
 
     protected override void OnDpiChanged(uint oldDpi, uint newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
-
-        _font?.Dispose();
-        _font = null;
+        InvalidateTextLayout();
     }
 
     protected override void OnDispose()
     {
         base.OnDispose();
-
-        _textStore.Invalidate();
-
-        _font?.Dispose();
-        _font = null;
+        _layout = null;
     }
 }
