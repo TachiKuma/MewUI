@@ -170,6 +170,36 @@ public sealed class TextViewLayoutTests
             "The projected offset after the folding placeholder must map back to the source suffix.");
     }
 
+    [TestMethod]
+    public void ExtensionPipeline_CollapsesCompleteLogicalLinesAndMapsHiddenCaret()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument("first\nhidden one\nhidden two\nlast");
+        var extensions = new TextViewExtensionPipeline();
+        extensions.LineCollapsers.Add(new MiddleLineCollapser());
+        using var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            document,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.NoWrap },
+            extensions);
+
+        view.SetViewport(new TextViewport(300, 200));
+
+        CollectionAssert.AreEqual(
+            new[] { 0, 3 },
+            view.MaterializedLines.Select(line => line.LogicalLine.LineNumber).ToArray());
+        Rect hiddenCaret = view.GetCaretBounds(document.GetLineByNumber(2).Offset + 2);
+        Rect firstLineEnd = view.GetCaretBounds(document.GetLineByNumber(0).Offset + document.GetLineByNumber(0).Length);
+        Assert.AreEqual(firstLineEnd.Y, hiddenCaret.Y, 0.01);
+    }
+
     private static TextViewLayout CreateView(GdiGraphicsFactory factory, IReadOnlyTextDocument document, double width)
         => new(
             factory.TextEngine,
@@ -315,5 +345,10 @@ public sealed class TextViewLayoutTests
 
         public int MapFromSource(int sourceOffset)
             => sourceOffset <= 3 ? sourceOffset : sourceOffset < 6 ? 3 : sourceOffset - 2;
+    }
+
+    private sealed class MiddleLineCollapser : ITextLineCollapser
+    {
+        public bool IsCollapsed(LogicalTextLine line) => line.LineNumber is 1 or 2;
     }
 }

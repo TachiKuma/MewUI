@@ -4,6 +4,7 @@ using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Platform;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Rendering.Gdi;
+using Aprillz.MewUI.Text.Editing;
 using MewUI.Test.Infrastructure;
 using System.Diagnostics;
 
@@ -27,6 +28,20 @@ public sealed class NewMultiLineTextBoxTests
             .ToArray();
 
         Assert.HasCount(0, legacyReferences);
+    }
+
+    [TestMethod]
+    public void InjectedDocumentRemainsTheEditableSourceOfTruth()
+    {
+        var document = new EditableTextDocument("seed");
+        var textBox = new NewMultiLineTextBox(document);
+
+        Assert.AreSame(document, textBox.Document);
+        Assert.AreEqual("seed", textBox.Text);
+
+        document.Insert(document.TextLength, " value");
+
+        Assert.AreEqual("seed value", textBox.Text);
     }
 
     [TestMethod]

@@ -37,6 +37,7 @@ public sealed class TextViewLayout : ITextViewLayout
         _dpi = dpi == 0 ? 96 : dpi;
         _estimatedLineHeight = Math.Max(1, _paragraph.LineHeight ?? defaultStyle.FontSize * 1.25);
         _states = CreateStates(document.LineCount, _estimatedLineHeight);
+        ApplyLineCollapsing();
     }
 
     public TextViewport Viewport { get; private set; }
@@ -134,6 +135,12 @@ public sealed class TextViewLayout : ITextViewLayout
 
         documentOffset = Math.Clamp(documentOffset, 0, _document.TextLength);
         var source = _document.GetLineByOffset(documentOffset);
+        int visibleLineNumber = FindVisibleCaretLine(source.LineNumber);
+        if (visibleLineNumber != source.LineNumber)
+        {
+            source = _document.GetLineByNumber(visibleLineNumber);
+            documentOffset = source.Offset + source.Length;
+        }
         double lineY = GetLineY(source.LineNumber);
         var layout = GetOrCreateLine(source.LineNumber, lineY, sourceOffset: documentOffset - source.Offset);
         int sourceOffset = Math.Clamp(documentOffset - layout.LogicalLine.Offset, 0, layout.LogicalLine.Length);
@@ -157,6 +164,10 @@ public sealed class TextViewLayout : ITextViewLayout
 
         for (int lineNumber = first; lineNumber < _states.Length && y <= limit; lineNumber++)
         {
+            if (_states[lineNumber].Collapsed)
+            {
+                continue;
+            }
             double targetY = Math.Max(y, Viewport.VerticalOffset - _estimatedLineHeight);
             var layout = GetOrCreateLine(lineNumber, y, targetY);
             _materialized.Add(layout);
@@ -384,6 +395,44 @@ public sealed class TextViewLayout : ITextViewLayout
             }
         }
         _states = replacement;
+        ApplyLineCollapsing();
+    }
+
+    private void ApplyLineCollapsing()
+    {
+        if (_extensions.LineCollapsers.Count == 0) return;
+        for (int lineNumber = 0; lineNumber < _states.Length; lineNumber++)
+        {
+            var source = _document.GetLineByNumber(lineNumber);
+            var logical = new LogicalTextLine(source.LineNumber, source.Offset, source.Length, source.TotalLength);
+            bool collapsed = _extensions.LineCollapsers.Any(collapser => collapser.IsCollapsed(logical));
+            var state = _states[lineNumber];
+            state.Collapsed = collapsed;
+            if (collapsed)
+            {
+                _engine.ManagedCache.ReleaseOwner(state.Owner);
+                state.Layout = null;
+                state.Height = 0;
+            }
+            else if (state.Height <= 0)
+            {
+                state.Height = _estimatedLineHeight;
+            }
+        }
+    }
+
+    private int FindVisibleCaretLine(int lineNumber)
+    {
+        if (!_states[lineNumber].Collapsed) return lineNumber;
+        for (int candidate = lineNumber - 1; candidate >= 0; candidate--)
+        {
+            if (!_states[candidate].Collapsed) return candidate;
+        }
+        for (int candidate = lineNumber + 1; candidate < _states.Length; candidate++)
+        {
+            if (!_states[candidate].Collapsed) return candidate;
+        }
+        return lineNumber;
     }
 
     private static LineState[] CreateStates(int count, double estimate)
@@ -422,6 +471,7 @@ public sealed class TextViewLayout : ITextViewLayout
         public int SliceStart { get; set; } = -1;
         public int SliceLength { get; set; } = -1;
         public double Width { get; set; } = -1;
+        public bool Collapsed { get; set; }
     }
 
     private sealed class VirtualWrapState(int sourceLength, int sampleLength, int sampleRows, double rowHeight)

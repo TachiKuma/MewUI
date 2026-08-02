@@ -89,6 +89,12 @@ public interface ITextProjection
     ProjectedText Project(in TextProjectionContext context);
 }
 
+/// <summary>Removes complete logical lines from the visual text surface.</summary>
+public interface ITextLineCollapser
+{
+    bool IsCollapsed(LogicalTextLine line);
+}
+
 public sealed class TextViewExtensionPipeline
 {
     public long Revision { get; set; }
@@ -97,4 +103,5 @@ public sealed class TextViewExtensionPipeline
     public IList<ITextElementGenerator> ElementGenerators { get; } = new List<ITextElementGenerator>();
     public IList<ITextAdornmentProvider> AdornmentProviders { get; } = new List<ITextAdornmentProvider>();
     public IList<ITextProjection> Projections { get; } = new List<ITextProjection>();
+    public IList<ITextLineCollapser> LineCollapsers { get; } = new List<ITextLineCollapser>();
 }

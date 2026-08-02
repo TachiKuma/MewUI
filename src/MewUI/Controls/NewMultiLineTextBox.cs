@@ -50,7 +50,7 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
 
     public static readonly MewProperty<int> SelectionLengthProperty = SelectionLengthPropertyKey.Property;
 
-    private readonly EditableTextDocument _document = new();
+    private readonly EditableTextDocument _document;
     private readonly TextEditorSession _editor;
     private readonly ScrollBar _verticalScrollBar;
     private readonly ScrollBar _horizontalScrollBar;
@@ -76,8 +76,15 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
     }
 
     public NewMultiLineTextBox()
+        : this(new EditableTextDocument())
     {
+    }
+
+    public NewMultiLineTextBox(EditableTextDocument document)
+    {
+        _document = document ?? throw new ArgumentNullException(nameof(document));
         Cursor = CursorType.IBeam;
+        Extensions = new TextViewExtensionPipeline();
         _editor = new TextEditorSession(_document);
         _document.Changed += OnDocumentChanged;
         _editor.StateChanged += OnEditorStateChanged;
@@ -88,6 +95,19 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
         _horizontalScrollBar.Parent = this;
         _verticalScrollBar.ValueChanged += value => SetVerticalOffset(value);
         _horizontalScrollBar.ValueChanged += value => SetHorizontalOffset(value);
+
+        if (_document.TextLength > 0)
+        {
+            _syncingText = true;
+            try
+            {
+                SetValue(TextProperty, _document.ToString());
+            }
+            finally
+            {
+                _syncingText = false;
+            }
+        }
     }
 
     public string Text
@@ -151,6 +171,11 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
     public bool CanRedo => _editor.CanRedo;
     public double HorizontalOffset => _horizontalOffset;
     public double VerticalOffset => _verticalOffset;
+    public EditableTextDocument Document => _document;
+    public TextViewExtensionPipeline Extensions { get; }
+    public IReadOnlyList<TextLineLayout> VisibleTextLines
+        => _view?.MaterializedLines ?? Array.Empty<TextLineLayout>();
+    public Rect TextViewportBounds => _contentBounds;
 
     /// <summary>Optional clipboard override for hosted editors and tests.</summary>
     public IClipboardService? ClipboardService { get; set; }
@@ -164,11 +189,19 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
     internal bool IsHorizontalScrollBarVisible => _horizontalScrollBar.IsVisible;
 
     public event Action<string>? TextChanged;
+    public event Action? EditingStateChanged;
     public event Action<bool>? WrapChanged;
     public event Action<TextInputEventArgs>? TextInput;
     public event Action<TextCompositionEventArgs>? TextCompositionStart;
     public event Action<TextCompositionEventArgs>? TextCompositionUpdate;
     public event Action<TextCompositionEventArgs>? TextCompositionEnd;
+
+    /// <summary>Re-runs registered classifiers, generators, projections, and adornments.</summary>
+    public void InvalidateTextView()
+    {
+        Extensions.Revision++;
+        ResetView();
+    }
 
     bool ITextCompositionClient.IsComposing => _editor.IsComposing;
     int ITextCompositionClient.CompositionStartIndex => _compositionStart;
@@ -188,6 +221,16 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
         {
             EnsureCaretVisible();
         }
+    }
+
+    public void ReplaceSelection(string? text)
+    {
+        if (IsReadOnly)
+        {
+            return;
+        }
+        InsertText(text);
+        EnsureCaretVisible();
     }
 
     public void Undo()
@@ -406,6 +449,7 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
                 Wrapping = Wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
                 Culture = System.Globalization.CultureInfo.CurrentUICulture
             },
+            Extensions,
             dpi: GetDpi());
     }
 
@@ -546,6 +590,7 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
         _preferredCaretX = double.NaN;
         ResetCaretBlink();
         InvalidateVisual();
+        EditingStateChanged?.Invoke();
     }
 
     private void InsertText(string? value)
@@ -768,8 +813,12 @@ public sealed class NewMultiLineTextBox : Control, ITextCompositionClient, IText
 
     private void EnsureCaretVisible()
     {
+        if (_contentBounds.IsEmpty)
+        {
+            return;
+        }
         EnsureView();
-        if (_view is null || _contentBounds.IsEmpty)
+        if (_view is null)
         {
             return;
         }
