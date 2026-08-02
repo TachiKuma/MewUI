@@ -189,15 +189,6 @@ public class TextEditor : ContentControl
     public void Redo() => _surface.Redo();
     public void InvalidateTextView() => _surface.InvalidateTextView();
 
-    protected override void OnMewPropertyChanged(MewProperty property)
-    {
-        base.OnMewPropertyChanged(property);
-        if (_surface is null) return;
-        if (ReferenceEquals(property, FontFamilyProperty)) _surface.FontFamily = FontFamily;
-        else if (ReferenceEquals(property, FontSizeProperty)) _surface.FontSize = FontSize;
-        else if (ReferenceEquals(property, FontWeightProperty)) _surface.FontWeight = FontWeight;
-    }
-
     protected override void OnDispose()
     {
         Options.PropertyChanged -= OnOptionsChanged;
@@ -216,15 +207,12 @@ public class TextEditor : ContentControl
         // The editor owns the frame so it encloses the line number margin, as AvalonEdit's
         // templated ScrollViewer encloses TextArea's left margins. The surface paints neither
         // border nor background: a square fill would cover the frame's rounded corners from the
-        // inside.
+        // inside. Font properties are inherited, so the surface must not take local values.
         _surface = new MultiLineTextBox(_document.CoreDocument)
         {
             Wrap = previous?.Wrap ?? false,
             IsReadOnly = previous?.IsReadOnly ?? false,
             AcceptTab = true,
-            FontFamily = FontFamily,
-            FontSize = FontSize,
-            FontWeight = FontWeight,
             Background = Color.Transparent,
             BorderThickness = 0,
             CornerRadius = 0
