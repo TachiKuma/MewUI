@@ -625,7 +625,14 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
             e.Handled = true;
             return;
         }
-        if (_editor.IsComposing) _editor.CommitComposition();
+        if (_editor.IsComposing)
+        {
+            // Win32 forwards the IME result string through TextInput while the preedit is still
+            // active; the preedit must be removed, not committed, or the candidate doubles up.
+            _editor.CancelComposition();
+            _compositionLength = 0;
+            _compositionAttributes = null;
+        }
         InsertText(text);
         EnsureCaretVisible();
         e.Handled = true;

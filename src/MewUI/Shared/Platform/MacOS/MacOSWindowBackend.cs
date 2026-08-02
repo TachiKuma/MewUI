@@ -934,6 +934,14 @@ internal sealed class MacOSWindowBackend : IWindowBackend
         {
             ImeUnmarkText();
         }
+
+        // AppKit keeps its own marked-text state in the view's NSTextInputContext. Discard it so a
+        // focus move does not deliver the stale composition into the next focused editor.
+        var inputContext = ObjC.MsgSend_nint(_nsView, ObjC.Sel("inputContext"));
+        if (inputContext != 0)
+        {
+            ObjC.MsgSend_void(inputContext, ObjC.Sel("discardMarkedText"));
+        }
     }
 
     public void Dispose()
