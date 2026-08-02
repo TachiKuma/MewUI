@@ -18,7 +18,7 @@ Direct2DBackend.Register();
 var window = new Window()
     .Title("MewUI Grid Star Content-Sizing Reference")
     .Resizable(900, 700)
-    .OnBuild(w => w.Content(BuildContent()));
+    .Build(w => w.Content(BuildContent()));
 
 Application.Run(window);
 

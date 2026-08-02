@@ -3,7 +3,7 @@
 #:property TargetFramework=net10.0
 #:property PublishAot=true
 #:property TrimMode=full
-#:package Aprillz.MewUI@0.19.1
+#:package Aprillz.MewUI@0.20.0
 
 using System.Collections.ObjectModel;
 using System.Numerics;
@@ -2340,7 +2340,7 @@ FrameworkElement CustomChromeWindowCard() =>
         {
             Window custom = null!;
             new Window().Ref(out custom).Resizable(640, 420).StartCenterOwner()
-                .OnBuild(x =>
+                .Build(x =>
                 {
                     x.Title = "CustomWindow";
                     x.AllowsTransparency = true;
@@ -2372,7 +2372,7 @@ FrameworkElement WindowShowDialogCard()
         status.Value = "Dialog: opening...";
         Window dialog = null!;
         new Window().Ref(out dialog).Resizable(420, 220).StartCenterScreen()
-            .OnBuild(x => x.Title("ShowDialog sample").Padding(16)
+            .Build(x => x.Title("ShowDialog sample").Padding(16)
                 .Content(new StackPanel().Vertical().Spacing(10).Children(
                     new TextBlock().Text("This is a modal window."),
                     new Button().Content("Close").OnClick(() => dialog.Close()))));
@@ -2508,7 +2508,7 @@ FrameworkElement ShowDialogPage()
             .Ref(out dialog)
             .Resizable(420, 220)
             .StartCenterScreen()
-            .OnBuild(x => x
+            .Build(x => x
                 .Title(title)
                 .Padding(16)
                 .Content(new StackPanel().Vertical().Spacing(10).Children(
@@ -2552,7 +2552,7 @@ FrameworkElement TransparentWindowCard()
                 .FitContentHeight(520)
                 .Background(Color.Pink.WithAlpha(64))
                 .StartCenterOwner()
-                .OnBuild(x =>
+                .Build(x =>
                 {
                     x.Title = "Transparent window sample";
                     x.AllowsTransparency = true;
@@ -2588,7 +2588,7 @@ FrameworkElement ManualPositionCard()
             status.Value = "Manual: opening at (120, 140)";
             Window manual = null!;
             new Window().Ref(out manual).Resizable(360, 180).StartManualPosition(120, 140)
-                .OnBuild(x => x.Title("StartupManualPosition sample").Padding(16)
+                .Build(x => x.Title("StartupManualPosition sample").Padding(16)
                     .Content(new StackPanel().Vertical().Spacing(10).Children(
                         new TextBlock().Text("StartupLocation.Manual\nLeft: 120\nTop: 140"),
                         new Button().Content("Close").OnClick(() => x.Close()))));
@@ -3591,7 +3591,7 @@ internal class NativeCustomWindowSample : NativeCustomWindow
 
     public NativeCustomWindowSample()
     {
-        this.OnBuild(OnBuild)
+        this.Build(OnBuild)
             .Resizable(600, 400, minWidth: 400, minHeight: 250)
             .OnActivated(UpdateStateLabel)
             .OnDeactivated(UpdateStateLabel)
@@ -3633,7 +3633,7 @@ internal class NativeCustomWindowSample : NativeCustomWindow
 
         window
             .Title("Native Chrome Demo")
-            .OnBuild(x => x
+            .Build(x => x
                 .Content(new StackPanel()
                     .Vertical()
                     .Spacing(8)
