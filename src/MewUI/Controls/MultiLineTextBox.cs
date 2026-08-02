@@ -100,11 +100,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
 
     public int SelectionStart => GetValue(SelectionStartProperty);
     public int SelectionLength => GetValue(SelectionLengthProperty);
-    public string SelectedText => SelectionLength == 0
-        ? string.Empty
-        : _document.GetText(SelectionStart, SelectionLength);
-    public bool CanUndo => _editor.CanUndo;
-    public bool CanRedo => _editor.CanRedo;
     public double HorizontalOffset => _horizontalOffset;
     public double VerticalOffset => _verticalOffset;
     public EditableTextDocument Document => _document;
@@ -112,9 +107,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     public IReadOnlyList<TextLineLayout> VisibleTextLines
         => _view?.MaterializedLines ?? Array.Empty<TextLineLayout>();
     public Rect TextViewportBounds => _contentBounds;
-
-    /// <summary>Optional clipboard override for hosted editors and tests.</summary>
-    public IClipboardService? ClipboardService { get; set; }
 
     internal int MaterializedLineCount => _view?.MaterializedLines.Count ?? 0;
     internal int MaterializedCharacterCount
@@ -133,77 +125,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     {
         Extensions.Revision++;
         ResetView();
-    }
-
-    public void Select(int start, int length) => _editor.SetSelection(start, length);
-    public void SelectAll() => _editor.SelectAll();
-
-    public void AppendText(string? text, bool scrollToCaret = false)
-    {
-        if (string.IsNullOrEmpty(text))
-        {
-            return;
-        }
-        _editor.SetCaret(_document.TextLength);
-        InsertText(text);
-        if (scrollToCaret)
-        {
-            EnsureCaretVisible();
-        }
-    }
-
-    public void ReplaceSelection(string? text)
-    {
-        if (IsReadOnly)
-        {
-            return;
-        }
-        InsertText(text);
-        EnsureCaretVisible();
-    }
-
-    public void Undo()
-    {
-        if (!IsReadOnly)
-        {
-            _editor.Undo();
-            EnsureCaretVisible();
-        }
-    }
-
-    public void Redo()
-    {
-        if (!IsReadOnly)
-        {
-            _editor.Redo();
-            EnsureCaretVisible();
-        }
-    }
-
-    public void Copy()
-    {
-        if (SelectionLength > 0)
-        {
-            TrySetClipboardText(SelectedText);
-        }
-    }
-
-    public void Cut()
-    {
-        if (IsReadOnly || SelectionLength == 0)
-        {
-            return;
-        }
-        Copy();
-        _editor.ReplaceSelection(string.Empty);
-    }
-
-    public void Paste()
-    {
-        if (!IsReadOnly && TryGetClipboardText(out string text))
-        {
-            InsertText(text);
-        }
     }
 
     public override Rect GetCharRectInWindow(int charIndex)
@@ -884,17 +805,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
         _verticalScrollBar.Dispose();
         _horizontalScrollBar.Dispose();
         base.OnDispose();
-    }
-
-    private bool TrySetClipboardText(string text)
-        => (ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformHost.Clipboard : null))
-            ?.TrySetText(text) == true;
-
-    private bool TryGetClipboardText(out string text)
-    {
-        text = string.Empty;
-        var clipboard = ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformHost.Clipboard : null);
-        return clipboard is not null && clipboard.TryGetText(out text);
     }
 
     bool IVisualTreeHost.VisitChildren(Func<Element, bool> visitor)

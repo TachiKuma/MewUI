@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using Aprillz.MewUI.Input;
+using Aprillz.MewUI.Platform;
 using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.Controls;
@@ -119,6 +120,108 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     public event Action<TextCompositionEventArgs>? TextCompositionStart;
     public event Action<TextCompositionEventArgs>? TextCompositionUpdate;
     public event Action<TextCompositionEventArgs>? TextCompositionEnd;
+
+    /// <summary>Optional clipboard override for hosted editors and tests.</summary>
+    public IClipboardService? ClipboardService { get; set; }
+
+    /// <summary>
+    /// Gets the currently selected text.
+    /// </summary>
+    public string SelectedText => _editor.Selection.Length == 0
+        ? string.Empty
+        : _document.GetText(_editor.Selection.Start, _editor.Selection.Length);
+
+    public bool CanUndo => _editor.CanUndo;
+    public bool CanRedo => _editor.CanRedo;
+
+    public void Select(int start, int length) => _editor.SetSelection(start, length);
+
+    public void SelectAll() => _editor.SelectAll();
+
+    /// <summary>Scrolls the view so the caret is visible.</summary>
+    public void ScrollToCaret() => EnsureCaretVisible();
+
+    /// <summary>
+    /// Appends text at the end of the document without allocating a full new Text string.
+    /// </summary>
+    public void AppendText(string? text, bool scrollToCaret = false)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+        _editor.SetCaret(_document.TextLength);
+        InsertText(text);
+        if (scrollToCaret)
+        {
+            EnsureCaretVisible();
+        }
+    }
+
+    public void ReplaceSelection(string? text)
+    {
+        if (IsReadOnly)
+        {
+            return;
+        }
+        InsertText(text);
+        EnsureCaretVisible();
+    }
+
+    public void Undo()
+    {
+        if (!IsReadOnly)
+        {
+            _editor.Undo();
+            EnsureCaretVisible();
+        }
+    }
+
+    public void Redo()
+    {
+        if (!IsReadOnly)
+        {
+            _editor.Redo();
+            EnsureCaretVisible();
+        }
+    }
+
+    public void Copy()
+    {
+        if (_editor.Selection.Length > 0)
+        {
+            TrySetClipboardText(SelectedText);
+        }
+    }
+
+    public void Cut()
+    {
+        if (IsReadOnly || _editor.Selection.Length == 0)
+        {
+            return;
+        }
+        Copy();
+        _editor.ReplaceSelection(string.Empty);
+    }
+
+    public void Paste()
+    {
+        if (!IsReadOnly && TryGetClipboardText(out string text))
+        {
+            InsertText(text);
+        }
+    }
+
+    private protected bool TrySetClipboardText(string text)
+        => (ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformHost.Clipboard : null))
+            ?.TrySetText(text) == true;
+
+    private protected bool TryGetClipboardText(out string text)
+    {
+        text = string.Empty;
+        var clipboard = ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformHost.Clipboard : null);
+        return clipboard is not null && clipboard.TryGetText(out text);
+    }
 
     /// <summary>
     /// Returns the rectangle at the given character index in window coordinates (DIPs).
