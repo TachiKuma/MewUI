@@ -35,15 +35,16 @@ internal static class TextServices
 
 internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
 {
+    private const int RealizationCapacity = 128;
     private readonly IGraphicsContext _context;
-    private readonly ConditionalWeakTable<ManagedTextLayout, Dictionary<LegacyRunKey, Rendering.TextLayout>> _layouts = new();
-    private int _cachedLayoutCount;
-    private readonly HashSet<Rendering.TextLayout> _ownedLayouts = [];
+    private readonly BoundedCache<LegacyRunKey, Rendering.TextLayout> _layouts = new(
+        RealizationCapacity,
+        static layout => layout.ReleaseBackendHandle());
 
     public LegacyTextRenderContext(IGraphicsContext context) => _context = context;
 
-    internal int CachedLayoutCount => _cachedLayoutCount;
-    internal IReadOnlyCollection<Rendering.TextLayout> CachedLayouts => _ownedLayouts;
+    internal int CachedLayoutCount => _layouts.Count;
+    internal IReadOnlyCollection<Rendering.TextLayout> CachedLayouts => _layouts.Values;
 
     public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options)
     {
@@ -112,13 +113,13 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                     Trimming = TextTrimming.None
                 };
                 var runKey = new LegacyRunKey(
+                    managed,
                     textStart,
                     textLength,
                     cluster.Font,
                     Math.Round(runWidth, 6),
                     Math.Round(line.Metrics.Bounds.Height, 6));
-                var realized = _layouts.GetValue(managed, static _ => []);
-                if (!realized.TryGetValue(runKey, out var legacyLayout))
+                if (!_layouts.TryGetValue(runKey, out var legacyLayout))
                 {
                     var layoutBounds = new Rect(0, 0, Math.Max(1, runWidth), line.Metrics.Bounds.Height);
                     var constraints = new TextLayoutConstraints(layoutBounds);
@@ -128,9 +129,7 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                         in constraints);
                     if (legacyLayout is not null)
                     {
-                        realized.Add(runKey, legacyLayout);
-                        _ownedLayouts.Add(legacyLayout);
-                        _cachedLayoutCount++;
+                        _layouts.Add(runKey, legacyLayout);
                     }
                 }
                 if (legacyLayout is not null)
@@ -173,11 +172,10 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
             Wrapping = TextWrapping.NoWrap,
             Trimming = TextTrimming.None
         };
-        var realized = _layouts.GetValue(managed, static _ => []);
         Rect? clip = _context.GetClipBoundsLocal();
         if (clip is Rect visibleClip)
         {
-            DrawFastPathVisibleRange(managed, line, origin, visibleClip, color, owner, font, format, realized);
+            DrawFastPathVisibleRange(managed, line, origin, visibleClip, color, owner, font, format);
             return;
         }
 
@@ -194,12 +192,13 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
             }
 
             var runKey = new LegacyRunKey(
+                managed,
                 segment.Start,
                 segment.Length,
                 font,
                 Math.Round(bounds.Width, 6),
                 Math.Round(bounds.Height, 6));
-            if (!realized.TryGetValue(runKey, out var legacyLayout))
+            if (!_layouts.TryGetValue(runKey, out var legacyLayout))
             {
                 var constraints = new TextLayoutConstraints(new Rect(0, 0, bounds.Width, bounds.Height));
                 legacyLayout = _context.CreateTextLayout(
@@ -208,9 +207,7 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                     in constraints);
                 if (legacyLayout is not null)
                 {
-                    realized.Add(runKey, legacyLayout);
-                    _ownedLayouts.Add(legacyLayout);
-                    _cachedLayoutCount++;
+                    _layouts.Add(runKey, legacyLayout);
                 }
             }
             if (legacyLayout is null)
@@ -238,8 +235,7 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
         Color color,
         object? owner,
         IFont font,
-        TextFormat format,
-        Dictionary<LegacyRunKey, Rendering.TextLayout> realized)
+        TextFormat format)
     {
         const double Overscan = 32;
         double hitY = line.Metrics.Bounds.Y + line.Metrics.Bounds.Height * 0.5;
@@ -260,12 +256,13 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
             Math.Max(1, endCaret.X - startCaret.X),
             line.Metrics.Bounds.Height);
         var runKey = new LegacyRunKey(
+            managed,
             textStart,
             textEnd - textStart,
             font,
             Math.Round(bounds.Width, 6),
             Math.Round(bounds.Height, 6));
-        if (!realized.TryGetValue(runKey, out var legacyLayout))
+        if (!_layouts.TryGetValue(runKey, out var legacyLayout))
         {
             var constraints = new TextLayoutConstraints(new Rect(0, 0, bounds.Width, bounds.Height));
             legacyLayout = _context.CreateTextLayout(
@@ -274,9 +271,7 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
                 in constraints);
             if (legacyLayout is not null)
             {
-                realized.Add(runKey, legacyLayout);
-                _ownedLayouts.Add(legacyLayout);
-                _cachedLayoutCount++;
+                _layouts.Add(runKey, legacyLayout);
             }
         }
         if (legacyLayout is null)
@@ -421,19 +416,74 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
     }
 
     private readonly record struct LegacyRunKey(
+        ManagedTextLayout Layout,
         int TextStart,
         int TextLength,
         IFont Font,
         double Width,
         double Height);
 
+    public void Dispose() => _layouts.Dispose();
+}
+
+internal sealed class BoundedCache<TKey, TValue> : IDisposable where TKey : notnull
+{
+    private readonly int _capacity;
+    private readonly Action<TValue> _dispose;
+    private readonly Dictionary<TKey, Entry> _entries = [];
+    private readonly LinkedList<TKey> _order = [];
+
+    public BoundedCache(int capacity, Action<TValue> dispose)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
+        _capacity = capacity;
+        _dispose = dispose ?? throw new ArgumentNullException(nameof(dispose));
+    }
+
+    public int Count => _entries.Count;
+    public IReadOnlyCollection<TValue> Values => _entries.Values.Select(static entry => entry.Value).ToArray();
+
+    public bool TryGetValue(TKey key, out TValue value)
+    {
+        if (_entries.TryGetValue(key, out var entry))
+        {
+            _order.Remove(entry.Node);
+            _order.AddLast(entry.Node);
+            value = entry.Value;
+            return true;
+        }
+        value = default!;
+        return false;
+    }
+
+    public void Add(TKey key, TValue value)
+    {
+        if (_entries.Remove(key, out var replaced))
+        {
+            _order.Remove(replaced.Node);
+            _dispose(replaced.Value);
+        }
+        var node = _order.AddLast(key);
+        _entries.Add(key, new Entry(value, node));
+        while (_entries.Count > _capacity && _order.First is { } oldest)
+        {
+            _order.RemoveFirst();
+            if (_entries.Remove(oldest.Value, out var evicted))
+            {
+                _dispose(evicted.Value);
+            }
+        }
+    }
+
     public void Dispose()
     {
-        foreach (var layout in _ownedLayouts)
+        foreach (var entry in _entries.Values)
         {
-            layout.ReleaseBackendHandle();
+            _dispose(entry.Value);
         }
-        _ownedLayouts.Clear();
-        _cachedLayoutCount = 0;
+        _entries.Clear();
+        _order.Clear();
     }
+
+    private sealed record Entry(TValue Value, LinkedListNode<TKey> Node);
 }

@@ -55,10 +55,23 @@ public sealed class TextEngineWindowsBackendTests
             editor.Text = singleLine;
             window.PerformLayout();
             window.RenderFrameToSurface(surface);
+            Assert.IsLessThan(4 * 1024, editor.MaterializedCharacterCount);
+
+            for (int step = 1; step <= 64; step++)
+            {
+                editor.CaretPosition = singleLine.Length * step / 64;
+                window.RenderFrameToSurface(surface);
+            }
 
             editor.Wrap = true;
             window.PerformLayout();
             window.RenderFrameToSurface(surface);
+            Assert.IsLessThan(4 * 1024, editor.MaterializedCharacterCount);
+            for (int step = 1; step <= 64; step++)
+            {
+                editor.CaretPosition = singleLine.Length * step / 64;
+                window.RenderFrameToSurface(surface);
+            }
             GC.Collect();
             GC.WaitForPendingFinalizers();
             window.RenderFrameToSurface(surface);
@@ -82,6 +95,38 @@ public sealed class TextEngineWindowsBackendTests
         AssertBackend(factory);
         AssertTenMegabyteFastPath(factory);
         AssertEditorBackend(factory);
+    }
+
+    [TestMethod]
+    public void Direct2D_RealizationCache_BoundsDistinctLayouts()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Direct2D is Windows-only.");
+            return;
+        }
+
+        using var factory = new Direct2DGraphicsFactory();
+        using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(320, 48, 1));
+        using var context = factory.CreateContext(surface);
+        var renderContext = (Direct2DTextRenderContext)context.Text;
+        context.BeginFrame(surface);
+        for (int index = 0; index < 192; index++)
+        {
+            string text = $"cache entry {index}";
+            var layout = factory.TextEngine.CreateLayout(new TextLayoutRequest
+            {
+                Text = text.AsMemory(),
+                DefaultStyle = new TextRunStyle("Segoe UI", 16),
+                Paragraph = new TextParagraphStyle { MaxWidth = 300, Wrapping = TextWrapping.NoWrap },
+                Runs = [new GeometryStyleRun(0, text.Length, new TextRunStyle("Segoe UI", 16, FontWeight.Bold))]
+            });
+            renderContext.Draw(layout, Point.Zero, new TextDrawOptions(Color.White));
+        }
+        context.EndFrame();
+
+        Assert.AreEqual(128, renderContext.CachedRunCount,
+            "Direct2D glyph realizations grew beyond the bounded cache capacity.");
     }
 
     [TestMethod]

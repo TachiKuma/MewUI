@@ -11,10 +11,13 @@ internal interface IManagedTextLayoutData
 
 internal sealed class ManagedTextLayout : ITextLayout, IManagedTextLayoutData
 {
+    private const int FastSegmentMapCapacity = 4;
     private readonly ManagedTextEngine _engine;
     private readonly List<ManagedTextLine> _lines;
     private readonly IReadOnlyList<TextLayoutLineMetrics> _lineMetrics;
     private int[]? _fastCaretBoundaries;
+    private readonly Dictionary<int, FastSegmentMapEntry> _fastSegmentMaps = [];
+    private readonly LinkedList<int> _fastSegmentMapOrder = [];
 
     public ManagedTextLayout(
         ManagedTextEngine engine,
@@ -326,23 +329,17 @@ internal sealed class ManagedTextLayout : ITextLayout, IManagedTextLayoutData
             return new CharacterHit(Snapshot.Text.Length, 0);
         }
 
-        var segments = line.FastSegments!;
-        ManagedTextSegment segment = segments[^1];
-        foreach (var candidate in segments)
-        {
-            if (x <= candidate.X + candidate.Width)
-            {
-                segment = candidate;
-                break;
-            }
-        }
-        int[] boundaries = GetSegmentCaretBoundaries(segment);
+        var segment = FindFastPathSegment(line.FastSegments!, x);
+        var map = GetFastSegmentMap(segment);
+        int[] boundaries = map.Boundaries;
         int low = 0;
         int high = boundaries.Length - 1;
         while (high - low > 1)
         {
             int middle = low + (high - low) / 2;
-            double middleX = GetFastPathX(line, boundaries[middle]);
+            double middleX = map.TryGetX(boundaries[middle], out double cachedX)
+                ? cachedX
+                : GetFastPathX(line, boundaries[middle]);
             if (x < middleX)
             {
                 high = middle;
@@ -353,8 +350,12 @@ internal sealed class ManagedTextLayout : ITextLayout, IManagedTextLayoutData
             }
         }
 
-        double leadingX = GetFastPathX(line, boundaries[low]);
-        double trailingX = GetFastPathX(line, boundaries[high]);
+        double leadingX = map.TryGetX(boundaries[low], out double cachedLeading)
+            ? cachedLeading
+            : GetFastPathX(line, boundaries[low]);
+        double trailingX = map.TryGetX(boundaries[high], out double cachedTrailing)
+            ? cachedTrailing
+            : GetFastPathX(line, boundaries[high]);
         return x < leadingX + (trailingX - leadingX) * 0.5
             ? new CharacterHit(boundaries[low], 0)
             : new CharacterHit(boundaries[high], 0);
@@ -371,46 +372,131 @@ internal sealed class ManagedTextLayout : ITextLayout, IManagedTextLayoutData
         {
             return line.Metrics.Bounds.Right;
         }
-        foreach (var segment in line.FastSegments!)
+        var segment = FindFastPathSegmentByInsertion(line.FastSegments!, insertion);
+        if (insertion == segment.End)
         {
-            if (insertion > segment.End)
-            {
-                continue;
-            }
-            if (insertion == segment.End)
-            {
-                return segment.X + segment.Width;
-            }
-            return segment.X + _engine.MeasureFastPathRange(
-                Snapshot,
-                segment.Start,
-                insertion - segment.Start);
+            return segment.X + segment.Width;
         }
-        return line.Metrics.Bounds.Right;
+        var map = GetFastSegmentMap(segment);
+        if (map.TryGetX(insertion, out double x))
+        {
+            return x;
+        }
+        return segment.X + _engine.MeasureFastPathRange(
+            Snapshot,
+            segment.Start,
+            insertion - segment.Start);
     }
 
-    private int[] GetSegmentCaretBoundaries(ManagedTextSegment segment)
+    private FastSegmentMap GetFastSegmentMap(ManagedTextSegment segment)
     {
-        var boundaries = new List<int>();
-        var enumerator = StringInfo.GetTextElementEnumerator(Snapshot.Text, segment.Start);
-        while (enumerator.MoveNext())
+        lock (_fastSegmentMaps)
         {
-            int boundary = enumerator.ElementIndex;
-            if (boundary > segment.End)
+            if (_fastSegmentMaps.TryGetValue(segment.Start, out var cached))
             {
-                break;
+                _fastSegmentMapOrder.Remove(cached.Node);
+                _fastSegmentMapOrder.AddLast(cached.Node);
+                return cached.Map;
             }
-            boundaries.Add(boundary);
-            if (boundary == segment.End)
+
+            string text = Snapshot.Text.Substring(segment.Start, segment.Length);
+            int[] starts = StringInfo.ParseCombiningCharacters(text);
+            var boundaries = new int[starts.Length + (starts.Length == 0 || starts[^1] != text.Length ? 1 : 0)];
+            for (int i = 0; i < starts.Length; i++)
             {
-                break;
+                boundaries[i] = segment.Start + starts[i];
+            }
+            if (boundaries.Length > starts.Length)
+            {
+                boundaries[^1] = segment.End;
+            }
+
+            double[]? advances = _engine.MeasureFastPathAdvances(Snapshot, segment.Start, segment.Length);
+            var map = new FastSegmentMap(segment, boundaries, advances);
+            var node = _fastSegmentMapOrder.AddLast(segment.Start);
+            _fastSegmentMaps.Add(segment.Start, new FastSegmentMapEntry(map, node));
+            while (_fastSegmentMaps.Count > FastSegmentMapCapacity && _fastSegmentMapOrder.First is { } oldest)
+            {
+                _fastSegmentMapOrder.RemoveFirst();
+                _fastSegmentMaps.Remove(oldest.Value);
+            }
+            return map;
+        }
+    }
+
+    private static ManagedTextSegment FindFastPathSegment(
+        IReadOnlyList<ManagedTextSegment> segments,
+        double x)
+    {
+        int low = 0;
+        int high = segments.Count - 1;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (x <= segments[middle].X + segments[middle].Width)
+            {
+                high = middle;
+            }
+            else
+            {
+                low = middle + 1;
             }
         }
-        if (boundaries.Count == 0 || boundaries[^1] != segment.End)
+        return segments[low];
+    }
+
+    private static ManagedTextSegment FindFastPathSegmentByInsertion(
+        IReadOnlyList<ManagedTextSegment> segments,
+        int insertion)
+    {
+        int low = 0;
+        int high = segments.Count - 1;
+        while (low < high)
         {
-            boundaries.Add(segment.End);
+            int middle = low + (high - low) / 2;
+            if (insertion <= segments[middle].End)
+            {
+                high = middle;
+            }
+            else
+            {
+                low = middle + 1;
+            }
         }
-        return boundaries.ToArray();
+        return segments[low];
+    }
+
+    private sealed record FastSegmentMapEntry(FastSegmentMap Map, LinkedListNode<int> Node);
+
+    private sealed class FastSegmentMap(
+        ManagedTextSegment segment,
+        int[] boundaries,
+        double[]? advances)
+    {
+        public int[] Boundaries { get; } = boundaries;
+
+        public bool TryGetX(int insertion, out double x)
+        {
+            int relative = insertion - segment.Start;
+            if (relative <= 0)
+            {
+                x = segment.X;
+                return true;
+            }
+            if (relative >= segment.Length)
+            {
+                x = segment.X + segment.Width;
+                return true;
+            }
+            if (advances is null || advances.Length < relative || advances[^1] <= 0)
+            {
+                x = 0;
+                return false;
+            }
+            double scale = segment.Width / advances[^1];
+            x = segment.X + advances[relative - 1] * scale;
+            return true;
+        }
     }
 
     private int[] GetFastCaretBoundaries()

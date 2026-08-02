@@ -71,6 +71,7 @@ public sealed class TextLineLayout
     internal TextLineLayout(
         LogicalTextLine logicalLine,
         ITextLayout layout,
+        double documentX,
         double documentY,
         ITextOffsetMap offsetMap,
         IReadOnlyList<TextPaintSpan> paintSpans,
@@ -82,6 +83,7 @@ public sealed class TextLineLayout
         OffsetMap = offsetMap;
         PaintSpans = paintSpans;
         Adornments = adornments;
+        DocumentX = documentX;
         DocumentY = documentY;
         _visualLines = new List<VisualTextLine>(layout.Lines.Count);
         for (int i = 0; i < layout.Lines.Count; i++)
@@ -91,7 +93,7 @@ public sealed class TextLineLayout
                 line.TextStart,
                 line.TextLength,
                 visualRowOffset + i,
-                new Rect(line.Bounds.X, documentY + line.Bounds.Y, line.Bounds.Width, line.Bounds.Height),
+                new Rect(documentX + line.Bounds.X, documentY + line.Bounds.Y, line.Bounds.Width, line.Bounds.Height),
                 line.Baseline,
                 layout,
                 i));
@@ -104,6 +106,7 @@ public sealed class TextLineLayout
     public ITextOffsetMap OffsetMap { get; }
     public IReadOnlyList<TextPaintSpan> PaintSpans { get; }
     public IReadOnlyList<ITextAdornment> Adornments { get; }
+    public double DocumentX { get; private set; }
     public double DocumentY { get; private set; }
 
     public CharacterHit HitTest(Point lineLocalPoint) => _layout.HitTestPoint(lineLocalPoint);
@@ -113,10 +116,20 @@ public sealed class TextLineLayout
     public void GetRangeBounds(TextRange range, IList<Rect> output)
         => _layout.GetRangeBounds(range.Start, range.Length, output);
 
+    internal CharacterHit HitTestDocument(Point documentPoint)
+        => _layout.HitTestPoint(new Point(documentPoint.X - DocumentX, documentPoint.Y));
+
+    internal Rect GetDocumentCaretBounds(CharacterHit hit)
+    {
+        var bounds = _layout.GetCaretBounds(hit);
+        return new Rect(DocumentX + bounds.X, bounds.Y, bounds.Width, bounds.Height);
+    }
+
     public void Draw(ITextRenderContext context, Point origin, in TextDrawOptions options)
     {
         ArgumentNullException.ThrowIfNull(context);
-        DrawAdornments(context, origin, TextAdornmentLayer.Background);
+        var documentOrigin = new Point(origin.X + DocumentX, origin.Y);
+        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Background);
 
         TextDrawOptions effective = options;
         if (PaintSpans.Count > 0)
@@ -136,10 +149,10 @@ public sealed class TextLineLayout
                 effective = options with { PaintSpans = combined };
             }
         }
-        context.Draw(_layout, origin, in effective);
+        context.Draw(_layout, documentOrigin, in effective);
 
-        DrawAdornments(context, origin, TextAdornmentLayer.Text);
-        DrawAdornments(context, origin, TextAdornmentLayer.Foreground);
+        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Text);
+        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Foreground);
     }
 
     public int MapProjectedOffsetToSource(int projectedOffset)
@@ -159,13 +172,18 @@ public sealed class TextLineLayout
         }
     }
 
-    internal void SetDocumentY(double documentY)
+    internal void SetDocumentPosition(double documentX, double documentY)
     {
+        DocumentX = documentX;
         DocumentY = documentY;
         for (int i = 0; i < _visualLines.Count; i++)
         {
             var source = _layout.Lines[i].Bounds;
-            _visualLines[i].Bounds = new Rect(source.X, documentY + source.Y, source.Width, source.Height);
+            _visualLines[i].Bounds = new Rect(
+                documentX + source.X,
+                documentY + source.Y,
+                source.Width,
+                source.Height);
         }
     }
 }
@@ -191,6 +209,7 @@ public interface ITextViewLayout : IDisposable
 {
     TextViewport Viewport { get; }
     IReadOnlyList<TextLineLayout> MaterializedLines { get; }
+    double ExtentWidth { get; }
     double ExtentHeight { get; }
     void SetViewport(TextViewport viewport);
     void Invalidate(TextChange change);

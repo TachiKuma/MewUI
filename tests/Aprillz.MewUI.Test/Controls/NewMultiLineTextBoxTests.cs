@@ -286,6 +286,8 @@ public sealed class NewMultiLineTextBoxTests
 
             Assert.AreEqual(10_000_000, textBox.Text.Length);
             Assert.AreEqual(1, textBox.MaterializedLineCount);
+            Assert.IsLessThan(4 * 1024, textBox.MaterializedCharacterCount,
+                "The no-wrap editor materialized the complete 10MB logical line.");
             Assert.AreEqual(0, textBox.HorizontalOffset);
 
             textBox.CaretPosition = textBox.Text.Length;
@@ -298,6 +300,7 @@ public sealed class NewMultiLineTextBoxTests
             Assert.IsGreaterThan(0, textBox.HorizontalOffset,
                 "Moving to the end of a 10MB line did not scroll the caret into view.");
             Assert.AreEqual(1, textBox.MaterializedLineCount);
+            Assert.IsLessThan(4 * 1024, textBox.MaterializedCharacterCount);
         }
         finally
         {
@@ -334,7 +337,7 @@ public sealed class NewMultiLineTextBoxTests
             long initialMilliseconds = stopwatch.ElapsedMilliseconds;
 
             Assert.AreEqual(1, textBox.MaterializedLineCount);
-            Assert.IsLessThan(64 * 1024, textBox.MaterializedCharacterCount,
+            Assert.IsLessThan(4 * 1024, textBox.MaterializedCharacterCount,
                 "The control materialized the complete wrapped logical line.");
             Assert.IsLessThan(512, textBox.MaterializedVisualLineCount,
                 "The control materialized every wrapped visual row.");
@@ -347,7 +350,7 @@ public sealed class NewMultiLineTextBoxTests
                 "End-caret navigation scanned every wrapped visual row.");
             Assert.IsGreaterThan(0, textBox.VerticalOffset,
                 "Moving to the end did not scroll the wrapped viewport.");
-            Assert.IsLessThan(64 * 1024, textBox.MaterializedCharacterCount);
+            Assert.IsLessThan(4 * 1024, textBox.MaterializedCharacterCount);
         }
         finally
         {

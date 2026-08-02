@@ -239,6 +239,32 @@ public sealed class TextEngineTier0Tests
             "Fast-path end caret/hit-test materialized all grapheme clusters.");
     }
 
+    [TestMethod]
+    public void LegacyRealizationCache_BoundsDistinctLayouts()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        using var factory = new GdiGraphicsFactory();
+        using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(320, 48, 1));
+        using var context = factory.CreateContext(surface);
+        var renderContext = (LegacyTextRenderContext)context.Text;
+        context.BeginFrame(surface);
+        for (int index = 0; index < 192; index++)
+        {
+            string text = $"cache entry {index}";
+            var layout = factory.TextEngine.CreateLayout(CreateRequest(text, TextWrapping.NoWrap, 300));
+            renderContext.Draw(layout, Point.Zero, new TextDrawOptions(Color.White));
+        }
+        context.EndFrame();
+
+        Assert.AreEqual(128, renderContext.CachedLayoutCount,
+            "Legacy text realizations grew beyond the bounded cache capacity.");
+    }
+
     private static TextLayoutRequest CreateRequest(string text, TextWrapping wrapping, double maxWidth)
         => new()
         {
