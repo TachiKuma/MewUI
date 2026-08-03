@@ -85,6 +85,26 @@ public sealed class TextBlockInlineTests
     }
 
     [TestMethod]
+    public void FluentInlinesReplaceTheExistingRuns()
+    {
+        var block = new TextBlock().Inlines(new Run("first"));
+
+        block.Inlines(
+            new Run("Normal "),
+            new Run("bold").Bold(),
+            new Run(" and ").Italic(),
+            new Run("marked").Underline().Strikethrough());
+
+        Assert.AreEqual("Normal bold and marked", block.Text);
+        Assert.HasCount(4, block.Inlines);
+        Assert.AreEqual(FontWeight.Bold, block.Inlines[1].FontWeight);
+        Assert.IsTrue(block.Inlines[2].Italic);
+        Assert.AreEqual(
+            Aprillz.MewUI.Text.TextDecoration.Underline | Aprillz.MewUI.Text.TextDecoration.Strikethrough,
+            block.Inlines[3].Decoration);
+    }
+
+    [TestMethod]
     public void ForegroundOnlyRunDoesNotSplitGeometry()
     {
         var block = new ProbeTextBlock { FontSize = 12 };
