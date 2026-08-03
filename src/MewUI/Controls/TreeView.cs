@@ -23,6 +23,8 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
     private ScrollIntoViewRequest _scrollIntoViewRequest;
     private readonly PendingTabFocusHelper _tabFocusHelper;
     private double _observedExtentWidth;
+    // Observed widths are DIP values that never shrink, so they must not outlive their scale.
+    private uint _observedExtentDpi;
 
     /// <summary>
     /// Gets or sets the root nodes collection.
@@ -787,6 +789,13 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
             return;
         }
 
+        uint dpi = GetDpi();
+        if (dpi != _observedExtentDpi)
+        {
+            _observedExtentWidth = 0;
+            _observedExtentDpi = dpi;
+        }
+
         double max = _observedExtentWidth;
         _presenter.VisitRealized((index, element) =>
         {
@@ -808,10 +817,12 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
             double padW = ItemPadding.HorizontalThickness;
             double rowW = indentW + w + padW;
 
-            double boundsW = Math.Max(0, element.Bounds.Width);
-            if (boundsW > 0)
+            if (w <= 0)
             {
-                rowW = Math.Max(rowW, indentW + boundsW + padW);
+                // Arranged width is a last resort only: rows stretch to the viewport, so feeding it
+                // back would make the extent track the viewport and grow by the snapping error
+                // every pass.
+                rowW = Math.Max(rowW, indentW + Math.Max(0, element.Bounds.Width) + padW);
             }
 
             if (rowW > max)
