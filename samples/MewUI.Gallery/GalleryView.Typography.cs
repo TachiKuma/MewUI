@@ -7,22 +7,25 @@ partial class GalleryView
 {
     private FrameworkElement TypographyPage()
     {
-        var runDemo = new TextBlock().Width(620).TextWrapping(TextWrapping.Wrap);
-        runDemo.Inlines.Add(new Run("Normal text, "));
-        runDemo.Inlines.Add(new Run("bold text") { FontWeight = FontWeight.Bold });
-        runDemo.Inlines.Add(new Run(", "));
-        runDemo.Inlines.Add(new Run("italic text") { Italic = true });
-        runDemo.Inlines.Add(new Run(", "));
-        runDemo.Inlines.Add(new Run("accent text") { Foreground = Color.FromHex("#D83B01") });
-        runDemo.Inlines.Add(new Run(", "));
-        runDemo.Inlines.Add(new Run("underlined text") { Decoration = TextDecoration.Underline });
-        runDemo.Inlines.Add(new Run(", and "));
-        runDemo.Inlines.Add(new Run("struck text") { Decoration = TextDecoration.Strikethrough });
-        runDemo.Inlines.Add(new Run(".\nMixed fonts: Segoe UI + "));
-        runDemo.Inlines.Add(new Run("Consolas") { FontFamily = "Consolas" });
-        runDemo.Inlines.Add(new Run(" + "));
-        runDemo.Inlines.Add(new Run("22 pt") { FontSize = 22 });
-        runDemo.Inlines.Add(new Run("."));
+        var runDemo = new TextBlock()
+            .Width(620)
+            .TextWrapping(TextWrapping.Wrap)
+            .Inlines(
+                new Run("Normal text, "),
+                new Run("bold text").Bold(),
+                new Run(", "),
+                new Run("italic text").Italic(),
+                new Run(", "),
+                new Run("accent text").Foreground(Color.FromHex("#D83B01")),
+                new Run(", "),
+                new Run("underlined text").Underline(),
+                new Run(", and "),
+                new Run("struck text").Strikethrough(),
+                new Run(".\nMixed fonts: Segoe UI + "),
+                new Run("Consolas").FontFamily("Consolas"),
+                new Run(" + "),
+                new Run("22 pt").FontSize(22),
+                new Run("."));
 
         // Font Inheritance: Border sets FontSize=16, children inherit
         var inheritanceDemo = new Border()
