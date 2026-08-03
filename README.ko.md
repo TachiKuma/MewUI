@@ -340,6 +340,7 @@ MewUI는 크로스플랫폼 관리형 파일 및 폴더 대화상자를 제공�
 - [에디터 프리뷰](docs/Preview.ko.md)
 - [Custom Controls](docs/CustomControls.ko.md)
 - [Control Template](docs/ControlTemplate.ko.md)
+- [텍스트 뷰 확장](docs/TextViewExtensions.ko.md)
 - [Localization](docs/Localization.ko.md)
 
 ---
