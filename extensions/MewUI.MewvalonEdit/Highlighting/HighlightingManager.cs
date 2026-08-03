@@ -40,11 +40,32 @@ public sealed class HighlightingManager
 
     private void RegisterBuiltIns()
     {
-        var keyword = new HighlightingColor { Foreground = Color.FromRgb(86, 156, 214) };
-        var type = new HighlightingColor { Foreground = Color.FromRgb(78, 201, 176) };
-        var text = new HighlightingColor { Foreground = Color.FromRgb(214, 157, 133) };
-        var comment = new HighlightingColor { Foreground = Color.FromRgb(106, 153, 85) };
-        var number = new HighlightingColor { Foreground = Color.FromRgb(181, 206, 168) };
+        // Dark values are the VS dark palette; light values its light counterpart, picked per theme.
+        var keyword = new HighlightingColor
+        {
+            Foreground = Color.FromRgb(86, 156, 214),
+            LightForeground = Color.FromRgb(0, 0, 255)
+        };
+        var type = new HighlightingColor
+        {
+            Foreground = Color.FromRgb(78, 201, 176),
+            LightForeground = Color.FromRgb(38, 127, 153)
+        };
+        var text = new HighlightingColor
+        {
+            Foreground = Color.FromRgb(214, 157, 133),
+            LightForeground = Color.FromRgb(163, 21, 21)
+        };
+        var comment = new HighlightingColor
+        {
+            Foreground = Color.FromRgb(106, 153, 85),
+            LightForeground = Color.FromRgb(0, 128, 0)
+        };
+        var number = new HighlightingColor
+        {
+            Foreground = Color.FromRgb(181, 206, 168),
+            LightForeground = Color.FromRgb(9, 134, 88)
+        };
         var csharp = new HighlightingDefinition("C#")
             .AddColor("Keyword", keyword)
             .AddColor("Type", type)
@@ -58,8 +79,16 @@ public sealed class HighlightingManager
             .AddRule(@"\b\d+(?:\.\d+)?\b", number);
         RegisterHighlighting("C#", [".cs", ".csx"], csharp);
 
-        var tag = new HighlightingColor { Foreground = Color.FromRgb(86, 156, 214) };
-        var attribute = new HighlightingColor { Foreground = Color.FromRgb(156, 220, 254) };
+        var tag = new HighlightingColor
+        {
+            Foreground = Color.FromRgb(86, 156, 214),
+            LightForeground = Color.FromRgb(128, 0, 0)
+        };
+        var attribute = new HighlightingColor
+        {
+            Foreground = Color.FromRgb(156, 220, 254),
+            LightForeground = Color.FromRgb(4, 81, 165)
+        };
         var xml = new HighlightingDefinition("XML")
             .AddRule(@"<!--[\s\S]*?-->", comment)
             .AddRule(@"</?[A-Za-z_][\w:.-]*", tag)

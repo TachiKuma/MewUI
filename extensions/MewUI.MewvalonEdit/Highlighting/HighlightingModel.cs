@@ -18,11 +18,22 @@ public sealed class HighlightingColor
     public string? Name { get; set; }
     public Color? Foreground { get; set; }
     public Color? Background { get; set; }
+
+    /// <summary>Foreground used on light themes. Falls back to <see cref="Foreground"/> when unset.</summary>
+    public Color? LightForeground { get; set; }
+
+    /// <summary>Background used on light themes. Falls back to <see cref="Background"/> when unset.</summary>
+    public Color? LightBackground { get; set; }
+
     public string? FontFamily { get; set; }
     public double? FontSize { get; set; }
     public FontWeight? FontWeight { get; set; }
     public bool? Underline { get; set; }
     public bool? Strikethrough { get; set; }
+
+    internal Color? ResolveForeground(bool isDark) => isDark ? Foreground : LightForeground ?? Foreground;
+
+    internal Color? ResolveBackground(bool isDark) => isDark ? Background : LightBackground ?? Background;
 }
 
 public sealed class HighlightingRule

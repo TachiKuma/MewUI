@@ -2,12 +2,16 @@ using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Highlighting;
 
-public sealed class HighlightingColorizer(IHighlightingDefinition definition) : ITextClassifier
+/// <param name="definition">Rule set whose regex matches become paint spans.</param>
+/// <param name="isDarkTheme">Queried per classification so a theme switch repaints without rebuilding the colorizer. Defaults to dark.</param>
+public sealed class HighlightingColorizer(IHighlightingDefinition definition, Func<bool>? isDarkTheme = null)
+    : ITextClassifier
 {
     public IHighlightingDefinition Definition { get; } = definition ?? throw new ArgumentNullException(nameof(definition));
 
     public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
     {
+        bool isDark = isDarkTheme?.Invoke() ?? true;
         string text = context.Text.ToString();
         foreach (var rule in Definition.MainRuleSet.Rules)
         {
@@ -20,8 +24,8 @@ public sealed class HighlightingColorizer(IHighlightingDefinition definition) : 
                 if (color.Strikethrough == true) decoration |= TextDecoration.Strikethrough;
                 output.Add(new TextPaintSpan(
                     new TextRange(match.Index, match.Length),
-                    color.Foreground,
-                    color.Background,
+                    color.ResolveForeground(isDark),
+                    color.ResolveBackground(isDark),
                     decoration));
             }
         }

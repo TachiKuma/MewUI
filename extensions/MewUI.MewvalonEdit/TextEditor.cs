@@ -18,6 +18,7 @@ public class TextEditor : ContentControl
     private IHighlightingDefinition? _syntaxHighlighting;
     private HighlightingColorizer? _colorizer;
     private readonly SpaceMarkerProjection _spaceMarkers;
+    private readonly SpaceMarkerClassifier _spaceMarkerColors;
     private readonly WhitespaceAdornmentProvider _whitespaceAdornments;
     private bool _showLineNumbers;
 
@@ -26,6 +27,7 @@ public class TextEditor : ContentControl
         Options = new TextEditorOptions();
         IndentationStrategy = new DefaultIndentationStrategy();
         _spaceMarkers = new SpaceMarkerProjection(Options);
+        _spaceMarkerColors = new SpaceMarkerClassifier(Options, this);
         _whitespaceAdornments = new WhitespaceAdornmentProvider(Options, this);
         Options.PropertyChanged += OnOptionsChanged;
         _document = new TextDocument();
@@ -48,6 +50,7 @@ public class TextEditor : ContentControl
         };
         _surface.TextInput += OnSurfaceTextInput;
         _surface.Extensions.Projections.Add(_spaceMarkers);
+        _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
         _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
         _lineNumberMargin = new LineNumberMargin(this) { IsVisible = _showLineNumbers };
         Content = new Grid()
@@ -227,8 +230,10 @@ public class TextEditor : ContentControl
         }
         if (_syntaxHighlighting is not null)
         {
-            _colorizer = new HighlightingColorizer(_syntaxHighlighting);
-            _surface.Extensions.Classifiers.Add(_colorizer);
+            // First in the list: syntax colors are the base layer, so whitespace markers and search
+            // highlights registered later keep their own colors where the ranges overlap.
+            _colorizer = new HighlightingColorizer(_syntaxHighlighting, () => Theme.IsDark);
+            _surface.Extensions.Classifiers.Insert(0, _colorizer);
         }
         _surface.InvalidateTextView();
     }
