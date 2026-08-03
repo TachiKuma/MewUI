@@ -62,6 +62,43 @@ public sealed class WrappedLineAlignmentTests
     }
 
     [TestMethod]
+    public void MeasuredWidthCountsTrailingWhitespaceOnlyAfterAHardBreak()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        using var factory = new GdiGraphicsFactory();
+
+        var layout = CreateLayout(factory, TextAlignment.Left);
+        double widestFull = layout.Lines.Max(line => line.Bounds.Width);
+        Assert.IsLessThan(widestFull, layout.MeasuredSize.Width,
+            $"The measured width kept the space a wrap left behind ({layout.MeasuredSize.Width} of {widestFull}).");
+
+        double broken = MeasureWidth(factory, "One\nTwo", wrap: false);
+        double brokenWithSpaces = MeasureWidth(factory, "One   \nTwo", wrap: false);
+        Assert.IsGreaterThan(broken, brokenWithSpaces,
+            "Trailing spaces before a hard break did not reach the measured width.");
+    }
+
+    private static double MeasureWidth(GdiGraphicsFactory factory, string text, bool wrap)
+        => factory.TextEngine.CreateLayout(
+            new TextLayoutRequest
+            {
+                Text = text.AsMemory(),
+                Dpi = 96,
+                DefaultStyle = TextRunStyle.Default,
+                Paragraph = new TextParagraphStyle
+                {
+                    Wrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+                    Alignment = TextAlignment.Left,
+                    MaxWidth = wrap ? MAX_WIDTH : double.PositiveInfinity,
+                },
+            }).MeasuredSize.Width;
+
+    [TestMethod]
     public void LeftAlignedWrappedLinesStillStartAtZero()
     {
         if (!OperatingSystem.IsWindows())

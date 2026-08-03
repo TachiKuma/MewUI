@@ -76,7 +76,17 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         var clusters = MeasureClusters(context, snapshot, 0, snapshot.Text.Length);
         var lines = AssembleLines(context, snapshot, clusters);
         ApplyTrimming(context, snapshot, lines);
-        double measuredWidth = lines.Count == 0 ? 0 : lines.Max(static line => line.Metrics.Bounds.Width);
+        double measuredWidth = 0;
+        for (int index = 0; index < lines.Count; index++)
+        {
+            var metrics = lines[index].Metrics;
+            // Trailing spaces count toward the width only where a hard break or the end of the text
+            // ended the line, never where a wrap did or an ellipsis replaced them.
+            bool countTrailingWhitespace = !lines[index].IsTrimmed &&
+                (metrics.NewLineLength > 0 || index == lines.Count - 1);
+            measuredWidth = Math.Max(
+                measuredWidth, countTrailingWhitespace ? metrics.Bounds.Width : metrics.VisibleWidth);
+        }
         double contentHeight = lines.Count == 0 ? 0 : lines[^1].Metrics.Bounds.Bottom;
         return new ManagedTextLayout(
             this,
