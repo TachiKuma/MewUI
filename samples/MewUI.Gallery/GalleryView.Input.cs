@@ -1,5 +1,4 @@
 using Aprillz.MewUI.Controls;
-using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Gallery;
 
@@ -39,50 +38,6 @@ partial class GalleryView
             );
     }
 
-    private FrameworkElement SyntaxViewerDemo()
-    {
-        var viewer = new SyntaxViewer
-        {
-            Width = 620,
-            Height = 330,
-            Wrap = false,
-            FontFamily = "Consolas",
-            Text = """
-                using System.Collections.Generic;
-                using System.Linq;
-
-                namespace Gallery.Syntax;
-
-                [Obsolete("Use CreateAsync instead")]
-                public sealed record Result(int Id, string Name);
-
-                public static class ResultService
-                {
-                    // Keywords, types, numbers, members, strings, and interpolation.
-                    public static async Task<IReadOnlyList<Result>> CreateAsync(
-                        IEnumerable<string?> names,
-                        CancellationToken cancellationToken = default)
-                    {
-                        const int minimumLength = 3;
-                        await Task.Delay(42, cancellationToken);
-
-                        return names
-                            .Where(name => !string.IsNullOrWhiteSpace(name) && name.Length >= minimumLength)
-                            .Select((name, index) => new Result(index + 1, $"Item {index}: {name!.Trim()}"))
-                            .ToArray();
-                    }
-                }
-                """
-        };
-        var classifier = new GalleryCSharpClassifier();
-        viewer.Extensions.Classifiers.Add(classifier);
-        viewer.WithTheme((theme, target) =>
-        {
-            classifier.IsDark = theme.IsDark;
-            target.InvalidateTextView();
-        });
-        return viewer;
-    }
 
     private FrameworkElement InputsPage() =>
             CardGrid(
@@ -188,12 +143,6 @@ partial class GalleryView
                 ),
 
                 Card(
-                    "SyntaxViewer",
-                    SyntaxViewerDemo(),
-                    minWidth: 650
-                ),
-
-                Card(
                     "ToolTip / ContextMenu",
                     new StackPanel()
                         .Vertical()
@@ -234,103 +183,4 @@ partial class GalleryView
                  )
              );
 
-    private sealed class GalleryCSharpClassifier : ITextClassifier
-    {
-        public bool IsDark { get; set; } = true;
-
-        private string CommentColor => IsDark ? "#6A9955" : "#008000";
-        private string StringColor => IsDark ? "#CE9178" : "#A31515";
-        private string NumberColor => IsDark ? "#B5CEA8" : "#098658";
-        private string KeywordColor => IsDark ? "#569CD6" : "#0000FF";
-        private string TypeColor => IsDark ? "#4EC9B0" : "#267F99";
-        private string MemberColor => IsDark ? "#DCDCAA" : "#795E26";
-
-        private static readonly HashSet<string> Keywords =
-        [
-            "async", "await", "class", "const", "default", "false", "namespace", "new", "null",
-            "public", "record", "return", "sealed", "static", "true", "using"
-        ];
-
-        private static readonly HashSet<string> BuiltInTypes =
-            ["bool", "double", "int", "object", "string", "var", "void"];
-
-        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
-        {
-            ReadOnlySpan<char> text = context.Text.Span;
-            int index = 0;
-            while (index < text.Length)
-            {
-                if (char.IsWhiteSpace(text[index]))
-                {
-                    index++;
-                    continue;
-                }
-
-                if (index + 1 < text.Length && text[index] == '/' && text[index + 1] == '/')
-                {
-                    Add(output, index, text.Length - index, CommentColor);
-                    break;
-                }
-
-                int stringPrefix = text[index] == '$' && index + 1 < text.Length && text[index + 1] == '"' ? 1 : 0;
-                if (text[index + stringPrefix] is '"' or '\'')
-                {
-                    char delimiter = text[index + stringPrefix];
-                    int end = index + stringPrefix + 1;
-                    while (end < text.Length)
-                    {
-                        if (text[end] == '\\')
-                        {
-                            end = Math.Min(text.Length, end + 2);
-                            continue;
-                        }
-                        if (text[end++] == delimiter) break;
-                    }
-                    Add(output, index, end - index, StringColor);
-                    index = end;
-                    continue;
-                }
-
-                if (char.IsDigit(text[index]))
-                {
-                    int end = index + 1;
-                    while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] is '.' or '_')) end++;
-                    Add(output, index, end - index, NumberColor);
-                    index = end;
-                    continue;
-                }
-
-                if (char.IsLetter(text[index]) || text[index] == '_')
-                {
-                    int end = index + 1;
-                    while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_')) end++;
-                    string identifier = text[index..end].ToString();
-                    if (Keywords.Contains(identifier) || BuiltInTypes.Contains(identifier))
-                        Add(output, index, end - index, KeywordColor);
-                    else if (char.IsUpper(identifier[0]))
-                        Add(output, index, end - index, TypeColor);
-                    else if (PreviousNonWhitespace(text, index) == '.')
-                        Add(output, index, end - index, MemberColor);
-                    index = end;
-                    continue;
-                }
-
-                index++;
-            }
-        }
-
-        private static char PreviousNonWhitespace(ReadOnlySpan<char> text, int index)
-        {
-            for (int current = index - 1; current >= 0; current--)
-            {
-                if (!char.IsWhiteSpace(text[current])) return text[current];
-            }
-            return '\0';
-        }
-
-        private static void Add(IList<TextPaintSpan> output, int start, int length, string color)
-            => output.Add(new TextPaintSpan(
-                new TextRange(start, length),
-                Foreground: Color.FromHex(color)));
-    }
 }
