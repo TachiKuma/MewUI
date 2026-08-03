@@ -32,6 +32,7 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
 
     private double? _lastWrapMeasureWidth;
     private readonly List<TextPaintSpan> _paintSpans = [];
+    private readonly List<GeometryStyleRun> _geometryRuns = [];
 
     private ITextLayout? _layout;
     private double _layoutMaxWidth;
@@ -153,12 +154,15 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
         _layoutWrapping = wrapping;
         _layoutDpi = dpi;
         _layoutStyle = style;
+        _geometryRuns.Clear();
+        OnGetTextGeometryRuns(style, _geometryRuns);
         _layout = GetGraphicsFactory().TextEngine.GetOrCreateLayout(
             new TextLayoutRequest
             {
                 Text = DisplayText.AsMemory(),
                 Dpi = dpi,
                 DefaultStyle = style,
+                Runs = _geometryRuns.Count == 0 ? [] : _geometryRuns.ToArray(),
                 Paragraph = new TextParagraphStyle
                 {
                     MaxWidth = maxWidth,
@@ -262,6 +266,14 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
     /// Offsets index <see cref="DisplayText"/>.
     /// </summary>
     protected virtual void OnGetTextPaintSpans(IList<TextPaintSpan> output)
+    {
+    }
+
+    /// <summary>
+    /// Contributes per-range font overrides. Ranges index <see cref="DisplayText"/>, must not
+    /// overlap, and <paramref name="defaultStyle"/> is the style unstyled text uses.
+    /// </summary>
+    protected virtual void OnGetTextGeometryRuns(in TextRunStyle defaultStyle, IList<GeometryStyleRun> output)
     {
     }
 
