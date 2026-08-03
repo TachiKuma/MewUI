@@ -1,4 +1,5 @@
 using Aprillz.MewUI.Controls;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Gallery;
 
@@ -38,6 +39,162 @@ partial class GalleryView
             );
     }
 
+
+    private const string FIND_DEMO_TEXT =
+        "The text engine assembles logical lines into visual lines, wraps them to the viewport, " +
+        "and materializes only the lines that are visible.\n\n" +
+        "Classifiers attach paint spans to a line without changing its geometry. A search classifier " +
+        "is the smallest useful classifier: it scans the line, emits a background span per match, " +
+        "and the engine paints the span behind the glyphs.\n\n" +
+        "Wrapped lines keep highlight spans consistent: a match that crosses a wrap boundary is " +
+        "painted on both visual lines. Scrolling does not recompute matches, because the match " +
+        "offsets live in the document, not in the view.\n\n" +
+        "Editing the document refreshes the matches. Type into this editor and the highlight " +
+        "follows the text. Search for the word line to see many matches, or search for engine " +
+        "to see a few.\n\n" +
+        "The chevron buttons move the current match, select it, and scroll it into view. The " +
+        "current match uses a stronger highlight than the other matches.";
+
+    // Search-match highlighter for the demo: recomputes absolute match offsets on text change and
+    // emits line-relative background spans; the current match gets a stronger color.
+    private sealed class FindHighlightClassifier : ITextClassifier
+    {
+        private static readonly Color _matchColor = Color.FromArgb(88, 255, 214, 0);
+        private static readonly Color _currentColor = Color.FromArgb(176, 255, 150, 40);
+
+        public List<int> Matches { get; } = new();
+        public int QueryLength { get; private set; }
+        public int CurrentIndex { get; set; } = -1;
+
+        public void Update(string documentText, string query)
+        {
+            Matches.Clear();
+            CurrentIndex = -1;
+            QueryLength = query.Length;
+            if (query.Length == 0)
+            {
+                return;
+            }
+
+            int searchStart = 0;
+            while (true)
+            {
+                int hit = documentText.IndexOf(query, searchStart, StringComparison.OrdinalIgnoreCase);
+                if (hit < 0)
+                {
+                    break;
+                }
+
+                Matches.Add(hit);
+                searchStart = hit + query.Length;
+            }
+        }
+
+        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
+        {
+            if (Matches.Count == 0)
+            {
+                return;
+            }
+
+            int lineStart = context.LogicalLine.Offset;
+            int lineEnd = lineStart + context.LogicalLine.Length;
+
+            for (int index = 0; index < Matches.Count; index++)
+            {
+                int matchStart = Matches[index];
+                if (matchStart >= lineEnd)
+                {
+                    break;
+                }
+
+                int clampedStart = Math.Max(lineStart, matchStart);
+                int clampedEnd = Math.Min(lineEnd, matchStart + QueryLength);
+                if (clampedEnd > clampedStart)
+                {
+                    output.Add(new TextPaintSpan(
+                        new TextRange(clampedStart - lineStart, clampedEnd - clampedStart),
+                        Background: index == CurrentIndex ? _currentColor : _matchColor));
+                }
+            }
+        }
+    }
+
+    private FrameworkElement FindHighlightDemo()
+    {
+        var classifier = new FindHighlightClassifier();
+
+        var box = new MultiLineTextBox()
+            .Height(170)
+            .Width(290)
+            .Wrap(true)
+            .Text(FIND_DEMO_TEXT);
+        box.Extensions.Classifiers.Add(classifier);
+
+        var searchBox = new TextBox().Placeholder("Find...").Width(150);
+        var countLabel = new TextBlock().FontSize(11).CenterVertical();
+
+        void UpdateCountLabel()
+            => countLabel.Text = classifier.Matches.Count == 0
+                ? "0/0"
+                : $"{classifier.CurrentIndex + 1}/{classifier.Matches.Count}";
+
+        void RefreshMatches()
+        {
+            classifier.Update(box.Text, searchBox.Text);
+            box.InvalidateTextView();
+            UpdateCountLabel();
+        }
+
+        void MoveCurrent(int direction)
+        {
+            int count = classifier.Matches.Count;
+            if (count == 0)
+            {
+                return;
+            }
+
+            if (classifier.CurrentIndex < 0)
+            {
+                classifier.CurrentIndex = direction > 0 ? 0 : count - 1;
+            }
+            else
+            {
+                classifier.CurrentIndex = (classifier.CurrentIndex + direction + count) % count;
+            }
+
+            int offset = classifier.Matches[classifier.CurrentIndex];
+            box.Select(offset, classifier.QueryLength);
+            box.ScrollToCaret();
+            box.InvalidateTextView();
+            UpdateCountLabel();
+        }
+
+        static Button ChevronButton(GlyphKind kind, Action onClick)
+            => new Button()
+                .Content(new GlyphElement().Kind(kind))
+                .Padding(0)
+                .WithTheme((t, c) => c.MinWidth(t.Metrics.BaseControlHeight))
+                .OnClick(onClick);
+
+        searchBox.TextChanged += _ => RefreshMatches();
+        box.DocumentChanged += _ => RefreshMatches();
+        UpdateCountLabel();
+
+        return new StackPanel()
+            .Vertical()
+            .Spacing(6)
+            .Children(
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(4)
+                    .Children(
+                        searchBox,
+                        ChevronButton(GlyphKind.ChevronUp, () => MoveCurrent(-1)),
+                        ChevronButton(GlyphKind.ChevronDown, () => MoveCurrent(+1)),
+                        countLabel),
+                box);
+    }
 
     private FrameworkElement InputsPage() =>
             CardGrid(
@@ -140,6 +297,11 @@ partial class GalleryView
                 Card(
                     "MultiLineTextBox",
                     MultiLineTextBoxDemo()
+                ),
+
+                Card(
+                    "Find Highlight",
+                    FindHighlightDemo()
                 ),
 
                 Card(
