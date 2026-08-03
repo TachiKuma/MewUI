@@ -866,6 +866,10 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
             InvalidateArrangeForCurrentLayoutPass();
         }
 
+        // Star columns claim their share of the final width in arrange, so neither the desired width
+        // nor the scroll extent may grow with whatever width the container happened to offer.
+        double unstretchedWidth = _core.ProbeColumnsExtent(double.PositiveInfinity);
+
         double contentWidth = double.IsPositiveInfinity(widthLimit)
             ? _columnsExtentWidth
             : Math.Min(_columnsExtentWidth, widthLimit);
@@ -887,7 +891,7 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
         }
 
         _presenter.ItemHeightHint = rowH;
-        _presenter.ExtentWidth = _columnsExtentWidth;
+        _presenter.ExtentWidth = unstretchedWidth;
 
         _header.HorizontalOffset = _scrollViewer.HorizontalOffset;
         _header.Measure(new Size(Math.Max(0, contentWidth), headerH));
@@ -896,7 +900,11 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
             double.IsPositiveInfinity(contentWidth) ? double.PositiveInfinity : Math.Max(0, contentWidth),
             double.IsPositiveInfinity(desiredRowsHeight) ? double.PositiveInfinity : Math.Max(0, desiredRowsHeight)));
 
-        var desired = new Size(Math.Max(0, contentWidth), Math.Max(0, headerH + desiredRowsHeight));
+        double desiredWidth = double.IsPositiveInfinity(widthLimit)
+            ? unstretchedWidth
+            : Math.Min(unstretchedWidth, widthLimit);
+
+        var desired = new Size(Math.Max(0, desiredWidth), Math.Max(0, headerH + desiredRowsHeight));
         return desired
             .Inflate(Padding)
             .Inflate(new Thickness(borderInset));
@@ -2095,6 +2103,8 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
         private readonly List<ColumnDefinition> _columns = new();
         private readonly List<GridViewColumnWidthRequest> _widthRequests = new();
         private double[] _resolvedWidths = [];
+        // Separate scratch: the measure pass must not disturb the widths arrange committed.
+        private double[] _probedWidths = [];
         private int _columnsVersion;
 
         public IReadOnlyList<ColumnDefinition> Columns => _columns;
@@ -2291,7 +2301,7 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
             ColumnsChanged?.Invoke();
         }
 
-        public double ResolveColumnWidths(double availableWidth, out bool changed)
+        private void FillWidthRequests()
         {
             _widthRequests.Clear();
             for (int i = 0; i < _columns.Count; i++)
@@ -2303,7 +2313,22 @@ public sealed class GridView : ScrollableItemsBase, IFocusIntoViewHost, IVirtual
                     column.MinWidth,
                     column.MaxWidth));
             }
+        }
 
+        /// <summary>Column extent for <paramref name="availableWidth"/> without committing ActualWidth.</summary>
+        public double ProbeColumnsExtent(double availableWidth)
+        {
+            FillWidthRequests();
+            if (_probedWidths.Length < _columns.Count)
+            {
+                _probedWidths = new double[_columns.Count];
+            }
+            return GridViewColumnWidthResolver.Resolve(_widthRequests, availableWidth, _probedWidths);
+        }
+
+        public double ResolveColumnWidths(double availableWidth, out bool changed)
+        {
+            FillWidthRequests();
             if (_resolvedWidths.Length < _columns.Count)
             {
                 _resolvedWidths = new double[_columns.Count];
