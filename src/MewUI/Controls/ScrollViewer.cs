@@ -175,6 +175,13 @@ public sealed class ScrollViewer : ContentControl
         }
 
         var size = focusedElement.RenderSize;
+        if (size.Width <= 0 || size.Height <= 0)
+        {
+            // An element that has not been arranged sits at the tree origin with an empty box, so
+            // scrolling it into view would drag the viewport to the top instead of leaving it alone.
+            return false;
+        }
+
         var localRect = new Rect(0, 0, size.Width, size.Height);
 
         Rect rectInViewer;
