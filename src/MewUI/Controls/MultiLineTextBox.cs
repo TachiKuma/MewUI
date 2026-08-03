@@ -11,7 +11,7 @@ namespace Aprillz.MewUI.Controls;
 /// Multi-line editor built on the extensible text view engine.
 /// It does not use the legacy Controls.Text formatter, view, or measurement caches.
 /// </summary>
-public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
+public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
 {
     public static readonly MewProperty<string> TextProperty =
         MewProperty<string>.Register<MultiLineTextBox>(nameof(Text), string.Empty,
@@ -91,7 +91,11 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     public double HorizontalOffset => _horizontalOffset;
     public double VerticalOffset => _verticalOffset;
     public EditableTextDocument Document => _document;
+    IReadOnlyTextDocument ITextViewHost.Document => _document;
     public TextViewExtensionPipeline Extensions { get; }
+
+    /// <summary>Raised after the document content changed or the document was replaced.</summary>
+    public event Action<ITextViewHost>? DocumentChanged;
     public IReadOnlyList<TextLineLayout> VisibleTextLines
         => _view?.MaterializedLines ?? Array.Empty<TextLineLayout>();
     public Rect TextViewportBounds => _contentBounds;
@@ -378,6 +382,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost
     private void OnDocumentChanged(TextChange change)
     {
         _view?.Invalidate(change);
+        DocumentChanged?.Invoke(this);
     }
 
     private void OnEditorStateChanged()

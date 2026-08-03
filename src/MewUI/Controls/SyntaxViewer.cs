@@ -5,7 +5,7 @@ using Aprillz.MewUI.Text;
 namespace Aprillz.MewUI.Controls;
 
 /// <summary>Read-only, virtualized text surface for syntax and diagnostic extensions.</summary>
-public sealed class SyntaxViewer : Control, IVisualTreeHost
+public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
 {
     public static readonly MewProperty<string> TextProperty =
         MewProperty<string>.Register<SyntaxViewer>(nameof(Text), string.Empty,
@@ -67,7 +67,13 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
         set => SetValue(TabSizeProperty, value);
     }
 
+    /// <summary>Document whose text the view presents. Replaced whole when <see cref="Text"/> changes.</summary>
+    public IReadOnlyTextDocument Document => _document;
     public TextViewExtensionPipeline Extensions { get; }
+
+    /// <summary>Raised after the document was replaced by a <see cref="Text"/> change.</summary>
+    public event Action<ITextViewHost>? DocumentChanged;
+
     public int SelectionStart => Math.Min(_anchor, _caret);
     public int SelectionLength => Math.Abs(_caret - _anchor);
     public string SelectedText => SelectionLength == 0
@@ -331,6 +337,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost
         _anchor = Math.Clamp(_anchor, 0, _document.TextLength);
         _caret = Math.Clamp(_caret, 0, _document.TextLength);
         ResetView();
+        DocumentChanged?.Invoke(this);
     }
 
     private void ResetView()
