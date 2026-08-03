@@ -10,6 +10,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
 {
     private readonly StringBuilder _text = new();
     private readonly EditableLineIndex _lines = new();
+    private TextEditHistory? _history;
 
     public EditableTextDocument(string? text = null)
     {
@@ -22,6 +23,8 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
     public int LineCount => _lines.Count;
 
     public event Action<TextChange>? Changed;
+
+    internal TextEditHistory History => _history ??= new TextEditHistory(this);
 
     public char GetCharAt(int offset)
     {

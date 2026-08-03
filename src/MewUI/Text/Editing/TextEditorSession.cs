@@ -5,8 +5,6 @@ namespace Aprillz.MewUI.Text.Editing;
 /// <summary>Editing state layered over <see cref="EditableTextDocument"/>.</summary>
 public sealed class TextEditorSession
 {
-    private readonly Stack<EditCommand> _undo = new();
-    private readonly Stack<EditCommand> _redo = new();
     private CompositionState? _composition;
     private long _textElementVersion = -1;
     private int _textElementLineOffset = -1;
@@ -19,8 +17,8 @@ public sealed class TextEditorSession
     public EditableTextDocument Document { get; }
     public int CaretPosition { get; private set; }
     public int AnchorPosition { get; private set; }
-    public bool CanUndo => _undo.Count > 0;
-    public bool CanRedo => _redo.Count > 0;
+    public bool CanUndo => Document.History.CanUndo;
+    public bool CanRedo => Document.History.CanRedo;
     public bool IsComposing => _composition is not null;
     public TextRange Selection => new(
         Math.Min(CaretPosition, AnchorPosition),
@@ -144,36 +142,28 @@ public sealed class TextEditorSession
     public void Undo()
     {
         CommitComposition();
-        if (!_undo.TryPop(out var command))
+        if (!Document.History.TryUndo(out int anchor, out int caret))
         {
             return;
         }
-        Document.Replace(command.Start, command.Inserted.Length, command.Removed);
-        AnchorPosition = command.AnchorBefore;
-        CaretPosition = command.CaretBefore;
-        _redo.Push(command);
+        AnchorPosition = anchor;
+        CaretPosition = caret;
         StateChanged?.Invoke();
     }
 
     public void Redo()
     {
         CommitComposition();
-        if (!_redo.TryPop(out var command))
+        if (!Document.History.TryRedo(out int anchor, out int caret))
         {
             return;
         }
-        Document.Replace(command.Start, command.Removed.Length, command.Inserted);
-        AnchorPosition = command.AnchorAfter;
-        CaretPosition = command.CaretAfter;
-        _undo.Push(command);
+        AnchorPosition = anchor;
+        CaretPosition = caret;
         StateChanged?.Invoke();
     }
 
-    public void ClearHistory()
-    {
-        _undo.Clear();
-        _redo.Clear();
-    }
+    public void ClearHistory() => Document.History.Clear();
 
     public void BeginComposition()
     {
@@ -189,7 +179,7 @@ public sealed class TextEditorSession
             CaretPosition);
         if (selection.Length > 0)
         {
-            Document.Remove(selection.Start, selection.Length);
+            Document.History.ReplaceTransient(selection.Start, selection.Length, string.Empty);
         }
         AnchorPosition = CaretPosition = selection.Start;
         StateChanged?.Invoke();
@@ -200,7 +190,7 @@ public sealed class TextEditorSession
         BeginComposition();
         var state = _composition!;
         string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);
-        Document.Replace(state.Start, state.CurrentLength, normalized);
+        Document.History.ReplaceTransient(state.Start, state.CurrentLength, normalized);
         state.CurrentLength = normalized.Length;
         AnchorPosition = CaretPosition = state.Start + normalized.Length;
         StateChanged?.Invoke();
@@ -216,15 +206,14 @@ public sealed class TextEditorSession
         _composition = null;
         if (state.Removed != inserted)
         {
-            _undo.Push(new EditCommand(
+            Document.History.Push(
                 state.Start,
                 state.Removed,
                 inserted,
                 state.AnchorBefore,
                 state.CaretBefore,
                 AnchorPosition,
-                CaretPosition));
-            _redo.Clear();
+                CaretPosition);
         }
         StateChanged?.Invoke();
     }
@@ -235,7 +224,7 @@ public sealed class TextEditorSession
         {
             return;
         }
-        Document.Replace(state.Start, state.CurrentLength, state.Removed);
+        Document.History.ReplaceTransient(state.Start, state.CurrentLength, state.Removed);
         AnchorPosition = state.AnchorBefore;
         CaretPosition = state.CaretBefore;
         _composition = null;
@@ -245,26 +234,14 @@ public sealed class TextEditorSession
     private void ApplyAndRecord(int start, int removeLength, string inserted)
     {
         CommitComposition();
-        string removed = Document.GetText(start, removeLength);
-        if (removed == inserted)
+        int caretAfter = start + inserted.Length;
+        if (!Document.History.RecordReplace(
+            start, removeLength, inserted, AnchorPosition, CaretPosition, caretAfter, caretAfter))
         {
-            SetCaret(start + inserted.Length);
+            SetCaret(caretAfter);
             return;
         }
-
-        int anchorBefore = AnchorPosition;
-        int caretBefore = CaretPosition;
-        Document.Replace(start, removeLength, inserted);
-        AnchorPosition = CaretPosition = start + inserted.Length;
-        _undo.Push(new EditCommand(
-            start,
-            removed,
-            inserted,
-            anchorBefore,
-            caretBefore,
-            AnchorPosition,
-            CaretPosition));
-        _redo.Clear();
+        AnchorPosition = CaretPosition = caretAfter;
         StateChanged?.Invoke();
     }
 
@@ -351,15 +328,6 @@ public sealed class TextEditorSession
     }
 
     private static bool IsWordCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
-
-    private readonly record struct EditCommand(
-        int Start,
-        string Removed,
-        string Inserted,
-        int AnchorBefore,
-        int CaretBefore,
-        int AnchorAfter,
-        int CaretAfter);
 
     private sealed class CompositionState(int start, string removed, int anchorBefore, int caretBefore)
     {
