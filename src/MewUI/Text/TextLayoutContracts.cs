@@ -97,9 +97,13 @@ public readonly record struct TextLayoutLineMetrics(
     int TextLength,
     int NewLineLength,
     Rect Bounds,
-    double Baseline)
+    double Baseline,
+    double TrailingWhitespaceWidth = 0)
 {
     public int TextEnd => checked(TextStart + TextLength);
+
+    /// <summary>Line width without the whitespace a wrap or a break left at its end.</summary>
+    public double VisibleWidth => Math.Max(0, Bounds.Width - TrailingWhitespaceWidth);
 }
 
 public interface ITextLayout

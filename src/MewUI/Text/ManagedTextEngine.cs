@@ -56,7 +56,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             var segments = MeasureFastPathSegments(context, snapshot.Text, font, out var measured);
             double height = ResolveLineHeight(snapshot.Paragraph, font.Ascent + font.Descent, measured.Height);
             double width = measured.Width;
-            double x = ResolveLineX(snapshot.Paragraph, width);
+            double trailingWhitespace = MeasureTrailingWhitespace(context, snapshot, font);
+            double x = ResolveLineX(snapshot.Paragraph, width - trailingWhitespace);
             if (x != 0)
             {
                 for (int index = 0; index < segments.Count; index++)
@@ -65,7 +66,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                 }
             }
             var line = new ManagedTextLine(
-                new TextLayoutLineMetrics(0, snapshot.Text.Length, 0, new Rect(x, 0, width, height), font.Ascent),
+                new TextLayoutLineMetrics(
+                    0, snapshot.Text.Length, 0, new Rect(x, 0, width, height), font.Ascent, trailingWhitespace),
                 clusters: null,
                 fastSegments: segments);
             return new ManagedTextLayout(this, snapshot, [line], new Size(width, height), isFastPath: true);
@@ -444,7 +446,10 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             baseline = defaultFont.Ascent;
         }
 
-        double x = ResolveLineX(snapshot.Paragraph, width);
+        // Alignment ignores the space a wrap left at the end of the line, so right-aligned text ends
+        // flush with the edge instead of one space short of it.
+        double trailingWhitespace = GetTrailingWhitespaceWidth(snapshot, clusters);
+        double x = ResolveLineX(snapshot.Paragraph, width - trailingWhitespace);
         double cursor = x;
         foreach (var cluster in clusters)
         {
@@ -455,7 +460,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         int textStart = clusters.Count == 0 ? fallbackStart : clusters[0].Start;
         int textLength = clusters.Count == 0 ? 0 : clusters[^1].End - textStart;
         return new ManagedTextLine(
-            new TextLayoutLineMetrics(textStart, textLength, newLineLength, new Rect(x, y, width, height), baseline),
+            new TextLayoutLineMetrics(
+                textStart, textLength, newLineLength, new Rect(x, y, width, height), baseline, trailingWhitespace),
             clusters);
     }
 
@@ -511,6 +517,63 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         => double.IsNaN(width) || width <= 0 || double.IsPositiveInfinity(width)
             ? double.PositiveInfinity
             : width;
+
+    /// <summary>Trailing whitespace width of the whole text, measured only when alignment needs it.</summary>
+    private static double MeasureTrailingWhitespace(
+        IGraphicsContext context,
+        TextLayoutRequestSnapshot snapshot,
+        IFont font)
+    {
+        if (snapshot.Paragraph.Alignment == TextAlignment.Left ||
+            double.IsPositiveInfinity(NormalizeMaxWidth(snapshot.Paragraph.MaxWidth)))
+        {
+            return 0;
+        }
+
+        var text = snapshot.Text.AsSpan();
+        int start = text.Length;
+        while (start > 0 && char.IsWhiteSpace(text[start - 1]))
+        {
+            start--;
+        }
+        return start == text.Length ? 0 : context.MeasureText(text[start..], font).Width;
+    }
+
+    /// <summary>Width of the whitespace runs a wrap or an explicit break left at the end of a line.</summary>
+    private static double GetTrailingWhitespaceWidth(
+        TextLayoutRequestSnapshot snapshot,
+        List<ManagedTextCluster> clusters)
+    {
+        double trailing = 0;
+        for (int index = clusters.Count - 1; index >= 0; index--)
+        {
+            var cluster = clusters[index];
+            if (cluster.Kind == ManagedTextClusterKind.NewLine)
+            {
+                continue;
+            }
+            if (cluster.Kind != ManagedTextClusterKind.Text ||
+                !IsWhitespaceRun(snapshot.Text, cluster.Start, cluster.Length))
+            {
+                break;
+            }
+
+            trailing += cluster.Width;
+        }
+        return trailing;
+    }
+
+    private static bool IsWhitespaceRun(string text, int start, int length)
+    {
+        for (int index = start; index < start + length; index++)
+        {
+            if (!char.IsWhiteSpace(text[index]))
+            {
+                return false;
+            }
+        }
+        return length > 0;
+    }
 
     private static double ResolveLineX(TextParagraphStyle paragraph, double width)
     {
