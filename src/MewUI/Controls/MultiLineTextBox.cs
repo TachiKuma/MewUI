@@ -120,8 +120,10 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     /// <summary>Re-runs registered classifiers, generators, projections, and adornments.</summary>
     public void InvalidateTextView()
     {
+        // Rebuild instead of reset: extensions re-run against unchanged text, so the reader
+        // must stay where they were reading. Only document or metric changes reset scrolling.
         Extensions.Revision++;
-        ResetView();
+        RebuildView();
     }
 
     public override Rect GetCharRectInWindow(int charIndex)

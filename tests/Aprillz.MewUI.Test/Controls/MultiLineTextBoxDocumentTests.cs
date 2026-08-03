@@ -25,7 +25,7 @@ public sealed class MultiLineTextBoxDocumentTests
         box.Document = new EditableTextDocument("new");
 
         Assert.AreSame(pipeline, box.Extensions);
-        Assert.IsTrue(box.Extensions.Classifiers.Contains(classifier));
+        Assert.Contains(classifier, box.Extensions.Classifiers);
     }
 
     [TestMethod]
