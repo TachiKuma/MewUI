@@ -280,7 +280,7 @@ public sealed class TextViewLayout : ITextViewLayout
 
         string text = projectedMemory.ToString();
         var paintSpans = new List<TextPaintSpan>();
-        var classificationContext = new TextClassificationContext(logical, text.AsMemory());
+        var classificationContext = new TextClassificationContext(logical, text.AsMemory(), offsetMap);
         foreach (var classifier in _extensions.Classifiers)
         {
             classifier.Classify(in classificationContext, paintSpans);
@@ -288,19 +288,19 @@ public sealed class TextViewLayout : ITextViewLayout
 
         var geometryRuns = new List<GeometryStyleRun>();
         var inlines = new List<InlineRun>();
-        var elementContext = new TextElementContext(logical, text.AsMemory());
+        var elementContext = new TextElementContext(logical, text.AsMemory(), offsetMap);
         foreach (var generator in _extensions.ElementGenerators)
         {
             generator.Generate(in elementContext, inlines);
         }
-        var transformContext = new TextLineTransformContext(logical, text.AsMemory(), _defaultStyle);
+        var transformContext = new TextLineTransformContext(logical, text.AsMemory(), _defaultStyle, offsetMap);
         foreach (var transformer in _extensions.Transformers)
         {
             transformer.Transform(in transformContext, geometryRuns, inlines);
         }
 
         var adornments = new List<ITextAdornment>();
-        var adornmentContext = new TextAdornmentContext(logical, text.AsMemory());
+        var adornmentContext = new TextAdornmentContext(logical, text.AsMemory(), offsetMap);
         foreach (var provider in _extensions.AdornmentProviders)
         {
             provider.GetAdornments(in adornmentContext, adornments);

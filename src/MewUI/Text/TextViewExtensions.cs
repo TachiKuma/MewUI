@@ -1,18 +1,22 @@
 namespace Aprillz.MewUI.Text;
 
+/// <summary>Classification input. <see cref="Text"/> is the projected display text; <see cref="OffsetMap"/> converts between its offsets and source document offsets.</summary>
 public readonly record struct TextClassificationContext(
     LogicalTextLine LogicalLine,
-    ReadOnlyMemory<char> Text);
+    ReadOnlyMemory<char> Text,
+    ITextOffsetMap OffsetMap);
 
 public interface ITextClassifier
 {
     void Classify(in TextClassificationContext context, IList<TextPaintSpan> output);
 }
 
+/// <summary>Transform input. <see cref="Text"/> is the projected display text; <see cref="OffsetMap"/> converts between its offsets and source document offsets.</summary>
 public readonly record struct TextLineTransformContext(
     LogicalTextLine LogicalLine,
     ReadOnlyMemory<char> Text,
-    TextRunStyle DefaultStyle);
+    TextRunStyle DefaultStyle,
+    ITextOffsetMap OffsetMap);
 
 public interface ITextLineTransformer
 {
@@ -22,9 +26,11 @@ public interface ITextLineTransformer
         IList<InlineRun> inlines);
 }
 
+/// <summary>Element generation input. <see cref="Text"/> is the projected display text; <see cref="OffsetMap"/> converts between its offsets and source document offsets.</summary>
 public readonly record struct TextElementContext(
     LogicalTextLine LogicalLine,
-    ReadOnlyMemory<char> Text);
+    ReadOnlyMemory<char> Text,
+    ITextOffsetMap OffsetMap);
 
 public interface ITextElementGenerator
 {
@@ -44,9 +50,11 @@ public interface ITextAdornment
     void Draw(ITextRenderContext context, TextLineLayout line, Point origin);
 }
 
+/// <summary>Adornment input. <see cref="Text"/> is the projected display text; <see cref="OffsetMap"/> converts between its offsets and source document offsets.</summary>
 public readonly record struct TextAdornmentContext(
     LogicalTextLine LogicalLine,
-    ReadOnlyMemory<char> Text);
+    ReadOnlyMemory<char> Text,
+    ITextOffsetMap OffsetMap);
 
 public interface ITextAdornmentProvider
 {
@@ -98,6 +106,7 @@ public interface ITextLineCollapser
 public sealed class TextViewExtensionPipeline
 {
     public long Revision { get; set; }
+    /// <summary>Run in registration order; where paint spans overlap, the later registration wins.</summary>
     public IList<ITextClassifier> Classifiers { get; } = new List<ITextClassifier>();
     public IList<ITextLineTransformer> Transformers { get; } = new List<ITextLineTransformer>();
     public IList<ITextElementGenerator> ElementGenerators { get; } = new List<ITextElementGenerator>();

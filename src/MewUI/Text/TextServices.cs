@@ -497,7 +497,8 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
     /// Resolves the effective foreground for a character index: the last covering paint span
     /// wins, matching painter-order span semantics.
     /// </summary>
-    private static Color? GetSpanForeground(ReadOnlySpan<TextPaintSpan> spans, int index)
+    /// <summary>Resolves the foreground at a text index; later spans win where ranges overlap.</summary>
+    internal static Color? GetSpanForeground(ReadOnlySpan<TextPaintSpan> spans, int index)
     {
         Color? result = null;
         foreach (var span in spans)
