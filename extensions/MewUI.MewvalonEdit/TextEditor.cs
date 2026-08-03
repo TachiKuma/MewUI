@@ -13,8 +13,8 @@ namespace Aprillz.MewUI.MewvalonEdit;
 public class TextEditor : ContentControl
 {
     private TextDocument _document;
-    private MultiLineTextBox _surface = null!;
-    private LineNumberMargin _lineNumberMargin = null!;
+    private readonly MultiLineTextBox _surface;
+    private readonly LineNumberMargin _lineNumberMargin;
     private IHighlightingDefinition? _syntaxHighlighting;
     private HighlightingColorizer? _colorizer;
     private readonly SpaceMarkerProjection _spaceMarkers;
@@ -32,7 +32,29 @@ public class TextEditor : ContentControl
         _document.Changed += OnDocumentTextChanged;
         StyleSheet = new StyleSheet();
         StyleSheet.Define<TextEditor>(CreateFrameStyle());
-        BuildSurface();
+
+        // The editor owns the frame so it encloses the line number margin, as AvalonEdit's
+        // templated ScrollViewer encloses TextArea's left margins. The surface paints neither
+        // border nor background: a square fill would cover the frame's rounded corners from the
+        // inside. Font properties are inherited, so the surface must not take local values.
+        _surface = new MultiLineTextBox(_document.CoreDocument)
+        {
+            Wrap = false,
+            AcceptTab = true,
+            TabSize = Options.IndentationSize,
+            Background = Color.Transparent,
+            BorderThickness = 0,
+            CornerRadius = 0
+        };
+        _surface.TextInput += OnSurfaceTextInput;
+        _surface.Extensions.Projections.Add(_spaceMarkers);
+        _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
+        _lineNumberMargin = new LineNumberMargin(this) { IsVisible = _showLineNumbers };
+        Content = new Grid()
+            .Columns("Auto,*")
+            .Children(
+                _surface.Column(1),
+                _lineNumberMargin.Column(0));
         TextArea = new TextArea(this);
     }
 
@@ -95,7 +117,8 @@ public class TextEditor : ContentControl
             _document.Changed -= OnDocumentTextChanged;
             _document = value;
             _document.Changed += OnDocumentTextChanged;
-            BuildSurface();
+            _surface.Document = value.CoreDocument;
+            _lineNumberMargin.SyncWidthToLineCount();
             DocumentChanged?.Invoke(this, EventArgs.Empty);
             TextChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -174,7 +197,6 @@ public class TextEditor : ContentControl
 
     internal MultiLineTextBox Surface => _surface;
     internal Color WhitespaceMarkerColor => Theme.Palette.PlaceholderText;
-    internal event Action<MultiLineTextBox, MultiLineTextBox>? SurfaceChanged;
 
     public event EventHandler? TextChanged;
     public event EventHandler? DocumentChanged;
@@ -196,52 +218,8 @@ public class TextEditor : ContentControl
         base.OnDispose();
     }
 
-    private void BuildSurface()
-    {
-        var previous = _surface;
-        if (previous is not null)
-        {
-            previous.TextInput -= OnSurfaceTextInput;
-        }
-
-        // The editor owns the frame so it encloses the line number margin, as AvalonEdit's
-        // templated ScrollViewer encloses TextArea's left margins. The surface paints neither
-        // border nor background: a square fill would cover the frame's rounded corners from the
-        // inside. Font properties are inherited, so the surface must not take local values.
-        _surface = new MultiLineTextBox(_document.CoreDocument)
-        {
-            Wrap = previous?.Wrap ?? false,
-            IsReadOnly = previous?.IsReadOnly ?? false,
-            AcceptTab = true,
-            TabSize = Options.IndentationSize,
-            Background = Color.Transparent,
-            BorderThickness = 0,
-            CornerRadius = 0
-        };
-        _surface.TextInput += OnSurfaceTextInput;
-        _surface.Extensions.Projections.Add(_spaceMarkers);
-        _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
-        _lineNumberMargin = new LineNumberMargin(this)
-        {
-            IsVisible = _showLineNumbers
-        };
-        ApplyHighlighting();
-        Content = new Grid()
-            .Columns("Auto,*")
-            .Children(
-                _surface.Column(1),
-                _lineNumberMargin.Column(0));
-
-        if (previous is not null)
-        {
-            SurfaceChanged?.Invoke(previous, _surface);
-            previous.Dispose();
-        }
-    }
-
     private void ApplyHighlighting()
     {
-        if (_surface is null) return;
         if (_colorizer is not null)
         {
             _surface.Extensions.Classifiers.Remove(_colorizer);

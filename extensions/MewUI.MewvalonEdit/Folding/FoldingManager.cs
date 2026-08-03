@@ -17,7 +17,6 @@ public sealed class FoldingManager
         _projection = new FoldingProjection(this);
         _editor.Surface.Extensions.Projections.Add(_projection);
         _editor.Surface.Extensions.LineCollapsers.Add(_projection);
-        _editor.SurfaceChanged += OnSurfaceChanged;
     }
 
     public IEnumerable<FoldingSection> AllFoldings => _foldings;
@@ -40,7 +39,6 @@ public sealed class FoldingManager
         ArgumentNullException.ThrowIfNull(manager);
         if (manager._uninstalled) return;
         manager._uninstalled = true;
-        manager._editor.SurfaceChanged -= manager.OnSurfaceChanged;
         manager._editor.Surface.Extensions.Projections.Remove(manager._projection);
         manager._editor.Surface.Extensions.LineCollapsers.Remove(manager._projection);
         manager._editor.InvalidateTextView();
@@ -145,17 +143,6 @@ public sealed class FoldingManager
         if (low == 0) return false;
         var range = _collapsedRanges[low - 1];
         return line.Offset > range.Start && line.Offset + line.Length <= range.End;
-    }
-
-    private void OnSurfaceChanged(
-        Aprillz.MewUI.Controls.MultiLineTextBox previous,
-        Aprillz.MewUI.Controls.MultiLineTextBox current)
-    {
-        previous.Extensions.Projections.Remove(_projection);
-        previous.Extensions.LineCollapsers.Remove(_projection);
-        current.Extensions.Projections.Add(_projection);
-        current.Extensions.LineCollapsers.Add(_projection);
-        current.InvalidateTextView();
     }
 
     private sealed class FoldingProjection(FoldingManager manager) : ITextProjection, ITextLineCollapser

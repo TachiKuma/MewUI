@@ -24,7 +24,7 @@ public sealed class SearchPanel : ITextClassifier
         _document = editor.Document;
         _editor.Surface.Extensions.Classifiers.Add(this);
         _document.Changed += OnDocumentChanged;
-        _editor.SurfaceChanged += OnSurfaceChanged;
+        _editor.DocumentChanged += OnEditorDocumentChanged;
     }
 
     public static SearchPanel Install(TextEditor editor)
@@ -46,7 +46,7 @@ public sealed class SearchPanel : ITextClassifier
         panel._uninstalled = true;
         panel._editor.Surface.Extensions.Classifiers.Remove(panel);
         panel._document.Changed -= panel.OnDocumentChanged;
-        panel._editor.SurfaceChanged -= panel.OnSurfaceChanged;
+        panel._editor.DocumentChanged -= panel.OnEditorDocumentChanged;
         panel._editor.InvalidateTextView();
     }
 
@@ -290,13 +290,11 @@ public sealed class SearchPanel : ITextClassifier
 
     private static bool IsWordCharacter(char value) => char.IsLetterOrDigit(value) || value == '_';
 
-    private void OnSurfaceChanged(MultiLineTextBox previous, MultiLineTextBox current)
+    private void OnEditorDocumentChanged(object? sender, EventArgs e)
     {
-        previous.Extensions.Classifiers.Remove(this);
         _document.Changed -= OnDocumentChanged;
         _document = _editor.Document;
         _document.Changed += OnDocumentChanged;
-        current.Extensions.Classifiers.Add(this);
         Refresh();
     }
 }

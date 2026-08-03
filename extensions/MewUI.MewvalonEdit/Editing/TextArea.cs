@@ -16,8 +16,8 @@ public sealed class TextArea
         Caret = new Caret(this);
         Selection = new TextSelection(this);
         TextView = new TextView(this);
-        Attach(editor.Surface);
-        editor.SurfaceChanged += OnSurfaceChanged;
+        editor.Surface.EditingStateChanged += OnEditingStateChanged;
+        editor.Surface.TextInput += OnTextInput;
     }
 
     public TextDocument Document => _editor.Document;
@@ -36,24 +36,6 @@ public sealed class TextArea
     public event Action<TextInputEventArgs>? TextEntering;
 
     public void ReplaceSelection(string? text) => _editor.Surface.ReplaceSelection(text);
-
-    private void Attach(MultiLineTextBox surface)
-    {
-        surface.EditingStateChanged += OnEditingStateChanged;
-        surface.TextInput += OnTextInput;
-    }
-
-    private void Detach(MultiLineTextBox surface)
-    {
-        surface.EditingStateChanged -= OnEditingStateChanged;
-        surface.TextInput -= OnTextInput;
-    }
-
-    private void OnSurfaceChanged(MultiLineTextBox previous, MultiLineTextBox current)
-    {
-        Detach(previous);
-        Attach(current);
-    }
 
     private void OnEditingStateChanged()
     {
@@ -91,6 +73,12 @@ public sealed class TextSelection(TextArea textArea)
 
 public sealed class TextView(TextArea textArea)
 {
+    /// <summary>Extension pipeline of the editing surface. Registrations survive document changes.</summary>
+    public Text.TextViewExtensionPipeline Extensions => textArea.Editor.Surface.Extensions;
+
+    /// <summary>The editing surface as a text view host, for host-neutral extensions.</summary>
+    public Text.ITextViewHost Host => textArea.Editor.Surface;
+
     public string FontFamily
     {
         get => textArea.Editor.FontFamily;
