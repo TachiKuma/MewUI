@@ -236,7 +236,7 @@ public class TextEditor : ContentControl
     {
         if (_colorizer is not null)
         {
-            _surface.Extensions.Classifiers.Remove(_colorizer);
+            LineTransformers.Remove(_colorizer);
             _colorizer = null;
         }
         if (_syntaxHighlighting is not null)
@@ -244,7 +244,7 @@ public class TextEditor : ContentControl
             // First in the list: syntax colors are the base layer, so whitespace markers and search
             // highlights registered later keep their own colors where the ranges overlap.
             _colorizer = new HighlightingColorizer(_syntaxHighlighting, () => Theme.IsDark);
-            _surface.Extensions.Classifiers.Insert(0, _colorizer);
+            LineTransformers.Insert(0, _colorizer);
         }
         _surface.InvalidateTextView();
     }

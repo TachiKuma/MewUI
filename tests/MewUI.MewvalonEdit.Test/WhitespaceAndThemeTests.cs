@@ -1,6 +1,8 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.MewvalonEdit;
+using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Highlighting;
+using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.Text;
 
 namespace MewUI.MewvalonEdit.Test;
@@ -54,19 +56,15 @@ public sealed class WhitespaceAndThemeTests
     {
         var definition = HighlightingManager.Instance.GetDefinition("C#");
         Assert.IsNotNull(definition);
-        var text = "public int Value = 3;".AsMemory();
-        var context = new TextClassificationContext(
-            new LogicalTextLine(0, 0, text.Length, text.Length), text, IdentityTextOffsetMap.Instance);
+        const string SOURCE = "public int Value = 3;";
 
-        var dark = new List<TextPaintSpan>();
-        new HighlightingColorizer(definition, () => true).Classify(in context, dark);
-        var light = new List<TextPaintSpan>();
-        new HighlightingColorizer(definition, () => false).Classify(in context, light);
+        var dark = HighlightingTestHost.Colorize(definition, SOURCE, isDarkTheme: true);
+        var light = HighlightingTestHost.Colorize(definition, SOURCE, isDarkTheme: false);
 
-        var darkKeyword = dark.First(span => span.Range.Start == 0);
-        var lightKeyword = light.First(span => span.Range.Start == 0);
-        Assert.AreEqual(Color.FromRgb(86, 156, 214), darkKeyword.Foreground);
-        Assert.AreEqual(Color.FromRgb(0, 0, 255), lightKeyword.Foreground);
+        var darkKeyword = dark.First(element => element.RelativeTextOffset == 0);
+        var lightKeyword = light.First(element => element.RelativeTextOffset == 0);
+        Assert.AreEqual(Color.FromRgb(86, 156, 214), darkKeyword.TextRunProperties.ForegroundBrush);
+        Assert.AreEqual(Color.FromRgb(0, 0, 255), lightKeyword.TextRunProperties.ForegroundBrush);
     }
 
     [TestMethod]
@@ -74,14 +72,17 @@ public sealed class WhitespaceAndThemeTests
     {
         var definition = HighlightingManager.Instance.GetDefinition("C#");
         Assert.IsNotNull(definition);
-        var text = "public".AsMemory();
-        var spans = new List<TextPaintSpan>();
+        var document = new TextDocument("public");
+        var elements = new List<VisualLineElement>();
 
-        new HighlightingColorizer(definition).Classify(
-            new TextClassificationContext(
-                new LogicalTextLine(0, 0, text.Length, text.Length), text, IdentityTextOffsetMap.Instance),
-            spans);
+        new HighlightingColorizer(definition).Transform(new DefaultThemeContext(document), elements);
 
-        Assert.AreEqual(Color.FromRgb(86, 156, 214), spans[0].Foreground);
+        Assert.AreEqual(Color.FromRgb(86, 156, 214), elements[0].TextRunProperties.ForegroundBrush);
+    }
+
+    private sealed class DefaultThemeContext(TextDocument document) : ITextRunConstructionContext
+    {
+        public TextDocument Document => document;
+        public DocumentLine CurrentDocumentLine => document.GetLineByNumber(1);
     }
 }

@@ -1,7 +1,8 @@
-using Aprillz.MewUI.Text;
+using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Highlighting;
+using Aprillz.MewUI.MewvalonEdit.Rendering;
 
-namespace Aprillz.MewUI.MewvalonEdit.Test;
+namespace MewUI.MewvalonEdit.Test;
 
 [TestClass]
 public sealed class HighlightingTests
@@ -11,15 +12,33 @@ public sealed class HighlightingTests
     {
         var definition = HighlightingManager.Instance.GetDefinition("C#");
         Assert.IsNotNull(definition);
-        var classifier = new HighlightingColorizer(definition);
-        var output = new List<TextPaintSpan>();
-        var text = "public string Value = \"text\";".AsMemory();
 
-        classifier.Classify(new TextClassificationContext(
-            new LogicalTextLine(0, 0, text.Length, text.Length), text, IdentityTextOffsetMap.Instance), output);
+        var elements = HighlightingTestHost.Colorize(definition, "public string Value = \"text\";");
 
-        Assert.IsTrue(output.Any(span => span.Range.Start == 0 && span.Range.Length == 6));
-        Assert.IsTrue(output.Any(span => span.Range.Start == 7 && span.Range.Length == 6));
-        Assert.IsTrue(output.Any(span => span.Range.Length == 6 && span.Range.Start > 7));
+        Assert.IsTrue(elements.Any(element => element.RelativeTextOffset == 0 && element.DocumentLength == 6));
+        Assert.IsTrue(elements.Any(element => element.RelativeTextOffset == 7 && element.DocumentLength == 6));
+        Assert.IsTrue(elements.Any(element => element.DocumentLength == 6 && element.RelativeTextOffset > 7));
+    }
+}
+
+/// <summary>Runs a colorizer over a single-line document through the transformer contract.</summary>
+internal static class HighlightingTestHost
+{
+    public static List<VisualLineElement> Colorize(
+        IHighlightingDefinition definition,
+        string text,
+        bool isDarkTheme = true)
+    {
+        var document = new TextDocument(text);
+        var elements = new List<VisualLineElement>();
+        new HighlightingColorizer(definition, () => isDarkTheme)
+            .Transform(new SingleLineContext(document), elements);
+        return elements;
+    }
+
+    private sealed class SingleLineContext(TextDocument document) : ITextRunConstructionContext
+    {
+        public TextDocument Document => document;
+        public DocumentLine CurrentDocumentLine => document.GetLineByNumber(1);
     }
 }
