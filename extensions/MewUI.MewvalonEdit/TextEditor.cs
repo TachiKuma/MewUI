@@ -21,7 +21,7 @@ public class TextEditor : ContentControl
     private readonly SpaceMarkerClassifier _spaceMarkerColors;
     private readonly WhitespaceAdornmentProvider _whitespaceAdornments;
     private readonly LineTransformerAdapter _lineTransformers;
-    private readonly BackgroundRendererAdornmentProvider _backgroundRenderers;
+    private readonly BackgroundRendererRegistry _backgroundRenderers;
     private bool _showLineNumbers;
     private bool _highlightingRefreshPending;
 
@@ -33,7 +33,7 @@ public class TextEditor : ContentControl
         _spaceMarkerColors = new SpaceMarkerClassifier(Options, this);
         _whitespaceAdornments = new WhitespaceAdornmentProvider(Options, this);
         _lineTransformers = new LineTransformerAdapter(this);
-        _backgroundRenderers = new BackgroundRendererAdornmentProvider(this);
+        _backgroundRenderers = new BackgroundRendererRegistry(this);
         Options.PropertyChanged += OnOptionsChanged;
         _document = new TextDocument();
         _document.Changed += OnDocumentTextChanged;
@@ -60,7 +60,7 @@ public class TextEditor : ContentControl
         _surface.Extensions.Classifiers.Add(_lineTransformers);
         _surface.Extensions.Transformers.Add(_lineTransformers);
         _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
-        _surface.Extensions.AdornmentProviders.Add(_backgroundRenderers);
+        _backgroundRenderers.RegisterInto(_surface.Extensions);
         _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
         _lineNumberMargin = new LineNumberMargin(this) { IsVisible = _showLineNumbers };
         Content = new Grid()

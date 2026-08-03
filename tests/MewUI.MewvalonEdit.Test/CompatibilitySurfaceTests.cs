@@ -29,13 +29,16 @@ public sealed class CompatibilitySurfaceTests
     {
         public KnownLayer Layer => KnownLayer.Selection;
         public List<Rect> DrawnRects { get; } = [];
+        public int DrawCount { get; private set; }
 
         public void Draw(TextView textView, IGraphicsContext context)
         {
+            DrawCount++;
             foreach (var rect in BackgroundGeometryBuilder.GetRectsForSegment(textView, marker))
             {
                 DrawnRects.Add(rect);
-                context.FillRectangle(rect, marker.Color);
+                // The surface is absent in this test; a ported service fills here.
+                context?.FillRectangle(rect, marker.Color);
             }
         }
 
@@ -103,24 +106,33 @@ public sealed class CompatibilitySurfaceTests
     }
 
     [TestMethod]
-    public void BackgroundRendererIsRegisteredOnTheMappedLayer()
+    public void BackgroundRendererRunsOnceOnTheMappedLayer()
     {
         var editor = new TextEditor { Text = "hello world" };
         var service = new TextMarkerService(new TextMarker(0, 5, Color.FromRgb(0, 0, 200)));
         editor.TextArea.TextView.BackgroundRenderers.Add(service);
+        var pipeline = editor.TextArea.TextView.Extensions;
 
-        var adornments = new List<ITextAdornment>();
-        foreach (var provider in editor.TextArea.TextView.Extensions.AdornmentProviders)
-        {
-            provider.GetAdornments(
-                new TextAdornmentContext(
-                    new LogicalTextLine(0, 0, editor.Text.Length, editor.Text.Length),
-                    editor.Text.AsMemory(),
-                    IdentityTextOffsetMap.Instance),
-                adornments);
-        }
+        // One bridge per known layer; only the mapped one may reach the renderer.
+        Assert.HasCount(4, pipeline.ViewportRenderers);
+        var selectionLayer = pipeline.ViewportRenderers
+            .Single(renderer => renderer.Layer == TextAdornmentLayer.Selection);
+        var otherLayer = pipeline.ViewportRenderers
+            .First(renderer => renderer.Layer == TextAdornmentLayer.Background);
 
-        Assert.ContainsSingle(adornments.Where(item => item.Layer == TextAdornmentLayer.Selection));
+        var context = new StubRenderContext();
+        selectionLayer.Draw(context, new Rect(0, 0, 100, 100));
+        otherLayer.Draw(context, new Rect(0, 0, 100, 100));
+
+        Assert.AreEqual(1, service.DrawCount, "The renderer must run once per frame, on its own layer only.");
+    }
+
+    private sealed class StubRenderContext : ITextRenderContext
+    {
+        public IGraphicsContext Graphics => null!;
+        public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options) { }
+        public void DrawBackground(ITextLayout layout, Point origin, in TextDrawOptions options) { }
+        public void DrawForeground(ITextLayout layout, Point origin, in TextDrawOptions options) { }
     }
 
     [TestMethod]

@@ -122,26 +122,27 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
 }
 
 /// <summary>
-/// Bridges <see cref="IBackgroundRenderer"/> onto per-line adornments. Each renderer is invoked once
-/// per visible line with the surface clipped to that line, so the layered draw order holds while the
-/// renderer still computes geometry for the whole viewport as it does in AvalonEdit.
+/// Holds the editor's background renderers and draws them once per frame at each known layer, so a
+/// renderer computes geometry for the whole viewport exactly once as it does in AvalonEdit.
 /// </summary>
-internal sealed class BackgroundRendererAdornmentProvider(TextEditor editor) : ITextAdornmentProvider
+internal sealed class BackgroundRendererRegistry(TextEditor editor)
 {
     public IList<IBackgroundRenderer> Renderers { get; } =
         new ExtensionList<IBackgroundRenderer>(editor.InvalidateTextView);
 
-    public void GetAdornments(in TextAdornmentContext context, IList<ITextAdornment> output)
+    /// <summary>Adds one viewport renderer per known layer; each draws the renderers assigned to it.</summary>
+    public void RegisterInto(TextViewExtensionPipeline pipeline)
     {
-        foreach (var renderer in Renderers)
+        foreach (var layer in Enum.GetValues<KnownLayer>())
         {
-            output.Add(new BackgroundRendererAdornment(renderer, editor));
+            pipeline.ViewportRenderers.Add(new LayerBridge(editor, layer, Renderers));
         }
     }
 
-    private sealed class BackgroundRendererAdornment(IBackgroundRenderer renderer, TextEditor editor) : ITextAdornment
+    private sealed class LayerBridge(TextEditor editor, KnownLayer layer, IList<IBackgroundRenderer> renderers)
+        : ITextViewportRenderer
     {
-        public TextAdornmentLayer Layer => renderer.Layer switch
+        public TextAdornmentLayer Layer => layer switch
         {
             KnownLayer.Background => TextAdornmentLayer.Background,
             KnownLayer.Selection => TextAdornmentLayer.Selection,
@@ -149,19 +150,14 @@ internal sealed class BackgroundRendererAdornmentProvider(TextEditor editor) : I
             _ => TextAdornmentLayer.Text
         };
 
-        public void Draw(ITextRenderContext context, TextLineLayout line, Point origin)
+        public void Draw(ITextRenderContext context, Rect viewportBounds)
         {
-            var graphics = context.Graphics;
-            var viewport = editor.Surface.TextViewportBounds;
-            graphics.Save();
-            try
+            foreach (var renderer in renderers)
             {
-                graphics.SetClip(new Rect(viewport.X, origin.Y, viewport.Width, line.Height));
-                renderer.Draw(editor.TextArea.TextView, graphics);
-            }
-            finally
-            {
-                graphics.Restore();
+                if (renderer.Layer == layer)
+                {
+                    renderer.Draw(editor.TextArea.TextView, context.Graphics);
+                }
             }
         }
     }
