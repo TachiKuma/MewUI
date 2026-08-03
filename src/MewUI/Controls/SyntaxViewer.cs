@@ -151,32 +151,26 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         try
         {
             context.SetClip(LayoutRounding.MakeClipRect(_contentBounds, GetDpi() / 96.0));
-            var selection = new TextRange(SelectionStart, SelectionLength);
+            // Two passes so viewport renderers land between the selection highlights and the glyphs.
+            var text = context.Text;
+            DrawViewportRenderers(text, TextAdornmentLayer.Background);
             foreach (var line in _view.MaterializedLines)
             {
-                TextPaintSpan[] paint = TextSelectionPresentation.TryCreateSpan(
-                    line.LogicalLine,
-                    selection,
-                    Theme.Palette.SelectionText,
-                    Theme.Palette.SelectionBackground,
-                    out var span)
-                    ? [span with { Foreground = null }]
-                    : [];
-                double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
-                var origin = new Point(
-                    _contentBounds.X - _horizontalOffset,
-                    _contentBounds.Y + documentY - _verticalOffset);
-                var options = new TextDrawOptions(Theme.Palette.WindowText, paint, Owner: line);
-                line.Draw(context.Text, origin, in options);
+                line.DrawBackground(text, GetLineOrigin(line), CreateDrawOptions(line));
             }
 
-            // The viewer paints no caret, but caret-layer adornments still belong above every line.
+            DrawViewportRenderers(text, TextAdornmentLayer.Selection);
             foreach (var line in _view.MaterializedLines)
             {
-                double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
-                line.DrawCaretLayer(context.Text, new Point(
-                    _contentBounds.X - _horizontalOffset,
-                    _contentBounds.Y + documentY - _verticalOffset));
+                line.DrawForeground(text, GetLineOrigin(line), CreateDrawOptions(line));
+            }
+
+            // The viewer paints no caret, but the topmost layer still belongs above every line.
+            DrawViewportRenderers(text, TextAdornmentLayer.Text);
+            DrawViewportRenderers(text, TextAdornmentLayer.Caret);
+            foreach (var line in _view.MaterializedLines)
+            {
+                line.DrawCaretLayer(text, GetLineOrigin(line));
             }
         }
         finally
@@ -340,6 +334,38 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         return LayoutRounding.SnapViewportRectToPixels(
             GetSnappedBorderBounds(Bounds).Deflate(new Thickness(border)).Deflate(Padding),
             GetDpi() / 96.0);
+    }
+
+    private Point GetLineOrigin(TextLineLayout line)
+    {
+        double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
+        return new Point(
+            _contentBounds.X - _horizontalOffset,
+            _contentBounds.Y + documentY - _verticalOffset);
+    }
+
+    private TextDrawOptions CreateDrawOptions(TextLineLayout line)
+    {
+        TextPaintSpan[] paint = TextSelectionPresentation.TryCreateSpan(
+            line.LogicalLine,
+            new TextRange(SelectionStart, SelectionLength),
+            Theme.Palette.SelectionText,
+            Theme.Palette.SelectionBackground,
+            out var span)
+            ? [span with { Foreground = null }]
+            : [];
+        return new TextDrawOptions(Theme.Palette.WindowText, paint, Owner: line);
+    }
+
+    private void DrawViewportRenderers(ITextRenderContext context, TextAdornmentLayer layer)
+    {
+        foreach (var renderer in Extensions.ViewportRenderers)
+        {
+            if (renderer.Layer == layer)
+            {
+                renderer.Draw(context, _contentBounds);
+            }
+        }
     }
 
     private void ReplaceDocument(string value)

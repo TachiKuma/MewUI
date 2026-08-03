@@ -125,12 +125,34 @@ public sealed class TextLineLayout
         return new Rect(DocumentX + bounds.X, bounds.Y, bounds.Width, bounds.Height);
     }
 
+    /// <summary>Draws the whole line. Hosts that interleave viewport renderers call the two passes instead.</summary>
     public void Draw(ITextRenderContext context, Point origin, in TextDrawOptions options)
+    {
+        DrawBackground(context, origin, in options);
+        DrawForeground(context, origin, in options);
+    }
+
+    /// <summary>First pass: background adornments, paint-span backgrounds, then the selection layer.</summary>
+    public void DrawBackground(ITextRenderContext context, Point origin, in TextDrawOptions options)
     {
         ArgumentNullException.ThrowIfNull(context);
         var documentOrigin = new Point(origin.X + DocumentX, origin.Y);
         DrawAdornments(context, documentOrigin, TextAdornmentLayer.Background);
+        context.DrawBackground(_layout, documentOrigin, Combine(in options));
+        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Selection);
+    }
 
+    /// <summary>Second pass: glyphs and the adornments that sit above them.</summary>
+    public void DrawForeground(ITextRenderContext context, Point origin, in TextDrawOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var documentOrigin = new Point(origin.X + DocumentX, origin.Y);
+        context.DrawForeground(_layout, documentOrigin, Combine(in options));
+        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Text);
+    }
+
+    private TextDrawOptions Combine(in TextDrawOptions options)
+    {
         TextDrawOptions effective = options;
         if (PaintSpans.Count > 0)
         {
@@ -149,11 +171,7 @@ public sealed class TextLineLayout
                 effective = options with { PaintSpans = combined };
             }
         }
-        context.DrawBackground(_layout, documentOrigin, in effective);
-        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Selection);
-        context.DrawForeground(_layout, documentOrigin, in effective);
-
-        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Text);
+        return effective;
     }
 
     /// <summary>Draws the adornments that belong above the caret; the host calls this after painting its caret.</summary>

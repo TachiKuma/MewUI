@@ -220,21 +220,31 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             return;
         }
+        // Two passes so viewport renderers can sit above every selection highlight and below every
+        // glyph. Interleaving per line would force each renderer to run once per line.
         var selection = _editor.Selection;
+        var text = context.Text;
+        DrawViewportRenderers(text, TextAdornmentLayer.Background);
         foreach (var line in _view.MaterializedLines)
         {
-            TextPaintSpan[] paint = CreatePaintSpans(line, selection);
-            double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
-            var origin = new Point(
-                _contentBounds.X - _horizontalOffset,
-                _contentBounds.Y + documentY - _verticalOffset);
             var options = new TextDrawOptions(
                 Theme.Palette.WindowText,
-                paint,
+                CreatePaintSpans(line, selection),
                 Owner: line);
-            line.Draw(context.Text, origin, in options);
+            line.DrawBackground(text, GetLineOrigin(line), in options);
         }
 
+        DrawViewportRenderers(text, TextAdornmentLayer.Selection);
+        foreach (var line in _view.MaterializedLines)
+        {
+            var options = new TextDrawOptions(
+                Theme.Palette.WindowText,
+                CreatePaintSpans(line, selection),
+                Owner: line);
+            line.DrawForeground(text, GetLineOrigin(line), in options);
+        }
+
+        DrawViewportRenderers(text, TextAdornmentLayer.Text);
         DrawCompositionUnderlines(context, _contentBounds.Right);
 
         if (IsFocused && _caretVisible)
@@ -252,12 +262,29 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             return;
         }
+        DrawViewportRenderers(context.Text, TextAdornmentLayer.Caret);
         foreach (var line in _view.MaterializedLines)
         {
-            double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
-            line.DrawCaretLayer(context.Text, new Point(
-                _contentBounds.X - _horizontalOffset,
-                _contentBounds.Y + documentY - _verticalOffset));
+            line.DrawCaretLayer(context.Text, GetLineOrigin(line));
+        }
+    }
+
+    private Point GetLineOrigin(TextLineLayout line)
+    {
+        double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
+        return new Point(
+            _contentBounds.X - _horizontalOffset,
+            _contentBounds.Y + documentY - _verticalOffset);
+    }
+
+    private void DrawViewportRenderers(ITextRenderContext context, TextAdornmentLayer layer)
+    {
+        foreach (var renderer in Extensions.ViewportRenderers)
+        {
+            if (renderer.Layer == layer)
+            {
+                renderer.Draw(context, _contentBounds);
+            }
         }
     }
 

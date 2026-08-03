@@ -41,6 +41,41 @@ public sealed class TextAdornmentLayerTests
             string.Join(',', order));
     }
 
+    [TestMethod]
+    public void HostsCanSplitTheLineIntoTwoPasses()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var order = new List<string>();
+        var extensions = new TextViewExtensionPipeline();
+        extensions.AdornmentProviders.Add(new RecordingAdornmentProvider(order));
+        using var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            new StringTextDocument("hello"),
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.NoWrap },
+            extensions,
+            dpi: 96);
+        view.SetViewport(new TextViewport(200, 50));
+        var line = view.MaterializedLines[0];
+        var recorder = new RecordingRenderContext(order);
+        var options = new TextDrawOptions(Color.Black);
+
+        // A viewport renderer runs between the passes, above every selection and below every glyph.
+        line.DrawBackground(recorder, new Point(0, 0), in options);
+        order.Add("ViewportSelection");
+        line.DrawForeground(recorder, new Point(0, 0), in options);
+
+        Assert.AreEqual(
+            "Background,DrawBackground,Selection,ViewportSelection,DrawForeground,Text",
+            string.Join(',', order));
+    }
+
     private sealed class RecordingAdornmentProvider(List<string> order) : ITextAdornmentProvider
     {
         public void GetAdornments(in TextAdornmentContext context, IList<ITextAdornment> output)
