@@ -43,9 +43,9 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         MewProperty<int>.Register<TextBase>(nameof(MaxLength), 0);
 
     // Shared editing state: derived controls access the document/session directly, matching
-    // the field names they used before the extraction.
-    private protected readonly EditableTextDocument _document;
-    private protected readonly TextEditorSession _editor;
+    // the field names they used before the extraction. Reassigned only by ReplaceDocumentCore.
+    private protected EditableTextDocument _document;
+    private protected TextEditorSession _editor;
     private protected bool _suppressNewLineInput;
     private protected bool _suppressTabInput;
     private protected int _compositionStart;
@@ -416,6 +416,39 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         finally
         {
             _syncingText = false;
+        }
+    }
+
+    /// <summary>Swaps the backing document; session state resets while control identity and subscribers survive.</summary>
+    private protected void ReplaceDocumentCore(EditableTextDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (_editor.IsComposing)
+        {
+            _editor.CancelComposition();
+        }
+        _compositionStart = 0;
+        _compositionLength = 0;
+        _compositionAttributes = null;
+        _document.Changed -= OnDocumentTextChanged;
+        _editor.StateChanged -= SyncSelectionMirrors;
+        _document = document;
+        _editor = new TextEditorSession(document);
+        _document.Changed += OnDocumentTextChanged;
+        _editor.StateChanged += SyncSelectionMirrors;
+        _textSnapshotVersion = -1;
+        SyncSelectionMirrors();
+        if (TextSyncProperty is MewProperty<string> mirror)
+        {
+            _syncingText = true;
+            try
+            {
+                SetValue(mirror, GetTextSnapshot());
+            }
+            finally
+            {
+                _syncingText = false;
+            }
         }
     }
 

@@ -90,7 +90,13 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
 
     public double HorizontalOffset => _horizontalOffset;
     public double VerticalOffset => _verticalOffset;
-    public EditableTextDocument Document => _document;
+    /// <summary>Backing document. Assigning a new one keeps the view and extension registrations while caret, selection, scroll, and undo history reset.</summary>
+    public EditableTextDocument Document
+    {
+        get => _document;
+        set => ReplaceDocument(value);
+    }
+
     IReadOnlyTextDocument ITextViewHost.Document => _document;
     public TextViewExtensionPipeline Extensions { get; }
 
@@ -616,6 +622,26 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         _horizontalOffset = value;
         if (_horizontalScrollBar.IsVisible) _horizontalScrollBar.Value = value;
         if (invalidate) InvalidateVisual();
+    }
+
+    private void ReplaceDocument(EditableTextDocument document)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        if (ReferenceEquals(document, _document))
+        {
+            return;
+        }
+        _document.Changed -= OnDocumentChanged;
+        _editor.StateChanged -= OnEditorStateChanged;
+        ReplaceDocumentCore(document);
+        _document.Changed += OnDocumentChanged;
+        _editor.StateChanged += OnEditorStateChanged;
+        _preferredCaretX = double.NaN;
+        _verticalOffset = 0;
+        ResetView();
+        InvalidateMeasure();
+        InvalidateVisual();
+        DocumentChanged?.Invoke(this);
     }
 
     private void ResetView()
