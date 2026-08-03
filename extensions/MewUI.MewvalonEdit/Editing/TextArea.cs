@@ -3,6 +3,7 @@ using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Indentation;
+using Aprillz.MewUI.MewvalonEdit.Rendering;
 
 namespace Aprillz.MewUI.MewvalonEdit.Editing;
 
@@ -71,25 +72,3 @@ public sealed class TextSelection(TextArea textArea)
         => IsEmpty ? Array.Empty<ISegment>() : [new SimpleSegment(textArea.Editor.SelectionStart, Length)];
 }
 
-public sealed class TextView(TextArea textArea)
-{
-    /// <summary>Extension pipeline of the editing surface. Registrations survive document changes.</summary>
-    public Text.TextViewExtensionPipeline Extensions => textArea.Editor.Surface.Extensions;
-
-    /// <summary>The editing surface as a text view host, for host-neutral extensions.</summary>
-    public Text.ITextViewHost Host => textArea.Editor.Surface;
-
-    public string FontFamily
-    {
-        get => textArea.Editor.FontFamily;
-        set => textArea.Editor.FontFamily = value;
-    }
-
-    public Color Foreground
-    {
-        get => textArea.Editor.Foreground;
-        set => textArea.Editor.Foreground = value;
-    }
-
-    public void Redraw() => textArea.Editor.InvalidateTextView();
-}

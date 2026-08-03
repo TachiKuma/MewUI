@@ -20,6 +20,8 @@ public class TextEditor : ContentControl
     private readonly SpaceMarkerProjection _spaceMarkers;
     private readonly SpaceMarkerClassifier _spaceMarkerColors;
     private readonly WhitespaceAdornmentProvider _whitespaceAdornments;
+    private readonly LineTransformerAdapter _lineTransformers;
+    private readonly BackgroundRendererAdornmentProvider _backgroundRenderers;
     private bool _showLineNumbers;
 
     public TextEditor()
@@ -29,6 +31,8 @@ public class TextEditor : ContentControl
         _spaceMarkers = new SpaceMarkerProjection(Options);
         _spaceMarkerColors = new SpaceMarkerClassifier(Options, this);
         _whitespaceAdornments = new WhitespaceAdornmentProvider(Options, this);
+        _lineTransformers = new LineTransformerAdapter(this);
+        _backgroundRenderers = new BackgroundRendererAdornmentProvider(this);
         Options.PropertyChanged += OnOptionsChanged;
         _document = new TextDocument();
         _document.Changed += OnDocumentTextChanged;
@@ -50,7 +54,12 @@ public class TextEditor : ContentControl
         };
         _surface.TextInput += OnSurfaceTextInput;
         _surface.Extensions.Projections.Add(_spaceMarkers);
+        // Ported transformers land below the whitespace markers, as AvalonEdit's baked marker
+        // glyphs cannot be recolored by a colorizer.
+        _surface.Extensions.Classifiers.Add(_lineTransformers);
+        _surface.Extensions.Transformers.Add(_lineTransformers);
         _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
+        _surface.Extensions.AdornmentProviders.Add(_backgroundRenderers);
         _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
         _lineNumberMargin = new LineNumberMargin(this) { IsVisible = _showLineNumbers };
         Content = new Grid()
@@ -200,6 +209,8 @@ public class TextEditor : ContentControl
 
     internal MultiLineTextBox Surface => _surface;
     internal Color WhitespaceMarkerColor => Theme.Palette.PlaceholderText;
+    internal IList<IBackgroundRenderer> BackgroundRenderers => _backgroundRenderers.Renderers;
+    internal IList<IVisualLineTransformer> LineTransformers => _lineTransformers.Transformers;
 
     public event EventHandler? TextChanged;
     public event EventHandler? DocumentChanged;
