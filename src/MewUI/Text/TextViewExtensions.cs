@@ -37,11 +37,20 @@ public interface ITextElementGenerator
     void Generate(in TextElementContext context, IList<InlineRun> output);
 }
 
+/// <summary>Draw order of an adornment relative to the surfaces the text host paints itself.</summary>
 public enum TextAdornmentLayer
 {
+    /// <summary>Below the selection highlight.</summary>
     Background,
+
+    /// <summary>Above the selection highlight, below the glyphs.</summary>
+    Selection,
+
+    /// <summary>Above the glyphs, below the caret.</summary>
     Text,
-    Foreground
+
+    /// <summary>Above the caret.</summary>
+    Caret
 }
 
 public interface ITextAdornment

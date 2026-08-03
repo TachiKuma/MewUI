@@ -140,7 +140,7 @@ public sealed class SyntaxViewerTests
 
         private sealed class CountingAdornment(CountingAdornmentProvider owner) : ITextAdornment
         {
-            public TextAdornmentLayer Layer => TextAdornmentLayer.Foreground;
+            public TextAdornmentLayer Layer => TextAdornmentLayer.Text;
 
             public void Draw(ITextRenderContext context, TextLineLayout line, Point origin)
                 => owner.DrawCount++;

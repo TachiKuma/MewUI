@@ -145,4 +145,10 @@ public readonly record struct TextDrawOptions(
 public interface ITextRenderContext
 {
     void Draw(ITextLayout layout, Point origin, in TextDrawOptions options);
+
+    /// <summary>Paints only the paint-span backgrounds and overlays, for callers that insert content between them and the glyphs.</summary>
+    void DrawBackground(ITextLayout layout, Point origin, in TextDrawOptions options);
+
+    /// <summary>Paints glyphs and decorations, assuming <see cref="DrawBackground"/> already ran for the same layout.</summary>
+    void DrawForeground(ITextLayout layout, Point origin, in TextDrawOptions options);
 }

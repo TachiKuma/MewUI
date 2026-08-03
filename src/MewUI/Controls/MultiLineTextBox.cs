@@ -242,6 +242,23 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
             var caret = GetCharRectInWindow(_editor.CaretPosition);
             context.FillRectangle(new Rect(caret.X, caret.Y, 1, Math.Max(1, caret.Height)), Theme.Palette.WindowText);
         }
+
+        DrawCaretLayerAdornments(context);
+    }
+
+    private void DrawCaretLayerAdornments(IGraphicsContext context)
+    {
+        if (_view is null)
+        {
+            return;
+        }
+        foreach (var line in _view.MaterializedLines)
+        {
+            double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
+            line.DrawCaretLayer(context.Text, new Point(
+                _contentBounds.X - _horizontalOffset,
+                _contentBounds.Y + documentY - _verticalOffset));
+        }
     }
 
     private TextPaintSpan[] CreatePaintSpans(TextLineLayout line, TextRange selection)

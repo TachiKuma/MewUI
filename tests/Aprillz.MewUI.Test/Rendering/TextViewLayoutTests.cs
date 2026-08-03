@@ -398,7 +398,7 @@ public sealed class TextViewLayoutTests
 
     private sealed class MarkerAdornment : ITextAdornment
     {
-        public TextAdornmentLayer Layer => TextAdornmentLayer.Foreground;
+        public TextAdornmentLayer Layer => TextAdornmentLayer.Text;
         public void Draw(ITextRenderContext context, TextLineLayout line, Point origin) { }
     }
 

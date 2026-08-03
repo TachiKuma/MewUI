@@ -169,6 +169,15 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
                 var options = new TextDrawOptions(Theme.Palette.WindowText, paint, Owner: line);
                 line.Draw(context.Text, origin, in options);
             }
+
+            // The viewer paints no caret, but caret-layer adornments still belong above every line.
+            foreach (var line in _view.MaterializedLines)
+            {
+                double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
+                line.DrawCaretLayer(context.Text, new Point(
+                    _contentBounds.X - _horizontalOffset,
+                    _contentBounds.Y + documentY - _verticalOffset));
+            }
         }
         finally
         {

@@ -25,17 +25,51 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
 
     public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options)
     {
-        if (layout is not ManagedTextLayout managed)
-            throw new ArgumentException("The layout was created by a different text engine.", nameof(layout));
-
+        var managed = Validate(layout);
         if (LegacyTextRenderContext.CanDrawFastPath(managed, in options))
         {
             _fastPathRenderer.Draw(managed, origin, in options);
             return;
         }
+        DrawBackgroundCore(managed, origin, in options);
+        DrawForegroundCore(managed, origin, in options);
+    }
 
+    public void DrawBackground(ITextLayout layout, Point origin, in TextDrawOptions options)
+    {
+        var managed = Validate(layout);
+        if (!LegacyTextRenderContext.CanDrawFastPath(managed, in options))
+        {
+            DrawBackgroundCore(managed, origin, in options);
+        }
+    }
+
+    public void DrawForeground(ITextLayout layout, Point origin, in TextDrawOptions options)
+    {
+        var managed = Validate(layout);
+        if (LegacyTextRenderContext.CanDrawFastPath(managed, in options))
+        {
+            _fastPathRenderer.Draw(managed, origin, in options);
+            return;
+        }
+        DrawForegroundCore(managed, origin, in options);
+    }
+
+    private static ManagedTextLayout Validate(ITextLayout layout)
+    {
+        if (layout is not ManagedTextLayout managed)
+            throw new ArgumentException("The layout was created by a different text engine.", nameof(layout));
+        return managed;
+    }
+
+    private void DrawBackgroundCore(ManagedTextLayout managed, Point origin, in TextDrawOptions options)
+    {
         DrawBackgrounds(managed, origin, options.PaintSpans.Span);
         DrawOverlays(managed, origin, options.Overlays.Span);
+    }
+
+    private void DrawForegroundCore(ManagedTextLayout managed, Point origin, in TextDrawOptions options)
+    {
         foreach (var line in managed.ManagedLines)
         {
             var clusters = managed.EnsureClusters(line);

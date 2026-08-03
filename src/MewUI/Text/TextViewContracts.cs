@@ -149,10 +149,18 @@ public sealed class TextLineLayout
                 effective = options with { PaintSpans = combined };
             }
         }
-        context.Draw(_layout, documentOrigin, in effective);
+        context.DrawBackground(_layout, documentOrigin, in effective);
+        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Selection);
+        context.DrawForeground(_layout, documentOrigin, in effective);
 
         DrawAdornments(context, documentOrigin, TextAdornmentLayer.Text);
-        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Foreground);
+    }
+
+    /// <summary>Draws the adornments that belong above the caret; the host calls this after painting its caret.</summary>
+    public void DrawCaretLayer(ITextRenderContext context, Point origin)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        DrawAdornments(context, new Point(origin.X + DocumentX, origin.Y), TextAdornmentLayer.Caret);
     }
 
     public int MapProjectedOffsetToSource(int projectedOffset)
