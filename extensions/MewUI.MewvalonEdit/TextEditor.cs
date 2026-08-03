@@ -23,6 +23,7 @@ public class TextEditor : ContentControl
     private readonly LineTransformerAdapter _lineTransformers;
     private readonly BackgroundRendererAdornmentProvider _backgroundRenderers;
     private bool _showLineNumbers;
+    private bool _highlightingRefreshPending;
 
     public TextEditor()
     {
@@ -244,9 +245,33 @@ public class TextEditor : ContentControl
             // First in the list: syntax colors are the base layer, so whitespace markers and search
             // highlights registered later keep their own colors where the ranges overlap.
             _colorizer = new HighlightingColorizer(_syntaxHighlighting, () => Theme.IsDark);
+            _colorizer.HighlightingStateChanged += (_, _) => RequestHighlightingRefresh();
             LineTransformers.Insert(0, _colorizer);
         }
         _surface.InvalidateTextView();
+    }
+
+    /// <summary>
+    /// Repaints after a highlighting span changed the state the lines below start from. The signal
+    /// arrives while a line is being laid out, so the rebuild is posted instead of run in place.
+    /// </summary>
+    private void RequestHighlightingRefresh()
+    {
+        if (_highlightingRefreshPending)
+        {
+            return;
+        }
+        var dispatcher = Application.IsRunning ? Application.Current.Dispatcher : null;
+        if (dispatcher is null)
+        {
+            return;
+        }
+        _highlightingRefreshPending = true;
+        dispatcher.BeginInvoke(() =>
+        {
+            _highlightingRefreshPending = false;
+            InvalidateTextView();
+        });
     }
 
     private void OnDocumentTextChanged(object? sender, DocumentChangeEventArgs e)

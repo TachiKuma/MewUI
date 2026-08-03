@@ -10,6 +10,9 @@ namespace Aprillz.MewUI.MewvalonEdit.Highlighting;
 public class HighlightingColorizer(IHighlightingDefinition definition, Func<bool>? isDarkTheme = null)
     : DocumentColorizingTransformer
 {
+    private DocumentHighlighter? _highlighter;
+    private TextDocument? _highlighterDocument;
+
     public IHighlightingDefinition Definition { get; } = definition ?? throw new ArgumentNullException(nameof(definition));
 
     protected override void ColorizeLine(DocumentLine line)
@@ -21,6 +24,16 @@ public class HighlightingColorizer(IHighlightingDefinition definition, Func<bool
         }
 
         bool isDark = isDarkTheme?.Invoke() ?? true;
+        if (Definition.MainRuleSet.Spans.Count > 0)
+        {
+            // Spans can cross lines, so the stateful highlighter owns the scan.
+            foreach (var section in GetHighlighter(context.Document).HighlightLine(line.LineNumber).Sections)
+            {
+                ApplyColorToElement(line.Offset + section.Offset, section.Length, section.Color, isDark);
+            }
+            return;
+        }
+
         string text = context.Document.GetText(line.Offset, line.Length);
         foreach (var rule in Definition.MainRuleSet.Rules)
         {
@@ -30,6 +43,21 @@ public class HighlightingColorizer(IHighlightingDefinition definition, Func<bool
                 ApplyColorToElement(line.Offset + match.Index, match.Length, rule.Color, isDark);
             }
         }
+    }
+
+    /// <summary>Raised with the line range that must be repainted after a span crossed lines.</summary>
+    public event Action<int, int>? HighlightingStateChanged;
+
+    private DocumentHighlighter GetHighlighter(TextDocument document)
+    {
+        if (_highlighter is null || !ReferenceEquals(_highlighterDocument, document))
+        {
+            _highlighter?.Dispose();
+            _highlighter = new DocumentHighlighter(document, Definition);
+            _highlighter.HighlightingStateChanged += (from, to) => HighlightingStateChanged?.Invoke(from, to);
+            _highlighterDocument = document;
+        }
+        return _highlighter;
     }
 
     /// <summary>Applies one highlighting color to a document range. Override to adjust how colors reach the view.</summary>

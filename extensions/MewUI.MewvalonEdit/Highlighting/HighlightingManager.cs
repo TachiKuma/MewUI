@@ -67,6 +67,8 @@ public sealed class HighlightingManager
             LightForeground = Color.FromRgb(9, 134, 88)
         };
         var csharp = new HighlightingDefinition("C#")
+            .AddSpan(@"/\*", @"\*/", comment)
+            .AddSpan(@"@""", @"""(?!"")", text)
             .AddColor("Keyword", keyword)
             .AddColor("Type", type)
             .AddColor("String", text)
@@ -90,7 +92,7 @@ public sealed class HighlightingManager
             LightForeground = Color.FromRgb(4, 81, 165)
         };
         var xml = new HighlightingDefinition("XML")
-            .AddRule(@"<!--[\s\S]*?-->", comment)
+            .AddSpan("<!--", "-->", comment)
             .AddRule(@"</?[A-Za-z_][\w:.-]*", tag)
             .AddRule(@"\b[A-Za-z_][\w:.-]*(?=\s*=)", attribute)
             .AddRule(@"""(?:\\.|[^""\\])*""", text);
