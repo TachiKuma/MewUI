@@ -257,7 +257,26 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
         using (ProfilerMarkers.TextDraw.Auto())
         {
             var options = new TextDrawOptions(Foreground, spans, Owner: this);
-            context.Text.Draw(layout, new Point(bounds.X, y), in options);
+            var origin = new Point(bounds.X, y);
+            // The engine draws from an origin with no extent of its own, so text longer than the
+            // arranged box would paint over whatever sits next to it.
+            if (layout.MeasuredSize.Width > bounds.Width + 0.5 || layout.ContentHeight > bounds.Height + 0.5)
+            {
+                context.Save();
+                try
+                {
+                    context.SetClip(LayoutRounding.MakeClipRect(bounds, GetDpi() / 96.0));
+                    context.Text.Draw(layout, origin, in options);
+                }
+                finally
+                {
+                    context.Restore();
+                }
+            }
+            else
+            {
+                context.Text.Draw(layout, origin, in options);
+            }
         }
     }
 
