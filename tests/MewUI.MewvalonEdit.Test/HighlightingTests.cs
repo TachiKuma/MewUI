@@ -16,7 +16,7 @@ public sealed class HighlightingTests
         var text = "public string Value = \"text\";".AsMemory();
 
         classifier.Classify(new TextClassificationContext(
-            new LogicalTextLine(0, 0, text.Length, text.Length), text), output);
+            new LogicalTextLine(0, 0, text.Length, text.Length), text, IdentityTextOffsetMap.Instance), output);
 
         Assert.IsTrue(output.Any(span => span.Range.Start == 0 && span.Range.Length == 6));
         Assert.IsTrue(output.Any(span => span.Range.Start == 7 && span.Range.Length == 6));
