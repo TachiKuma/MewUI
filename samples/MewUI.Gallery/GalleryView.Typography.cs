@@ -7,17 +7,22 @@ partial class GalleryView
 {
     private FrameworkElement TypographyPage()
     {
-        var runDemo = new SyntaxViewer
-        {
-            Width = 620,
-            Height = 112,
-            Wrap = true,
-            Text = "Normal text, bold text, italic text, accent text, underlined text, and struck text.\nMixed fonts: Segoe UI + Consolas + 22 pt."
-        };
-        var runStyler = new RunLikeTextStyler();
-        runDemo.Extensions.Classifiers.Add(runStyler);
-        runDemo.Extensions.Transformers.Add(runStyler);
-        runDemo.InvalidateTextView();
+        var runDemo = new TextBlock().Width(620).TextWrapping(TextWrapping.Wrap);
+        runDemo.Inlines.Add(new Run("Normal text, "));
+        runDemo.Inlines.Add(new Run("bold text") { FontWeight = FontWeight.Bold });
+        runDemo.Inlines.Add(new Run(", "));
+        runDemo.Inlines.Add(new Run("italic text") { Italic = true });
+        runDemo.Inlines.Add(new Run(", "));
+        runDemo.Inlines.Add(new Run("accent text") { Foreground = Color.FromHex("#D83B01") });
+        runDemo.Inlines.Add(new Run(", "));
+        runDemo.Inlines.Add(new Run("underlined text") { Decoration = TextDecoration.Underline });
+        runDemo.Inlines.Add(new Run(", and "));
+        runDemo.Inlines.Add(new Run("struck text") { Decoration = TextDecoration.Strikethrough });
+        runDemo.Inlines.Add(new Run(".\nMixed fonts: Segoe UI + "));
+        runDemo.Inlines.Add(new Run("Consolas") { FontFamily = "Consolas" });
+        runDemo.Inlines.Add(new Run(" + "));
+        runDemo.Inlines.Add(new Run("22 pt") { FontSize = 22 });
+        runDemo.Inlines.Add(new Run("."));
 
         // Font Inheritance: Border sets FontSize=16, children inherit
         var inheritanceDemo = new Border()
@@ -121,54 +126,5 @@ partial class GalleryView
             Card("Font Weight Inheritance", fontWeightDemo),
             Card("Nested Inheritance", nestedDemo)
         );
-    }
-
-    private sealed class RunLikeTextStyler : ITextClassifier, ITextLineTransformer
-    {
-        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
-        {
-            AddPaint(context.Text.Span, "accent text", output, Color.FromHex("#D83B01"));
-        }
-
-        public void Transform(
-            in TextLineTransformContext context,
-            IList<GeometryStyleRun> geometryRuns,
-            IList<InlineRun> inlines)
-        {
-            AddGeometry(context.Text.Span, "bold text", geometryRuns,
-                context.DefaultStyle with { Weight = FontWeight.Bold });
-            AddGeometry(context.Text.Span, "italic text", geometryRuns,
-                context.DefaultStyle with { Italic = true });
-            AddGeometry(context.Text.Span, "underlined text", geometryRuns,
-                context.DefaultStyle with { Decoration = TextDecoration.Underline });
-            AddGeometry(context.Text.Span, "struck text", geometryRuns,
-                context.DefaultStyle with { Decoration = TextDecoration.Strikethrough });
-            AddGeometry(context.Text.Span, "Consolas", geometryRuns,
-                context.DefaultStyle with { FontFamily = "Consolas" });
-            AddGeometry(context.Text.Span, "22 pt", geometryRuns,
-                context.DefaultStyle with { FontSize = 22 });
-        }
-
-        private static void AddPaint(
-            ReadOnlySpan<char> text,
-            string value,
-            IList<TextPaintSpan> output,
-            Color foreground)
-        {
-            int start = text.IndexOf(value, StringComparison.Ordinal);
-            if (start >= 0)
-                output.Add(new TextPaintSpan(new TextRange(start, value.Length), Foreground: foreground));
-        }
-
-        private static void AddGeometry(
-            ReadOnlySpan<char> text,
-            string value,
-            IList<GeometryStyleRun> output,
-            TextRunStyle style)
-        {
-            int start = text.IndexOf(value, StringComparison.Ordinal);
-            if (start >= 0)
-                output.Add(new GeometryStyleRun(start, value.Length, style));
-        }
     }
 }
