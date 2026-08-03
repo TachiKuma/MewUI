@@ -84,5 +84,6 @@ public sealed class WhitespaceAndThemeTests
     {
         public TextDocument Document => document;
         public DocumentLine CurrentDocumentLine => document.GetLineByNumber(1);
+        public TextRunStyle DefaultStyle => TextRunStyle.Default;
     }
 }

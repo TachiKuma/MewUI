@@ -13,6 +13,9 @@ public sealed class TextView(TextArea textArea)
     /// <summary>Transformers restyling ranges of each visual line.</summary>
     public IList<IVisualLineTransformer> LineTransformers => textArea.Editor.LineTransformers;
 
+    /// <summary>Generators replacing document ranges with elements that draw themselves.</summary>
+    public IList<VisualLineElementGenerator> ElementGenerators => textArea.Editor.ElementGenerators;
+
     /// <summary>Extension pipeline of the editing surface, for MewUI-native extensions.</summary>
     public TextViewExtensionPipeline Extensions => textArea.Editor.Surface.Extensions;
 

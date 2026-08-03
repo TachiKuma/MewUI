@@ -41,29 +41,46 @@ public sealed class VisualLineElementTextRunProperties
 }
 
 /// <summary>
-/// A range of a visual line that a transformer can restyle. The engine builds the line itself, so
-/// this carries the requested overrides rather than producing text runs.
+/// A range of a visual line. Transformers restyle one through <see cref="TextRunProperties"/>;
+/// element generators produce one that measures and draws itself in place of the document text.
 /// </summary>
 public class VisualLineElement
 {
-    internal VisualLineElement(int relativeTextOffset, int documentLength)
+    protected VisualLineElement(int visualLength, int documentLength)
     {
-        RelativeTextOffset = relativeTextOffset;
+        ArgumentOutOfRangeException.ThrowIfLessThan(visualLength, 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(documentLength);
+        VisualLength = visualLength;
         DocumentLength = documentLength;
     }
 
-    /// <summary>Offset from the start of the visual line.</summary>
-    public int RelativeTextOffset { get; }
+    public int VisualLength { get; }
 
     public int DocumentLength { get; }
 
+    /// <summary>Offset from the start of the visual line. Assigned while the line is built.</summary>
+    public int RelativeTextOffset { get; internal set; }
+
     /// <summary>Equal to <see cref="RelativeTextOffset"/>: this port maps visual columns onto line offsets.</summary>
     public int VisualColumn => RelativeTextOffset;
-
-    public int VisualLength => DocumentLength;
 
     public VisualLineElementTextRunProperties TextRunProperties { get; } = new();
 
     /// <summary>Background painted behind the range. Equivalent to setting it through <see cref="TextRunProperties"/>.</summary>
     public Color? BackgroundBrush { get; set; }
+
+    /// <summary>Size this element occupies. Generated elements override it; a restyled range keeps the document text.</summary>
+    public virtual InlineMetrics Measure() => default;
+
+    /// <summary>Paints this element. Generated elements override it.</summary>
+    public virtual void Draw(ITextRenderContext context, Point origin)
+    {
+    }
+}
+
+/// <summary>Range whose only purpose is to carry a transformer's overrides.</summary>
+internal sealed class StyleOverrideElement : VisualLineElement
+{
+    public StyleOverrideElement(int relativeTextOffset, int length) : base(Math.Max(1, length), length)
+        => RelativeTextOffset = relativeTextOffset;
 }

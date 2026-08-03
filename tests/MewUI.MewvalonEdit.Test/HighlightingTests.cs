@@ -1,6 +1,7 @@
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Highlighting;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
+using Aprillz.MewUI.Text;
 
 namespace MewUI.MewvalonEdit.Test;
 
@@ -40,5 +41,6 @@ internal static class HighlightingTestHost
     {
         public TextDocument Document => document;
         public DocumentLine CurrentDocumentLine => document.GetLineByNumber(1);
+        public TextRunStyle DefaultStyle => TextRunStyle.Default;
     }
 }

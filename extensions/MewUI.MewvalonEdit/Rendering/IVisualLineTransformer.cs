@@ -1,14 +1,18 @@
 using Aprillz.MewUI.MewvalonEdit.Document;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
-/// <summary>Line context handed to transformers while a visual line is built.</summary>
+/// <summary>Line context handed to transformers and generators while a visual line is built.</summary>
 public interface ITextRunConstructionContext
 {
     TextDocument Document { get; }
 
-    /// <summary>Document line the transformer is currently colorizing.</summary>
+    /// <summary>Document line currently being built.</summary>
     DocumentLine CurrentDocumentLine { get; }
+
+    /// <summary>Font the line is drawn with before any override. AvalonEdit's global text run properties.</summary>
+    TextRunStyle DefaultStyle { get; }
 }
 
 /// <summary>Restyles ranges of a visual line. AvalonEdit's transformer contract.</summary>
@@ -47,7 +51,7 @@ public abstract class ColorizingTransformer : IVisualLineTransformer
         {
             return;
         }
-        var element = new VisualLineElement(visualStartColumn, visualEndColumn - visualStartColumn);
+        var element = new StyleOverrideElement(visualStartColumn, visualEndColumn - visualStartColumn);
         action(element);
         CurrentElements.Add(element);
     }

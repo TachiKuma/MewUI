@@ -21,6 +21,7 @@ public class TextEditor : ContentControl
     private readonly SpaceMarkerClassifier _spaceMarkerColors;
     private readonly WhitespaceAdornmentProvider _whitespaceAdornments;
     private readonly LineTransformerAdapter _lineTransformers;
+    private readonly ElementGeneratorAdapter _elementGenerators;
     private readonly BackgroundRendererRegistry _backgroundRenderers;
     private bool _showLineNumbers;
     private bool _highlightingRefreshPending;
@@ -33,6 +34,7 @@ public class TextEditor : ContentControl
         _spaceMarkerColors = new SpaceMarkerClassifier(Options, this);
         _whitespaceAdornments = new WhitespaceAdornmentProvider(Options, this);
         _lineTransformers = new LineTransformerAdapter(this);
+        _elementGenerators = new ElementGeneratorAdapter(this);
         _backgroundRenderers = new BackgroundRendererRegistry(this);
         Options.PropertyChanged += OnOptionsChanged;
         _document = new TextDocument();
@@ -60,6 +62,7 @@ public class TextEditor : ContentControl
         _surface.Extensions.Classifiers.Add(_lineTransformers);
         _surface.Extensions.Transformers.Add(_lineTransformers);
         _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
+        _surface.Extensions.ElementGenerators.Add(_elementGenerators);
         _backgroundRenderers.RegisterInto(_surface.Extensions);
         _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
         _lineNumberMargin = new LineNumberMargin(this) { IsVisible = _showLineNumbers };
@@ -212,6 +215,7 @@ public class TextEditor : ContentControl
     internal Color WhitespaceMarkerColor => Theme.Palette.PlaceholderText;
     internal IList<IBackgroundRenderer> BackgroundRenderers => _backgroundRenderers.Renderers;
     internal IList<IVisualLineTransformer> LineTransformers => _lineTransformers.Transformers;
+    internal IList<VisualLineElementGenerator> ElementGenerators => _elementGenerators.Generators;
 
     public event EventHandler? TextChanged;
     public event EventHandler? DocumentChanged;

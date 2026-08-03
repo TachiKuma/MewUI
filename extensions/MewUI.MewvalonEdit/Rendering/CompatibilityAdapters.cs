@@ -118,6 +118,90 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
     {
         public TextDocument Document => editor.Document;
         public DocumentLine CurrentDocumentLine { get; set; } = null!;
+        public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
+    }
+}
+
+/// <summary>
+/// Runs the registered <see cref="VisualLineElementGenerator"/>s over a line and turns the elements
+/// they build into engine inline runs, following AvalonEdit's scan protocol.
+/// </summary>
+internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementGenerator
+{
+    private readonly GenerationContext _context = new(editor);
+
+    public IList<VisualLineElementGenerator> Generators { get; } =
+        new ExtensionList<VisualLineElementGenerator>(editor.InvalidateTextView);
+
+    public void Generate(in TextElementContext context, IList<InlineRun> output)
+    {
+        if (Generators.Count == 0)
+        {
+            return;
+        }
+
+        var logical = context.LogicalLine;
+        int lineStart = logical.Offset;
+        int lineEnd = lineStart + logical.Length;
+        _context.CurrentDocumentLine = editor.Document.GetLineByOffset(lineStart);
+        foreach (var generator in Generators)
+        {
+            generator.StartGeneration(_context);
+        }
+        try
+        {
+            int offset = lineStart;
+            while (offset < lineEnd)
+            {
+                int bestOffset = int.MaxValue;
+                VisualLineElementGenerator? winner = null;
+                foreach (var generator in Generators)
+                {
+                    int interested = generator.GetFirstInterestedOffset(offset);
+                    if (interested >= offset && interested < bestOffset && interested < lineEnd)
+                    {
+                        bestOffset = interested;
+                        winner = generator;
+                    }
+                }
+                if (winner is null)
+                {
+                    break;
+                }
+
+                var element = winner.ConstructElement(bestOffset);
+                if (element is null)
+                {
+                    // Declining the offset must still advance, or the scan would not terminate.
+                    offset = bestOffset + 1;
+                    continue;
+                }
+                element.RelativeTextOffset = bestOffset - lineStart;
+                output.Add(new InlineRun(element.RelativeTextOffset, element.DocumentLength, new ElementInline(element)));
+                offset = bestOffset + Math.Max(1, element.DocumentLength);
+            }
+        }
+        finally
+        {
+            foreach (var generator in Generators)
+            {
+                generator.FinishGeneration();
+            }
+        }
+    }
+
+    private sealed class ElementInline(VisualLineElement element) : IInlineTextObject
+    {
+        public InlineMetrics Measure() => element.Measure();
+
+        public void Draw(ITextRenderContext context, Point origin) => element.Draw(context, origin);
+    }
+
+    private sealed class GenerationContext(TextEditor editor) : ITextRunConstructionContext
+    {
+        public TextDocument Document => editor.Document;
+        public DocumentLine CurrentDocumentLine { get; set; } = null!;
+        public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
     }
 }
 
