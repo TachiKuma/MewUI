@@ -652,7 +652,11 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         cache ??= [];
         if (!cache.TryGetValue(font, out double width))
         {
-            width = Math.Max(1, context.MeasureText(" ", font).Width);
+            // Tab stops must land on real space advances; MeasureText pads to whole pixels on some backends.
+            width = context is ITextAdvanceSource advanceSource
+                ? advanceSource.GetUtf16PrefixAdvances(" ", font)[0]
+                : context.MeasureText(" ", font).Width;
+            width = Math.Max(1, width);
             cache.Add(font, width);
         }
         return width;
