@@ -43,6 +43,8 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
 
     public LegacyTextRenderContext(IGraphicsContext context) => _context = context;
 
+    public IGraphicsContext Graphics => _context;
+
     internal int CachedLayoutCount => _layouts.Count;
     internal IReadOnlyCollection<Rendering.TextLayout> CachedLayouts => _layouts.Values;
 

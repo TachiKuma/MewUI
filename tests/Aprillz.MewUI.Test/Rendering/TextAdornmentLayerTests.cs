@@ -1,4 +1,5 @@
 using Aprillz.MewUI;
+using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Rendering.Gdi;
 using Aprillz.MewUI.Text;
 
@@ -60,6 +61,8 @@ public sealed class TextAdornmentLayerTests
 
     private sealed class RecordingRenderContext(List<string> order) : ITextRenderContext
     {
+        public IGraphicsContext Graphics => throw new NotSupportedException();
+
         public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options) => order.Add("Draw");
 
         public void DrawBackground(ITextLayout layout, Point origin, in TextDrawOptions options)

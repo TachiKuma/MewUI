@@ -19,6 +19,8 @@ internal sealed class Direct2DTextRenderContext : ITextRenderContext, IDisposabl
         _fastPathRenderer = new LegacyTextRenderContext(context);
     }
 
+    public IGraphicsContext Graphics => _context;
+
     internal int CachedRunCount => _cache.Count;
     internal IEnumerable<TextLayout> CachedLayouts
         => _cache.Values.Select(static run => run.Layout);
