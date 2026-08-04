@@ -28,6 +28,14 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
             MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
             static (self, _, _) => self.ResetView());
 
+    // Guard against an offset that oscillates instead of settling. Measured convergence is 2-3
+    // passes and does not grow with the document, since each pass measures the lines it lands on.
+    private const int SCROLL_SETTLE_PASSES = 8;
+
+    // Keeps the caret fully visible at the end of the longest line, whose width is the whole extent.
+    private const double CARET_SLACK = 2;
+    private const double DRAG_EDGE_DIP = 8;
+
     private readonly ScrollBar _verticalScrollBar;
     private readonly ScrollBar _horizontalScrollBar;
     private TextViewLayout? _view;
@@ -465,7 +473,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         if (horizontal)
         {
             _horizontalScrollBar.Minimum = 0;
-            _horizontalScrollBar.Maximum = Math.Max(0, extentWidth - _contentBounds.Width);
+            _horizontalScrollBar.Maximum = Math.Max(0, extentWidth - _contentBounds.Width + CARET_SLACK);
             _horizontalScrollBar.ViewportSize = _contentBounds.Width;
             _horizontalScrollBar.Value = _horizontalOffset;
             _horizontalScrollBar.Arrange(new Rect(Bounds.X, Bounds.Bottom - thickness, Bounds.Width, thickness));
@@ -522,6 +530,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         if (e.PrimaryKey && HandlePrimaryKey(e))
         {
             e.Handled = true;
+            EnsureCaretVisible();
             return;
         }
 
@@ -538,6 +547,14 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
                 break;
             case Key.Down:
                 MoveCaretVertical(1, e.ShiftKey);
+                break;
+            // Ctrl is left alone: it is the tab-switching chord, and a focused editor must not
+            // swallow it on the way to the tab control.
+            case Key.PageUp when !e.ControlKey:
+                MoveCaretPage(-1, e.ShiftKey);
+                break;
+            case Key.PageDown when !e.ControlKey:
+                MoveCaretPage(1, e.ShiftKey);
                 break;
             case Key.Home:
                 MoveToLineEdge(true, e.ShiftKey);
@@ -603,6 +620,49 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             _preferredCaretX = preferredCaretX;
         }
+    }
+
+    /// <summary>Moves the caret one viewport, clamped to the document, and follows it with the view.</summary>
+    private void MoveCaretPage(int direction, bool extend)
+    {
+        EnsureView();
+        if (_view is null || _contentBounds.Height <= 0)
+        {
+            return;
+        }
+        var caret = _view.GetCaretBounds(_editor.CaretPosition);
+        if (double.IsNaN(_preferredCaretX))
+        {
+            _preferredCaretX = caret.X;
+        }
+        double preferredCaretX = _preferredCaretX;
+        double caretScreenY = caret.Y - _verticalOffset;
+        double targetY = caret.Y + direction * _contentBounds.Height;
+        if (targetY < 0)
+        {
+            // The caret leads the scroll: a page that overshoots the document still lands on its
+            // first line, even though the view itself has nowhere left to go.
+            SetVerticalOffset(0, false);
+            _editor.SetCaret(0, extend);
+        }
+        else if (targetY >= _view.ExtentHeight)
+        {
+            _editor.SetCaret(_document.TextLength, extend);
+        }
+        else
+        {
+            SetVerticalOffset(targetY - caretScreenY, false);
+            UpdateViewport();
+            var hit = _view.HitTest(new Point(
+                preferredCaretX - _horizontalOffset,
+                targetY - _verticalOffset + caret.Height / 2));
+            _editor.SetCaret(hit.DocumentOffset, extend);
+            // A viewport is rarely a whole number of rows, so anchor the scroll to the row the page
+            // landed on. Otherwise the caret creeps down the screen by the remainder each press.
+            SetVerticalOffset(_view.GetCaretBounds(hit.DocumentOffset).Y - caretScreenY, false);
+        }
+        UpdateViewport();
+        _preferredCaretX = preferredCaretX;
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -689,6 +749,18 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             SetVerticalOffset(_verticalOffset + point.Y - _contentBounds.Bottom);
         }
+        if (Wrap)
+        {
+            return;
+        }
+        if (point.X < _contentBounds.X + DRAG_EDGE_DIP)
+        {
+            SetHorizontalOffset(_horizontalOffset + point.X - (_contentBounds.X + DRAG_EDGE_DIP));
+        }
+        else if (point.X > _contentBounds.Right - DRAG_EDGE_DIP)
+        {
+            SetHorizontalOffset(_horizontalOffset + point.X - (_contentBounds.Right - DRAG_EDGE_DIP));
+        }
     }
 
     private protected override void EnsureCaretVisible()
@@ -702,19 +774,35 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             return;
         }
-        var caret = _view.GetCaretBounds(_editor.CaretPosition);
-        double vertical = _verticalOffset;
-        double horizontal = _horizontalOffset;
-        if (caret.Y < vertical) vertical = caret.Y;
-        else if (caret.Bottom > vertical + _contentBounds.Height) vertical = caret.Bottom - _contentBounds.Height;
-        if (!Wrap)
+        // Scrolling materializes lines, which replaces estimated metrics with measured ones and so
+        // moves both the caret and the scroll limit. A single pass stops short of the document edge
+        // whenever the estimate was low, on either axis.
+        for (int pass = 0; pass < SCROLL_SETTLE_PASSES; pass++)
         {
-            if (caret.X < horizontal) horizontal = caret.X;
-            else if (caret.Right > horizontal + _contentBounds.Width) horizontal = caret.Right - _contentBounds.Width;
+            var caret = _view.GetCaretBounds(_editor.CaretPosition);
+            double vertical = _verticalOffset;
+            double horizontal = _horizontalOffset;
+            if (caret.Y < vertical) vertical = caret.Y;
+            else if (caret.Bottom > vertical + _contentBounds.Height) vertical = caret.Bottom - _contentBounds.Height;
+            if (!Wrap)
+            {
+                if (caret.X < horizontal) horizontal = caret.X;
+                else if (caret.Right > horizontal + _contentBounds.Width - CARET_SLACK)
+                {
+                    horizontal = caret.Right - _contentBounds.Width + CARET_SLACK;
+                }
+            }
+            double settledVertical = _verticalOffset;
+            double settledHorizontal = _horizontalOffset;
+            SetVerticalOffset(vertical, false);
+            SetHorizontalOffset(horizontal, false);
+            UpdateViewport();
+            if (Math.Abs(_verticalOffset - settledVertical) < 0.001 &&
+                Math.Abs(_horizontalOffset - settledHorizontal) < 0.001)
+            {
+                break;
+            }
         }
-        SetVerticalOffset(vertical, false);
-        SetHorizontalOffset(horizontal, false);
-        UpdateViewport();
         InvalidateVisual();
     }
 
@@ -785,7 +873,10 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
 
     private void SetHorizontalOffset(double value, bool invalidate = true)
     {
-        double maximum = _horizontalScrollBar.IsVisible ? _horizontalScrollBar.Maximum : Math.Max(0, value);
+        // The scroll bar's limit is only refreshed on arrange, and materializing a slice grows the
+        // extent mid-keystroke, so the limit has to come from the view itself.
+        double extent = _view?.ExtentWidth ?? 0;
+        double maximum = Math.Max(0, extent - _contentBounds.Width + CARET_SLACK);
         value = Wrap ? 0 : Math.Clamp(double.IsFinite(value) ? value : 0, 0, maximum);
         if (Math.Abs(_horizontalOffset - value) < 0.001) return;
         _horizontalOffset = value;

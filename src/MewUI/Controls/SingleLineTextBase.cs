@@ -186,6 +186,7 @@ public abstract class SingleLineTextBase : TextBase
         if (e.PrimaryKey && HandlePrimaryKey(e))
         {
             e.Handled = true;
+            EnsureCaretVisible();
             return;
         }
 
@@ -341,6 +342,9 @@ public abstract class SingleLineTextBase : TextBase
             return;
         }
         _view.SetViewport(new TextViewport(_contentBounds.Width, _contentBounds.Height, _horizontalOffset, 0));
+        // The document may have shrunk under the offset, and the clamp lives in the setter. The
+        // nested UpdateViewport call settles immediately because the re-set value no longer moves.
+        SetHorizontalOffset(_horizontalOffset);
     }
 
     private Rect GetEditorContentBounds()
