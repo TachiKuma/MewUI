@@ -151,27 +151,14 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         try
         {
             context.SetClip(LayoutRounding.MakeClipRect(_contentBounds, GetDpi() / 96.0));
-            // Two passes so viewport renderers land between the selection highlights and the glyphs.
+            // Every anchor paints its extensions first and its own content after. The viewer draws
+            // no caret, so that anchor holds extensions only; keeping it preserves the slot.
             var text = context.Text;
-            DrawViewportRenderers(text, TextAdornmentLayer.Background);
-            foreach (var line in _view.MaterializedLines)
+            Layers.Draw(text, _contentBounds, anchor =>
             {
-                line.DrawBackground(text, GetLineOrigin(line), CreateDrawOptions(line));
-            }
-
-            DrawViewportRenderers(text, TextAdornmentLayer.Selection);
-            foreach (var line in _view.MaterializedLines)
-            {
-                line.DrawForeground(text, GetLineOrigin(line), CreateDrawOptions(line));
-            }
-
-            // The viewer paints no caret, but the topmost layer still belongs above every line.
-            DrawViewportRenderers(text, TextAdornmentLayer.Text);
-            DrawViewportRenderers(text, TextAdornmentLayer.Caret);
-            foreach (var line in _view.MaterializedLines)
-            {
-                line.DrawCaretLayer(text, GetLineOrigin(line));
-            }
+                DrawLayerExtensions(text, anchor);
+                DrawAnchorContent(text, anchor);
+            });
         }
         finally
         {
@@ -226,6 +213,66 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             },
             Extensions,
             GetDpi());
+        _view.LineConstructionStarting += (_, firstLine) => LineConstructionStarting?.Invoke(this, firstLine);
+        _view.LinesChanged += _ => LinesChanged?.Invoke(this);
+    }
+
+    /// <inheritdoc/>
+    public event Action<ITextViewHost, int>? LineConstructionStarting;
+
+    /// <inheritdoc/>
+    public event Action<ITextViewHost>? LinesChanged;
+
+    /// <inheritdoc/>
+    public void InvalidateTextRange(int offset, int length)
+    {
+        EnsureView();
+        _view?.InvalidateRange(offset, length);
+        InvalidateVisual();
+    }
+
+    /// <inheritdoc/>
+    public double DocumentHeight
+    {
+        get
+        {
+            EnsureView();
+            return _view?.ExtentHeight ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public double DefaultLineHeight
+    {
+        get
+        {
+            EnsureView();
+            return _view?.DefaultLineHeight ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public double DefaultBaseline
+    {
+        get
+        {
+            EnsureView();
+            return _view?.DefaultBaseline ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public int GetLineNumberByVisualTop(double documentY)
+    {
+        EnsureView();
+        return _view?.GetLineNumberByVisualTop(documentY) ?? 0;
+    }
+
+    /// <inheritdoc/>
+    public double GetVisualTopByLineNumber(int lineNumber)
+    {
+        EnsureView();
+        return _view?.GetVisualTopByLineNumber(lineNumber) ?? 0;
     }
 
     private void UpdateViewport()
@@ -301,11 +348,41 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         {
             _verticalScrollBar.Value = value;
         }
+        ScrollOffsetChanged?.Invoke(this);
         if (invalidate)
         {
             UpdateViewport();
             InvalidateVisual();
         }
+    }
+
+    /// <inheritdoc/>
+    public Point ScrollOffset => new(_horizontalOffset, _verticalOffset);
+
+    /// <inheritdoc/>
+    public event Action<ITextViewHost>? ScrollOffsetChanged;
+
+    /// <inheritdoc/>
+    public void MakeVisible(Rect documentRect)
+    {
+        if (_contentBounds.IsEmpty)
+        {
+            return;
+        }
+        EnsureView();
+        SetVerticalOffset(
+            TextViewScrolling.ResolveOffset(
+                _verticalOffset, _contentBounds.Height, documentRect.Y, documentRect.Height),
+            false);
+        if (!Wrap)
+        {
+            SetHorizontalOffset(
+                TextViewScrolling.ResolveOffset(
+                    _horizontalOffset, _contentBounds.Width, documentRect.X, documentRect.Width),
+                false);
+        }
+        UpdateViewport();
+        InvalidateVisual();
     }
 
     private void SetHorizontalOffset(double value, bool invalidate = true)
@@ -321,6 +398,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         {
             _horizontalScrollBar.Value = value;
         }
+        ScrollOffsetChanged?.Invoke(this);
         if (invalidate)
         {
             UpdateViewport();
@@ -357,14 +435,47 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         return new TextDrawOptions(Theme.Palette.WindowText, paint, Owner: line);
     }
 
-    private void DrawViewportRenderers(ITextRenderContext context, TextAdornmentLayer layer)
+    private void DrawAnchorContent(ITextRenderContext text, TextAdornmentLayer anchor)
     {
-        foreach (var renderer in Extensions.ViewportRenderers)
+        if (_view is null)
         {
-            if (renderer.Layer == layer)
+            return;
+        }
+        foreach (var line in _view.MaterializedLines)
+        {
+            var options = CreateDrawOptions(line);
+            if (anchor == TextAdornmentLayer.Selection && !options.PaintSpans.IsEmpty)
             {
-                renderer.Draw(context, _contentBounds);
+                line.DrawBackground(text, GetLineOrigin(line), in options);
             }
+            else if (anchor == TextAdornmentLayer.Text)
+            {
+                line.DrawForeground(text, GetLineOrigin(line), in options);
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public TextViewLayerStack Layers => _layers;
+
+    /// <inheritdoc/>
+    public void InsertLayer(ITextViewLayer layer, TextAdornmentLayer anchor, TextLayerPosition position)
+        => _layers.Insert(layer, anchor, position);
+
+    /// <inheritdoc/>
+    public void InvalidateLayer(TextAdornmentLayer anchor) => InvalidateVisual();
+
+    private readonly TextViewLayerStack _layers = new();
+
+    private void DrawLayerExtensions(ITextRenderContext context, TextAdornmentLayer layer)
+    {
+        if (_view is null)
+        {
+            return;
+        }
+        foreach (var line in _view.MaterializedLines)
+        {
+            line.DrawAdornmentLayer(context, GetLineOrigin(line), layer);
         }
     }
 

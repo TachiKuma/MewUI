@@ -214,26 +214,28 @@ internal sealed class BackgroundRendererRegistry(TextEditor editor)
     public IList<IBackgroundRenderer> Renderers { get; } =
         new ExtensionList<IBackgroundRenderer>(editor.InvalidateTextView);
 
-    /// <summary>Adds one viewport renderer per known layer; each draws the renderers assigned to it.</summary>
-    public void RegisterInto(TextViewExtensionPipeline pipeline)
+    /// <summary>Inserts one layer under each known anchor; each draws the renderers assigned to it.</summary>
+    public void RegisterInto(ITextViewHost host)
     {
         foreach (var layer in Enum.GetValues<KnownLayer>())
         {
-            pipeline.ViewportRenderers.Add(new LayerBridge(editor, layer, Renderers));
+            // Below the anchor, because an AvalonEdit background renderer paints under the content
+            // of the layer it names.
+            host.InsertLayer(new LayerBridge(editor, layer, Renderers), ToAnchor(layer), TextLayerPosition.Below);
         }
     }
 
-    private sealed class LayerBridge(TextEditor editor, KnownLayer layer, IList<IBackgroundRenderer> renderers)
-        : ITextViewportRenderer
+    private static TextAdornmentLayer ToAnchor(KnownLayer layer) => layer switch
     {
-        public TextAdornmentLayer Layer => layer switch
-        {
-            KnownLayer.Background => TextAdornmentLayer.Background,
-            KnownLayer.Selection => TextAdornmentLayer.Selection,
-            KnownLayer.Caret => TextAdornmentLayer.Caret,
-            _ => TextAdornmentLayer.Text
-        };
+        KnownLayer.Background => TextAdornmentLayer.Background,
+        KnownLayer.Selection => TextAdornmentLayer.Selection,
+        KnownLayer.Caret => TextAdornmentLayer.Caret,
+        _ => TextAdornmentLayer.Text
+    };
 
+    private sealed class LayerBridge(TextEditor editor, KnownLayer layer, IList<IBackgroundRenderer> renderers)
+        : ITextViewLayer
+    {
         public void Draw(ITextRenderContext context, Rect viewportBounds)
         {
             foreach (var renderer in renderers)

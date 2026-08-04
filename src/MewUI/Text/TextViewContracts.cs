@@ -125,30 +125,39 @@ public sealed class TextLineLayout
         return new Rect(DocumentX + bounds.X, bounds.Y, bounds.Width, bounds.Height);
     }
 
-    /// <summary>Draws the whole line. Hosts that interleave viewport renderers call the two passes instead.</summary>
+    /// <summary>Draws the whole line. Hosts that interleave layers call the individual passes instead.</summary>
     public void Draw(ITextRenderContext context, Point origin, in TextDrawOptions options)
     {
+        DrawAdornmentLayer(context, origin, TextAdornmentLayer.Background);
         DrawBackground(context, origin, in options);
+        DrawAdornmentLayer(context, origin, TextAdornmentLayer.Selection);
+        DrawAdornmentLayer(context, origin, TextAdornmentLayer.Text);
         DrawForeground(context, origin, in options);
+        DrawAdornmentLayer(context, origin, TextAdornmentLayer.Caret);
     }
 
-    /// <summary>First pass: background adornments, paint-span backgrounds, then the selection layer.</summary>
+    /// <summary>Paint-span backgrounds of this line.</summary>
     public void DrawBackground(ITextRenderContext context, Point origin, in TextDrawOptions options)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var documentOrigin = new Point(origin.X + DocumentX, origin.Y);
-        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Background);
-        context.DrawBackground(_layout, documentOrigin, Combine(in options));
-        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Selection);
+        context.DrawBackground(_layout, new Point(origin.X + DocumentX, origin.Y), Combine(in options));
     }
 
-    /// <summary>Second pass: glyphs and the adornments that sit above them.</summary>
+    /// <summary>Glyphs of this line.</summary>
     public void DrawForeground(ITextRenderContext context, Point origin, in TextDrawOptions options)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var documentOrigin = new Point(origin.X + DocumentX, origin.Y);
-        context.DrawForeground(_layout, documentOrigin, Combine(in options));
-        DrawAdornments(context, documentOrigin, TextAdornmentLayer.Text);
+        context.DrawForeground(_layout, new Point(origin.X + DocumentX, origin.Y), Combine(in options));
+    }
+
+    /// <summary>
+    /// Adornments registered for <paramref name="layer"/>. They belong under that layer's own
+    /// content, so the host calls this before painting the layer.
+    /// </summary>
+    public void DrawAdornmentLayer(ITextRenderContext context, Point origin, TextAdornmentLayer layer)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        DrawAdornments(context, new Point(origin.X + DocumentX, origin.Y), layer);
     }
 
     private TextDrawOptions Combine(in TextDrawOptions options)
@@ -172,13 +181,6 @@ public sealed class TextLineLayout
             }
         }
         return effective;
-    }
-
-    /// <summary>Draws the adornments that belong above the caret; the host calls this after painting its caret.</summary>
-    public void DrawCaretLayer(ITextRenderContext context, Point origin)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        DrawAdornments(context, new Point(origin.X + DocumentX, origin.Y), TextAdornmentLayer.Caret);
     }
 
     public int MapProjectedOffsetToSource(int projectedOffset)

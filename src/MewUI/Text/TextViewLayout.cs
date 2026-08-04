@@ -48,9 +48,69 @@ public sealed class TextViewLayout : ITextViewLayout
 
     public IReadOnlyList<TextLineLayout> MaterializedLines => _materialized;
 
+    /// <summary>Raised before the visible lines are built, carrying the first line number.</summary>
+    public event Action<TextViewLayout, int>? LineConstructionStarting;
+
+    /// <summary>Raised after the visible lines were built.</summary>
+    public event Action<TextViewLayout>? LinesChanged;
+
+    private bool _materializing;
+    private (int Offset, int Length)? _pendingInvalidation;
+
+    private static (int Offset, int Length) Merge((int Offset, int Length) pending, int offset, int length)
+    {
+        int start = Math.Min(pending.Offset, offset);
+        int end = Math.Max(pending.Offset + pending.Length, offset + length);
+        return (start, end - start);
+    }
+
     public double ExtentWidth => _metrics.MaxWidth;
 
     public double ExtentHeight => _metrics.TotalHeight;
+
+    /// <summary>Height of a line holding one character in the default style, independent of content.</summary>
+    public double DefaultLineHeight => EnsureDefaultMetrics().Height;
+
+    /// <summary>Baseline of a line holding one character in the default style.</summary>
+    public double DefaultBaseline => EnsureDefaultMetrics().Baseline;
+
+    /// <summary>Line number whose row contains <paramref name="documentY"/>.</summary>
+    public int GetLineNumberByVisualTop(double documentY)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _document.LineCount == 0 ? 0 : FindLineByY(documentY);
+    }
+
+    /// <summary>Document-space top of <paramref name="lineNumber"/>.</summary>
+    public double GetVisualTopByLineNumber(int lineNumber)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return GetLineY(Math.Clamp(lineNumber, 0, Math.Max(0, _states.Length - 1)));
+    }
+
+    private (double Height, double Baseline)? _defaultMetrics;
+
+    private (double Height, double Baseline) EnsureDefaultMetrics()
+    {
+        if (_defaultMetrics is { } cached)
+        {
+            return cached;
+        }
+
+        // A single character rather than the document: the value has to stay put when the text does
+        // not, and it is what margins align their rows against.
+        var layout = _engine.CreateLayout(new TextLayoutRequest
+        {
+            Text = "x".AsMemory(),
+            Dpi = _dpi,
+            DefaultStyle = _defaultStyle,
+            Paragraph = _paragraph with { MaxWidth = double.PositiveInfinity, Wrapping = TextWrapping.NoWrap },
+        });
+        double height = Math.Max(1, layout.ContentHeight);
+        double baseline = layout.Lines.Count == 0 ? height : layout.Lines[0].Baseline;
+        _defaultMetrics = (height, baseline);
+        return _defaultMetrics.Value;
+    }
 
     public void SetViewport(TextViewport viewport)
     {
@@ -89,6 +149,49 @@ public sealed class TextViewLayout : ITextViewLayout
                 change.Offset + change.InsertedLength,
                 0,
                 _document.TextLength)).LineNumber;
+        DirtyLines(firstLine, lastLine);
+        MaterializeViewport();
+    }
+
+    /// <summary>
+    /// Drops the cached layout of the lines overlapping the range. Unlike <see cref="Invalidate"/>
+    /// the text is unchanged, so lines outside the range keep their layout.
+    /// </summary>
+    public void InvalidateRange(int offset, int length)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (length < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(length));
+        }
+        if (_document.LineCount == 0)
+        {
+            return;
+        }
+        if (_materializing)
+        {
+            // Called from a classifier while its line is being built. Rebuilding here would mutate
+            // the loop it was called from, so the widest pending range runs once the loop ends.
+            _pendingInvalidation = _pendingInvalidation is { } pending
+                ? Merge(pending, offset, length)
+                : (offset, length);
+            return;
+        }
+
+        EnsureStateCount();
+        int start = Math.Clamp(offset, 0, _document.TextLength);
+        int end = Math.Clamp(offset + length, start, _document.TextLength);
+        int firstLine = Math.Clamp(
+            _document.GetLineByOffset(start).LineNumber, 0, Math.Max(0, _states.Length - 1));
+        int lastLine = Math.Clamp(
+            _document.GetLineByOffset(end).LineNumber, firstLine, Math.Max(0, _states.Length - 1));
+
+        DirtyLines(firstLine, lastLine);
+        MaterializeViewport();
+    }
+
+    private void DirtyLines(int firstLine, int lastLine)
+    {
         for (int i = firstLine; i <= lastLine; i++)
         {
             var state = _states[i];
@@ -102,8 +205,6 @@ public sealed class TextViewLayout : ITextViewLayout
             state.Width = -1;
             SetStateMetrics(i, _estimatedLineHeight, 0);
         }
-
-        MaterializeViewport();
     }
 
     public TextViewHit HitTest(Point viewportPoint)
@@ -176,16 +277,35 @@ public sealed class TextViewLayout : ITextViewLayout
         double y = GetLineY(first);
         double limit = Viewport.VerticalOffset + Viewport.Height + _estimatedLineHeight;
 
-        for (int lineNumber = first; lineNumber < _states.Length && y <= limit; lineNumber++)
+        _materializing = true;
+        try
         {
-            if (_states[lineNumber].Collapsed)
+            LineConstructionStarting?.Invoke(this, first);
+            for (int lineNumber = first; lineNumber < _states.Length && y <= limit; lineNumber++)
             {
-                continue;
+                if (_states[lineNumber].Collapsed)
+                {
+                    continue;
+                }
+                double targetY = Math.Max(y, Viewport.VerticalOffset - _estimatedLineHeight);
+                var layout = GetOrCreateLine(lineNumber, y, targetY);
+                _materialized.Add(layout);
+                y += _states[lineNumber].Height;
             }
-            double targetY = Math.Max(y, Viewport.VerticalOffset - _estimatedLineHeight);
-            var layout = GetOrCreateLine(lineNumber, y, targetY);
-            _materialized.Add(layout);
-            y += _states[lineNumber].Height;
+        }
+        finally
+        {
+            _materializing = false;
+        }
+
+        LinesChanged?.Invoke(this);
+
+        if (_pendingInvalidation is { } pending)
+        {
+            // A classifier that invalidated while its own line was being built asked for a rebuild
+            // it must not perform from inside the loop.
+            _pendingInvalidation = null;
+            InvalidateRange(pending.Offset, pending.Length);
         }
     }
 

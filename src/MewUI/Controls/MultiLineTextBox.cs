@@ -35,6 +35,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     private Rect _contentBounds;
     private double _verticalOffset;
     private double _horizontalOffset;
+    private readonly TextViewLayerStack _layers = new();
     private double _preferredCaretX = double.NaN;
     private bool _dragSelecting;
 
@@ -220,52 +221,79 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             return;
         }
-        // Two passes so viewport renderers can sit above every selection highlight and below every
-        // glyph. Interleaving per line would force each renderer to run once per line.
+        // Every anchor paints its adornments and viewport renderers first and its own content after,
+        // so an extension registered at an anchor sits under what that anchor draws.
         var selection = _editor.Selection;
         var text = context.Text;
-        DrawViewportRenderers(text, TextAdornmentLayer.Background);
-        foreach (var line in _view.MaterializedLines)
+        Layers.Draw(text, _contentBounds, anchor =>
         {
-            var options = new TextDrawOptions(
-                Theme.Palette.WindowText,
-                CreatePaintSpans(line, selection),
-                Owner: line);
-            line.DrawBackground(text, GetLineOrigin(line), in options);
-        }
-
-        DrawViewportRenderers(text, TextAdornmentLayer.Selection);
-        foreach (var line in _view.MaterializedLines)
-        {
-            var options = new TextDrawOptions(
-                Theme.Palette.WindowText,
-                CreatePaintSpans(line, selection),
-                Owner: line);
-            line.DrawForeground(text, GetLineOrigin(line), in options);
-        }
-
-        DrawViewportRenderers(text, TextAdornmentLayer.Text);
-        DrawCompositionUnderlines(context, _contentBounds.Right);
-
-        if (IsFocused && _caretVisible)
-        {
-            var caret = GetCharRectInWindow(_editor.CaretPosition);
-            context.FillRectangle(new Rect(caret.X, caret.Y, 1, Math.Max(1, caret.Height)), Theme.Palette.WindowText);
-        }
-
-        DrawCaretLayerAdornments(context);
+            DrawLayerExtensions(text, anchor);
+            DrawAnchorContent(context, text, anchor, selection);
+        });
     }
 
-    private void DrawCaretLayerAdornments(IGraphicsContext context)
+    private void DrawAnchorContent(
+        IGraphicsContext context,
+        ITextRenderContext text,
+        TextAdornmentLayer anchor,
+        TextRange selection)
     {
         if (_view is null)
         {
             return;
         }
-        DrawViewportRenderers(context.Text, TextAdornmentLayer.Caret);
+        switch (anchor)
+        {
+            case TextAdornmentLayer.Background:
+                foreach (var line in _view.MaterializedLines)
+                {
+                    var options = new TextDrawOptions(Foreground, CreateCompositionSpans(line), Owner: line);
+                    line.DrawBackground(text, GetLineOrigin(line), in options);
+                }
+                break;
+
+            case TextAdornmentLayer.Selection:
+                foreach (var line in _view.MaterializedLines)
+                {
+                    var spans = CreateSelectionSpans(line, selection);
+                    if (spans.Length == 0)
+                    {
+                        continue;
+                    }
+                    var options = new TextDrawOptions(Foreground, spans, Owner: line);
+                    line.DrawBackground(text, GetLineOrigin(line), in options);
+                }
+                break;
+
+            case TextAdornmentLayer.Text:
+                foreach (var line in _view.MaterializedLines)
+                {
+                    var options = new TextDrawOptions(Foreground, CreateCompositionSpans(line), Owner: line);
+                    line.DrawForeground(text, GetLineOrigin(line), in options);
+                }
+                DrawCompositionUnderlines(context, _contentBounds.Right);
+                break;
+
+            default:
+                if (IsFocused && _caretVisible)
+                {
+                    var caret = GetCharRectInWindow(_editor.CaretPosition);
+                    context.FillRectangle(
+                        new Rect(caret.X, caret.Y, 1, Math.Max(1, caret.Height)), Theme.Palette.WindowText);
+                }
+                break;
+        }
+    }
+
+    private void DrawLayerExtensions(ITextRenderContext context, TextAdornmentLayer layer)
+    {
+        if (_view is null)
+        {
+            return;
+        }
         foreach (var line in _view.MaterializedLines)
         {
-            line.DrawCaretLayer(context.Text, GetLineOrigin(line));
+            line.DrawAdornmentLayer(context, GetLineOrigin(line), layer);
         }
     }
 
@@ -277,34 +305,28 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
             _contentBounds.Y + documentY - _verticalOffset);
     }
 
-    private void DrawViewportRenderers(ITextRenderContext context, TextAdornmentLayer layer)
+    private TextPaintSpan[] CreateSelectionSpans(TextLineLayout line, TextRange selection)
     {
-        foreach (var renderer in Extensions.ViewportRenderers)
-        {
-            if (renderer.Layer == layer)
-            {
-                renderer.Draw(context, _contentBounds);
-            }
-        }
-    }
-
-    private TextPaintSpan[] CreatePaintSpans(TextLineLayout line, TextRange selection)
-    {
-        var spans = new List<TextPaintSpan>(2);
-        int lineStart = line.LogicalLine.Offset;
-        int lineEnd = lineStart + line.LogicalLine.Length;
-        if (TextSelectionPresentation.TryCreateSpan(
+        if (!TextSelectionPresentation.TryCreateSpan(
                 line.LogicalLine,
                 selection,
                 Theme.Palette.SelectionText,
                 Theme.Palette.SelectionBackground,
                 out var selectionSpan))
         {
-            // Selection paints only the background; keeping the glyph colors avoids the
-            // foreground-segment repaint whose boundaries shift on every drag frame.
-            spans.Add(selectionSpan with { Foreground = null });
+            return [];
         }
 
+        // Selection paints only the background; keeping the glyph colors avoids the
+        // foreground-segment repaint whose boundaries shift on every drag frame.
+        return [selectionSpan with { Foreground = null }];
+    }
+
+    private TextPaintSpan[] CreateCompositionSpans(TextLineLayout line)
+    {
+        var spans = new List<TextPaintSpan>(1);
+        int lineStart = line.LogicalLine.Offset;
+        int lineEnd = lineStart + line.LogicalLine.Length;
         if (_editor.IsComposing)
         {
             int compositionEnd = _compositionStart + _compositionLength;
@@ -349,6 +371,66 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
             },
             Extensions,
             dpi: GetDpi());
+        _view.LineConstructionStarting += (_, firstLine) => LineConstructionStarting?.Invoke(this, firstLine);
+        _view.LinesChanged += _ => LinesChanged?.Invoke(this);
+    }
+
+    /// <inheritdoc/>
+    public event Action<ITextViewHost, int>? LineConstructionStarting;
+
+    /// <inheritdoc/>
+    public event Action<ITextViewHost>? LinesChanged;
+
+    /// <inheritdoc/>
+    public void InvalidateTextRange(int offset, int length)
+    {
+        EnsureView();
+        _view?.InvalidateRange(offset, length);
+        InvalidateVisual();
+    }
+
+    /// <inheritdoc/>
+    public double DocumentHeight
+    {
+        get
+        {
+            EnsureView();
+            return _view?.ExtentHeight ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public double DefaultLineHeight
+    {
+        get
+        {
+            EnsureView();
+            return _view?.DefaultLineHeight ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public double DefaultBaseline
+    {
+        get
+        {
+            EnsureView();
+            return _view?.DefaultBaseline ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
+    public int GetLineNumberByVisualTop(double documentY)
+    {
+        EnsureView();
+        return _view?.GetLineNumberByVisualTop(documentY) ?? 0;
+    }
+
+    /// <inheritdoc/>
+    public double GetVisualTopByLineNumber(int lineNumber)
+    {
+        EnsureView();
+        return _view?.GetVisualTopByLineNumber(lineNumber) ?? 0;
     }
 
     private void UpdateViewport()
@@ -649,6 +731,59 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         InvalidateVisual();
     }
 
+    /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>
+    public IReadOnlySectionProvider? ReadOnlySections
+    {
+        get => _editor.ReadOnlySections;
+        set => _editor.ReadOnlySections = value;
+    }
+
+    /// <summary>Raised after typed or composed text reached the document, once per commit.</summary>
+    public event Action<string>? TextEntered
+    {
+        add => _editor.TextEntered += value;
+        remove => _editor.TextEntered -= value;
+    }
+
+    /// <inheritdoc/>
+    public TextViewLayerStack Layers => _layers;
+
+    /// <inheritdoc/>
+    public void InsertLayer(ITextViewLayer layer, TextAdornmentLayer anchor, TextLayerPosition position)
+        => _layers.Insert(layer, anchor, position);
+
+    /// <inheritdoc/>
+    public void InvalidateLayer(TextAdornmentLayer anchor) => InvalidateVisual();
+
+    /// <inheritdoc/>
+    public Point ScrollOffset => new(_horizontalOffset, _verticalOffset);
+
+    /// <inheritdoc/>
+    public event Action<ITextViewHost>? ScrollOffsetChanged;
+
+    /// <inheritdoc/>
+    public void MakeVisible(Rect documentRect)
+    {
+        if (_contentBounds.IsEmpty)
+        {
+            return;
+        }
+        EnsureView();
+        SetVerticalOffset(
+            TextViewScrolling.ResolveOffset(
+                _verticalOffset, _contentBounds.Height, documentRect.Y, documentRect.Height),
+            false);
+        if (!Wrap)
+        {
+            SetHorizontalOffset(
+                TextViewScrolling.ResolveOffset(
+                    _horizontalOffset, _contentBounds.Width, documentRect.X, documentRect.Width),
+                false);
+        }
+        UpdateViewport();
+        InvalidateVisual();
+    }
+
     private void SetVerticalOffset(double value, bool invalidate = true)
     {
         double extent = _view?.ExtentHeight ?? 0;
@@ -657,6 +792,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         if (Math.Abs(_verticalOffset - value) < 0.001) return;
         _verticalOffset = value;
         if (_verticalScrollBar.IsVisible) _verticalScrollBar.Value = value;
+        ScrollOffsetChanged?.Invoke(this);
         if (invalidate) InvalidateVisual();
     }
 
@@ -667,6 +803,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         if (Math.Abs(_horizontalOffset - value) < 0.001) return;
         _horizontalOffset = value;
         if (_horizontalScrollBar.IsVisible) _horizontalScrollBar.Value = value;
+        ScrollOffsetChanged?.Invoke(this);
         if (invalidate) InvalidateVisual();
     }
 

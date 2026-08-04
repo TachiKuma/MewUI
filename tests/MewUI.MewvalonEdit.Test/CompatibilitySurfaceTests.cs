@@ -111,18 +111,16 @@ public sealed class CompatibilitySurfaceTests
         var editor = new TextEditor { Text = "hello world" };
         var service = new TextMarkerService(new TextMarker(0, 5, Color.FromRgb(0, 0, 200)));
         editor.TextArea.TextView.BackgroundRenderers.Add(service);
-        var pipeline = editor.TextArea.TextView.Extensions;
 
-        // One bridge per known layer; only the mapped one may reach the renderer.
-        Assert.HasCount(4, pipeline.ViewportRenderers);
-        var selectionLayer = pipeline.ViewportRenderers
-            .Single(renderer => renderer.Layer == TextAdornmentLayer.Selection);
-        var otherLayer = pipeline.ViewportRenderers
-            .First(renderer => renderer.Layer == TextAdornmentLayer.Background);
+        // One bridge layer per known anchor; only the mapped one may reach the renderer.
+        var layers = editor.TextArea.TextView.Host.Layers.Layers;
+        Assert.HasCount(4, layers);
 
         var context = new StubRenderContext();
-        selectionLayer.Draw(context, new Rect(0, 0, 100, 100));
-        otherLayer.Draw(context, new Rect(0, 0, 100, 100));
+        foreach (var layer in layers)
+        {
+            layer.Draw(context, new Rect(0, 0, 100, 100));
+        }
 
         Assert.AreEqual(1, service.DrawCount, "The renderer must run once per frame, on its own layer only.");
     }

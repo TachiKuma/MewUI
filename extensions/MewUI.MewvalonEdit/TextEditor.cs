@@ -63,7 +63,7 @@ public class TextEditor : ContentControl
         _surface.Extensions.Transformers.Add(_lineTransformers);
         _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
-        _backgroundRenderers.RegisterInto(_surface.Extensions);
+        _backgroundRenderers.RegisterInto(_surface);
         _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
         _lineNumberMargin = new LineNumberMargin(this) { IsVisible = _showLineNumbers };
         Content = new Grid()

@@ -37,19 +37,22 @@ public interface ITextElementGenerator
     void Generate(in TextElementContext context, IList<InlineRun> output);
 }
 
-/// <summary>Draw order of an adornment relative to the surfaces the text host paints itself.</summary>
+/// <summary>
+/// Anchor an adornment draws at. Every adornment paints under the content of its own layer, so the
+/// layer names what it sits beneath rather than what it covers.
+/// </summary>
 public enum TextAdornmentLayer
 {
-    /// <summary>Below the selection highlight.</summary>
+    /// <summary>Under the line backgrounds, the bottom of the stack.</summary>
     Background,
 
-    /// <summary>Above the selection highlight, below the glyphs.</summary>
+    /// <summary>Under the selection highlight.</summary>
     Selection,
 
-    /// <summary>Above the glyphs, below the caret.</summary>
+    /// <summary>Under the glyphs.</summary>
     Text,
 
-    /// <summary>Above the caret.</summary>
+    /// <summary>Under the caret.</summary>
     Caret
 }
 
@@ -68,17 +71,6 @@ public readonly record struct TextAdornmentContext(
 public interface ITextAdornmentProvider
 {
     void GetAdornments(in TextAdornmentContext context, IList<ITextAdornment> output);
-}
-
-/// <summary>
-/// Paints once per frame across the whole viewport at one layer, for decorations that span lines.
-/// Adornments are the per-line counterpart.
-/// </summary>
-public interface ITextViewportRenderer
-{
-    TextAdornmentLayer Layer { get; }
-
-    void Draw(ITextRenderContext context, Rect viewportBounds);
 }
 
 public interface ITextOffsetMap
@@ -131,9 +123,6 @@ public sealed class TextViewExtensionPipeline
     public IList<ITextLineTransformer> Transformers { get; } = new List<ITextLineTransformer>();
     public IList<ITextElementGenerator> ElementGenerators { get; } = new List<ITextElementGenerator>();
     public IList<ITextAdornmentProvider> AdornmentProviders { get; } = new List<ITextAdornmentProvider>();
-
-    /// <summary>Renderers drawn once per frame per layer, outside the per-line loop.</summary>
-    public IList<ITextViewportRenderer> ViewportRenderers { get; } = new List<ITextViewportRenderer>();
     public IList<ITextProjection> Projections { get; } = new List<ITextProjection>();
     public IList<ITextLineCollapser> LineCollapsers { get; } = new List<ITextLineCollapser>();
 }

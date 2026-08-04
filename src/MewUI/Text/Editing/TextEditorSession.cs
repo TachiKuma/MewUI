@@ -216,6 +216,12 @@ public sealed class TextEditorSession
                 CaretPosition);
         }
         StateChanged?.Invoke();
+        if (inserted.Length > 0)
+        {
+            // Once per commit: the intermediates are transient replaces, so reporting them would
+            // fire on every keystroke of a composition.
+            TextEntered?.Invoke(inserted);
+        }
     }
 
     public void CancelComposition()
@@ -231,9 +237,30 @@ public sealed class TextEditorSession
         StateChanged?.Invoke();
     }
 
+    /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>
+    public IReadOnlySectionProvider? ReadOnlySections { get; set; }
+
+    /// <summary>Raised after typed or composed text reached the document, once per commit.</summary>
+    public event Action<string>? TextEntered;
+
+    /// <summary>Applies typed text and reports it as entered once it is in the document.</summary>
+    public void EnterText(string? text)
+    {
+        string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);
+        ReplaceSelection(normalized);
+        if (normalized.Length > 0)
+        {
+            TextEntered?.Invoke(normalized);
+        }
+    }
+
     private void ApplyAndRecord(int start, int removeLength, string inserted)
     {
         CommitComposition();
+        if (ReadOnlySections is { } sections)
+        {
+            (removeLength, inserted) = ResolveAgainstReadOnlySections(sections, start, removeLength, inserted);
+        }
         int caretAfter = start + inserted.Length;
         if (!Document.History.RecordReplace(
             start, removeLength, inserted, AnchorPosition, CaretPosition, caretAfter, caretAfter))
@@ -243,6 +270,49 @@ public sealed class TextEditorSession
         }
         AnchorPosition = CaretPosition = caretAfter;
         StateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Rewrites an edit so it only removes what the provider allows. The protected text is folded
+    /// back into the replacement, which keeps the whole edit one contiguous replace and so one undo
+    /// step even when the deletable parts are not adjacent.
+    /// </summary>
+    private (int RemoveLength, string Inserted) ResolveAgainstReadOnlySections(
+        IReadOnlySectionProvider sections,
+        int start,
+        int removeLength,
+        string inserted)
+    {
+        if (inserted.Length > 0 && !sections.CanInsert(start))
+        {
+            inserted = string.Empty;
+        }
+        if (removeLength == 0)
+        {
+            return (0, inserted);
+        }
+
+        var deletable = new List<TextRange>();
+        sections.GetDeletableSegments(new TextRange(start, removeLength), deletable);
+
+        var kept = new System.Text.StringBuilder();
+        int cursor = start;
+        foreach (var segment in deletable)
+        {
+            int segmentStart = Math.Clamp(segment.Start, start, start + removeLength);
+            int segmentEnd = Math.Clamp(segment.Start + segment.Length, segmentStart, start + removeLength);
+            if (segmentStart > cursor)
+            {
+                kept.Append(Document.GetText(cursor, segmentStart - cursor));
+            }
+            cursor = Math.Max(cursor, segmentEnd);
+        }
+        if (cursor < start + removeLength)
+        {
+            kept.Append(Document.GetText(cursor, start + removeLength - cursor));
+        }
+
+        return (removeLength, inserted + kept.ToString());
     }
 
     private int PreviousTextElement(int position)

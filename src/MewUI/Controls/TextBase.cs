@@ -725,7 +725,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         }
         if (text.Length > 0)
         {
-            _editor.ReplaceSelection(text);
+            _editor.EnterText(text);
         }
     }
 
