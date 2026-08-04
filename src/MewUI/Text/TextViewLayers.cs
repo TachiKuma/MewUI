@@ -31,24 +31,30 @@ public sealed class TextViewLayerStack
 {
     private readonly List<Entry> _entries;
 
-    public TextViewLayerStack()
+    /// <summary>
+    /// Creates the stack with the host's own drawing already in it. The host passes one layer per
+    /// anchor, so its background, selection, glyph and caret passes are ordinary entries rather
+    /// than a callback the stack has to ask for.
+    /// </summary>
+    public TextViewLayerStack(Func<TextViewLayerAnchor, ITextViewLayer> createBuiltIn)
     {
+        ArgumentNullException.ThrowIfNull(createBuiltIn);
         _entries = new List<Entry>(4);
-        foreach (var anchor in Enum.GetValues<TextAdornmentLayer>())
+        foreach (var anchor in Enum.GetValues<TextViewLayerAnchor>())
         {
-            _entries.Add(new Entry(anchor, null, IsAnchor: true));
+            _entries.Add(new Entry(anchor, createBuiltIn(anchor), IsAnchor: true));
         }
     }
 
     /// <summary>Raised when the order changed, so the host can repaint.</summary>
     public event Action? Changed;
 
-    /// <summary>Layers in draw order. Built-in anchors appear as null-free entries only when replaced.</summary>
+    /// <summary>Layers in draw order, the host's built-in ones included.</summary>
     public IReadOnlyList<ITextViewLayer> Layers
-        => _entries.Where(entry => entry.Layer is not null).Select(entry => entry.Layer!).ToArray();
+        => _entries.Select(entry => entry.Layer).ToArray();
 
     /// <summary>Inserts <paramref name="layer"/> relative to <paramref name="anchor"/>.</summary>
-    public void Insert(ITextViewLayer layer, TextAdornmentLayer anchor, TextLayerPosition position)
+    public void Insert(ITextViewLayer layer, TextViewLayerAnchor anchor, TextLayerPosition position)
     {
         ArgumentNullException.ThrowIfNull(layer);
         int index = FindAnchor(anchor);
@@ -67,34 +73,17 @@ public sealed class TextViewLayerStack
         Changed?.Invoke();
     }
 
-    /// <summary>Whether the host still owns the drawing of <paramref name="anchor"/>.</summary>
-    public bool DrawsOwnContent(TextAdornmentLayer anchor) => _entries[FindAnchor(anchor)].Layer is null;
-
-    /// <summary>
-    /// Walks the order, letting the host paint an anchor it still owns through
-    /// <paramref name="drawAnchor"/>.
-    /// </summary>
-    public void Draw(
-        ITextRenderContext context,
-        Rect viewportBounds,
-        Action<TextAdornmentLayer> drawAnchor)
+    /// <summary>Draws every layer in order.</summary>
+    public void Draw(ITextRenderContext context, Rect viewportBounds)
     {
         ArgumentNullException.ThrowIfNull(context);
-        ArgumentNullException.ThrowIfNull(drawAnchor);
         foreach (var entry in _entries)
         {
-            if (entry.Layer is null)
-            {
-                drawAnchor(entry.Anchor);
-            }
-            else
-            {
-                entry.Layer.Draw(context, viewportBounds);
-            }
+            entry.Layer.Draw(context, viewportBounds);
         }
     }
 
-    private int FindAnchor(TextAdornmentLayer anchor)
+    private int FindAnchor(TextViewLayerAnchor anchor)
     {
         for (int index = 0; index < _entries.Count; index++)
         {
@@ -107,5 +96,5 @@ public sealed class TextViewLayerStack
     }
 
     // A replaced anchor keeps IsAnchor so later inserts still find the position by name.
-    private readonly record struct Entry(TextAdornmentLayer Anchor, ITextViewLayer? Layer, bool IsAnchor);
+    private readonly record struct Entry(TextViewLayerAnchor Anchor, ITextViewLayer Layer, bool IsAnchor);
 }

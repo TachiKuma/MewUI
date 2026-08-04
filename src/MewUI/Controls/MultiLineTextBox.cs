@@ -51,7 +51,8 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     // target. The delta is the anchor row's distance above the viewport top.
     private int _scrollAnchorOffset;
     private double _scrollAnchorDelta;
-    private readonly TextViewLayerStack _layers = new();
+    private readonly TextViewLayerStack _layers;
+    private IGraphicsContext? _graphics;
     private double _preferredCaretX = double.NaN;
     private bool _dragSelecting;
 
@@ -69,6 +70,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         : base(document)
     {
         Extensions = new TextViewExtensionPipeline();
+        _layers = new TextViewLayerStack(CreateBuiltInLayer);
         _document.Changed += OnDocumentChanged;
         _editor.StateChanged += OnEditorStateChanged;
 
@@ -134,7 +136,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     public event Action? EditingStateChanged;
     public event Action<bool>? WrapChanged;
 
-    /// <summary>Re-runs registered classifiers, generators, projections, and adornments.</summary>
+    /// <summary>Re-runs registered classifiers, generators, projections, and layers.</summary>
     public void InvalidateTextView()
     {
         // Rebuild instead of reset: extensions re-run against unchanged text, so the reader
@@ -237,66 +239,77 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             return;
         }
-        // Every anchor paints its adornments and viewport renderers first and its own content after,
-        // so an extension registered at an anchor sits under what that anchor draws.
-        var selection = _editor.Selection;
-        var text = context.Text;
-        Layers.Draw(text, _contentBounds, anchor =>
-        {
-            DrawAnchorContent(context, text, anchor, selection);
-        });
+        // A layer inserted below an anchor paints under that anchor's content, and the four
+        // built-ins are entries like any other, so the order alone decides the result.
+        _graphics = context;
+        _layers.Draw(context.Text, _contentBounds);
     }
 
-    private void DrawAnchorContent(
-        IGraphicsContext context,
-        ITextRenderContext text,
-        TextAdornmentLayer anchor,
-        TextRange selection)
+    private ITextViewLayer CreateBuiltInLayer(TextViewLayerAnchor anchor) => anchor switch
     {
-        if (_view is null)
+        TextViewLayerAnchor.Background => new BuiltInLayer(this, DrawLineBackgrounds),
+        TextViewLayerAnchor.Selection => new BuiltInLayer(this, DrawSelection),
+        TextViewLayerAnchor.Text => new BuiltInLayer(this, DrawGlyphs),
+        _ => new BuiltInLayer(this, DrawCaret)
+    };
+
+    private void DrawLineBackgrounds(ITextRenderContext text)
+    {
+        foreach (var line in _view!.MaterializedLines)
+        {
+            var options = new TextDrawOptions(Foreground, CreateCompositionSpans(line), Owner: line);
+            line.DrawBackground(text, GetLineOrigin(line), in options);
+        }
+    }
+
+    private void DrawSelection(ITextRenderContext text)
+    {
+        var selection = _editor.Selection;
+        foreach (var line in _view!.MaterializedLines)
+        {
+            var spans = CreateSelectionSpans(line, selection);
+            if (spans.Length == 0)
+            {
+                continue;
+            }
+            var options = new TextDrawOptions(Foreground, spans, Owner: line);
+            line.DrawBackground(text, GetLineOrigin(line), in options);
+        }
+    }
+
+    private void DrawGlyphs(ITextRenderContext text)
+    {
+        foreach (var line in _view!.MaterializedLines)
+        {
+            var options = new TextDrawOptions(Foreground, CreateCompositionSpans(line), Owner: line);
+            line.DrawForeground(text, GetLineOrigin(line), in options);
+        }
+        DrawCompositionUnderlines(_graphics!, _contentBounds.Right);
+    }
+
+    private void DrawCaret(ITextRenderContext text)
+    {
+        if (!IsFocused || !_caretVisible)
         {
             return;
         }
-        switch (anchor)
+        var caret = GetCharRectInWindow(_editor.CaretPosition);
+        _graphics!.FillRectangle(
+            new Rect(caret.X, caret.Y, 1, Math.Max(1, caret.Height)), Theme.Palette.WindowText);
+    }
+
+    /// <summary>
+    /// One of the host's own drawing passes as a layer entry. It draws nothing before the view
+    /// exists, which is the same guard the single draw method used to carry.
+    /// </summary>
+    private sealed class BuiltInLayer(MultiLineTextBox owner, Action<ITextRenderContext> draw) : ITextViewLayer
+    {
+        public void Draw(ITextRenderContext context, Rect viewportBounds)
         {
-            case TextAdornmentLayer.Background:
-                foreach (var line in _view.MaterializedLines)
-                {
-                    var options = new TextDrawOptions(Foreground, CreateCompositionSpans(line), Owner: line);
-                    line.DrawBackground(text, GetLineOrigin(line), in options);
-                }
-                break;
-
-            case TextAdornmentLayer.Selection:
-                foreach (var line in _view.MaterializedLines)
-                {
-                    var spans = CreateSelectionSpans(line, selection);
-                    if (spans.Length == 0)
-                    {
-                        continue;
-                    }
-                    var options = new TextDrawOptions(Foreground, spans, Owner: line);
-                    line.DrawBackground(text, GetLineOrigin(line), in options);
-                }
-                break;
-
-            case TextAdornmentLayer.Text:
-                foreach (var line in _view.MaterializedLines)
-                {
-                    var options = new TextDrawOptions(Foreground, CreateCompositionSpans(line), Owner: line);
-                    line.DrawForeground(text, GetLineOrigin(line), in options);
-                }
-                DrawCompositionUnderlines(context, _contentBounds.Right);
-                break;
-
-            default:
-                if (IsFocused && _caretVisible)
-                {
-                    var caret = GetCharRectInWindow(_editor.CaretPosition);
-                    context.FillRectangle(
-                        new Rect(caret.X, caret.Y, 1, Math.Max(1, caret.Height)), Theme.Palette.WindowText);
-                }
-                break;
+            if (owner._view is not null)
+            {
+                draw(context);
+            }
         }
     }
 
@@ -393,7 +406,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     }
 
     /// <inheritdoc/>
-    public double DocumentHeight
+    public double ExtentHeight
     {
         get
         {
@@ -423,17 +436,17 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     }
 
     /// <inheritdoc/>
-    public int GetLineNumberByVisualTop(double documentY)
+    public int FindLineByY(double documentY)
     {
         EnsureView();
-        return _view?.GetLineNumberByVisualTop(documentY) ?? 0;
+        return _view?.FindLineByY(documentY) ?? 0;
     }
 
     /// <inheritdoc/>
-    public double GetVisualTopByLineNumber(int lineNumber)
+    public double GetLineY(int lineNumber)
     {
         EnsureView();
-        return _view?.GetVisualTopByLineNumber(lineNumber) ?? 0;
+        return _view?.GetLineY(lineNumber) ?? 0;
     }
 
     private void UpdateViewport()
@@ -480,7 +493,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
             int lineNumber = _document.LineCount == 0
                 ? 0
                 : _document.GetLineByOffset(Math.Clamp(_scrollAnchorOffset, 0, _document.TextLength)).LineNumber;
-            return _view.GetVisualTopByLineNumber(lineNumber);
+            return _view.GetLineY(lineNumber);
         }
         return _view.GetCaretBounds(_scrollAnchorOffset).Y;
     }
@@ -908,11 +921,11 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     public TextViewLayerStack Layers => _layers;
 
     /// <inheritdoc/>
-    public void InsertLayer(ITextViewLayer layer, TextAdornmentLayer anchor, TextLayerPosition position)
+    public void InsertLayer(ITextViewLayer layer, TextViewLayerAnchor anchor, TextLayerPosition position)
         => _layers.Insert(layer, anchor, position);
 
     /// <inheritdoc/>
-    public void InvalidateLayer(TextAdornmentLayer anchor) => InvalidateVisual();
+    public void InvalidateLayer(TextViewLayerAnchor anchor) => InvalidateVisual();
 
     /// <inheritdoc/>
     public Point ScrollOffset => new(_horizontalOffset, _verticalOffset);

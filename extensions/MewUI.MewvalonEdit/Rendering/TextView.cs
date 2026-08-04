@@ -113,12 +113,12 @@ public sealed class TextView
             _ => TextLayerPosition.Below
         });
 
-    internal static TextAdornmentLayer ToAnchor(KnownLayer layer) => layer switch
+    internal static TextViewLayerAnchor ToAnchor(KnownLayer layer) => layer switch
     {
-        KnownLayer.Background => TextAdornmentLayer.Background,
-        KnownLayer.Selection => TextAdornmentLayer.Selection,
-        KnownLayer.Caret => TextAdornmentLayer.Caret,
-        _ => TextAdornmentLayer.Text
+        KnownLayer.Background => TextViewLayerAnchor.Background,
+        KnownLayer.Selection => TextViewLayerAnchor.Selection,
+        KnownLayer.Caret => TextViewLayerAnchor.Caret,
+        _ => TextViewLayerAnchor.Text
     };
 
     /// <summary>Raised before the visible lines are built, carrying the first line number.</summary>
@@ -136,7 +136,7 @@ public sealed class TextView
     }
 
     /// <summary>Height of the whole document in view coordinates.</summary>
-    public double DocumentHeight => Host.DocumentHeight;
+    public double DocumentHeight => Host.ExtentHeight;
 
     /// <summary>Height of a line holding one character, independent of content.</summary>
     public double DefaultLineHeight => Host.DefaultLineHeight;
@@ -173,11 +173,11 @@ public sealed class TextView
 
     /// <summary>Document-space top of a one-based document line.</summary>
     public double GetVisualTopByDocumentLine(int documentLineNumber)
-        => Host.GetVisualTopByLineNumber(documentLineNumber - 1);
+        => Host.GetLineY(documentLineNumber - 1);
 
     /// <summary>One-based document line whose row contains the document-space Y.</summary>
     public int GetDocumentLineByVisualTop(double documentY)
-        => Host.GetLineNumberByVisualTop(documentY) + 1;
+        => Host.FindLineByY(documentY) + 1;
 
     /// <summary>The laid-out line containing the document-space Y, or null when not visible.</summary>
     public VisualLine? GetVisualLineFromVisualTop(double documentY)

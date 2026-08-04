@@ -148,7 +148,7 @@ public readonly record struct TextDrawOptions(
 
 public interface ITextRenderContext
 {
-    /// <summary>Surface this context draws into, for adornments that paint shapes rather than text.</summary>
+    /// <summary>Surface this context draws into, for layers that paint shapes rather than text.</summary>
     IGraphicsContext Graphics { get; }
 
     void Draw(ITextLayout layout, Point origin, in TextDrawOptions options);

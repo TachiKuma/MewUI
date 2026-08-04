@@ -72,7 +72,7 @@ public class TextEditor : ContentControl
         _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
         _backgroundRenderers.RegisterInto(_surface);
-        _surface.InsertLayer(_whitespaceMarkers, TextAdornmentLayer.Text, TextLayerPosition.Below);
+        _surface.InsertLayer(_whitespaceMarkers, TextViewLayerAnchor.Text, TextLayerPosition.Below);
         _lineNumberMargin = new LineNumberMargin { IsVisible = _showLineNumbers };
         _marginHost = new Grid().Columns("Auto,*").Children(_surface.Column(1));
         Content = _marginHost;

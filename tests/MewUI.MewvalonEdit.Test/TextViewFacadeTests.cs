@@ -81,7 +81,7 @@ public sealed class TextViewFacadeTests
         Assert.AreEqual(view.Host.ScrollOffset.X, view.HorizontalOffset, 0.01);
         Assert.AreEqual(view.Host.ScrollOffset.Y, view.VerticalOffset, 0.01);
         Assert.AreEqual(view.Host.ScrollOffset, view.ScrollOffset);
-        Assert.AreEqual(view.Host.DocumentHeight, view.DocumentHeight, 0.01);
+        Assert.AreEqual(view.Host.ExtentHeight, view.DocumentHeight, 0.01);
     }
 
     [TestMethod]

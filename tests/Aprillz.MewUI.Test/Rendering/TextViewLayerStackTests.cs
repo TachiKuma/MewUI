@@ -4,61 +4,71 @@ using Aprillz.MewUI.Text;
 namespace MewUI.Test.Rendering;
 
 /// <summary>
-/// Anchors are positions, not slots that own their content: a layer inserted against one draws
-/// beside it, and replacing one stops the host from painting that anchor at all.
+/// Anchors are positions, not slots that own their content: the host's own drawing is an ordinary
+/// entry, a layer inserted against one draws beside it, and replacing one drops the host's entry.
 /// </summary>
 [TestClass]
 public sealed class TextViewLayerStackTests
 {
+    private static TextViewLayerStack CreateStack(List<string> order)
+        => new(anchor => new RecordingLayer(anchor.ToString(), order));
+
+    private static string Draw(TextViewLayerStack stack, List<string> order)
+    {
+        stack.Draw(NullRenderContext.Instance, default);
+        return string.Join(',', order);
+    }
+
     [TestMethod]
     public void BuiltInAnchorsDrawInOrder()
     {
         var order = new List<string>();
-        var stack = new TextViewLayerStack();
+        var stack = CreateStack(order);
 
-        stack.Draw(NullRenderContext.Instance, default, anchor => order.Add(anchor.ToString()));
-
-        Assert.AreEqual("Background,Selection,Text,Caret", string.Join(',', order));
+        Assert.AreEqual("Background,Selection,Text,Caret", Draw(stack, order));
     }
 
     [TestMethod]
     public void InsertedLayersSitBesideTheirAnchor()
     {
         var order = new List<string>();
-        var stack = new TextViewLayerStack();
-        stack.Insert(new RecordingLayer("under", order), TextAdornmentLayer.Text, TextLayerPosition.Below);
-        stack.Insert(new RecordingLayer("over", order), TextAdornmentLayer.Text, TextLayerPosition.Above);
+        var stack = CreateStack(order);
+        stack.Insert(new RecordingLayer("under", order), TextViewLayerAnchor.Text, TextLayerPosition.Below);
+        stack.Insert(new RecordingLayer("over", order), TextViewLayerAnchor.Text, TextLayerPosition.Above);
 
-        stack.Draw(NullRenderContext.Instance, default, anchor => order.Add(anchor.ToString()));
-
-        Assert.AreEqual("Background,Selection,under,Text,over,Caret", string.Join(',', order));
+        Assert.AreEqual("Background,Selection,under,Text,over,Caret", Draw(stack, order));
     }
 
     [TestMethod]
     public void ReplacingAnAnchorTakesOverItsDrawing()
     {
         var order = new List<string>();
-        var stack = new TextViewLayerStack();
-        stack.Insert(new RecordingLayer("mine", order), TextAdornmentLayer.Selection, TextLayerPosition.Replace);
+        var stack = CreateStack(order);
+        stack.Insert(new RecordingLayer("mine", order), TextViewLayerAnchor.Selection, TextLayerPosition.Replace);
 
-        stack.Draw(NullRenderContext.Instance, default, anchor => order.Add(anchor.ToString()));
-
-        Assert.AreEqual("Background,mine,Text,Caret", string.Join(',', order));
-        Assert.IsFalse(stack.DrawsOwnContent(TextAdornmentLayer.Selection));
-        Assert.IsTrue(stack.DrawsOwnContent(TextAdornmentLayer.Text));
+        // The host's own selection pass is gone, which is what makes replacement meaningful.
+        Assert.AreEqual("Background,mine,Text,Caret", Draw(stack, order));
     }
 
     [TestMethod]
     public void AReplacedAnchorStillAcceptsNeighbours()
     {
         var order = new List<string>();
-        var stack = new TextViewLayerStack();
-        stack.Insert(new RecordingLayer("mine", order), TextAdornmentLayer.Selection, TextLayerPosition.Replace);
-        stack.Insert(new RecordingLayer("under", order), TextAdornmentLayer.Selection, TextLayerPosition.Below);
+        var stack = CreateStack(order);
+        stack.Insert(new RecordingLayer("mine", order), TextViewLayerAnchor.Selection, TextLayerPosition.Replace);
+        stack.Insert(new RecordingLayer("under", order), TextViewLayerAnchor.Selection, TextLayerPosition.Below);
 
-        stack.Draw(NullRenderContext.Instance, default, anchor => order.Add(anchor.ToString()));
+        Assert.AreEqual("Background,under,mine,Text,Caret", Draw(stack, order));
+    }
 
-        Assert.AreEqual("Background,under,mine,Text,Caret", string.Join(',', order));
+    [TestMethod]
+    public void LayersListCarriesTheBuiltInsAndTheInsertions()
+    {
+        var order = new List<string>();
+        var stack = CreateStack(order);
+        stack.Insert(new RecordingLayer("extra", order), TextViewLayerAnchor.Text, TextLayerPosition.Above);
+
+        Assert.HasCount(5, stack.Layers);
     }
 
     private sealed class RecordingLayer(string name, List<string> order) : ITextViewLayer

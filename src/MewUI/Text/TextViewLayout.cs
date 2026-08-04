@@ -75,17 +75,17 @@ public sealed class TextViewLayout : ITextViewLayout
     public double DefaultBaseline => EnsureDefaultMetrics().Baseline;
 
     /// <summary>Line number whose row contains <paramref name="documentY"/>.</summary>
-    public int GetLineNumberByVisualTop(double documentY)
+    public int FindLineByY(double documentY)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return _document.LineCount == 0 ? 0 : FindLineByY(documentY);
+        return _document.LineCount == 0 ? 0 : _metrics.FindLineByY(documentY);
     }
 
     /// <summary>Document-space top of <paramref name="lineNumber"/>.</summary>
-    public double GetVisualTopByLineNumber(int lineNumber)
+    public double GetLineY(int lineNumber)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        return GetLineY(Math.Clamp(lineNumber, 0, Math.Max(0, _states.Length - 1)));
+        return _metrics.GetLineY(Math.Clamp(lineNumber, 0, Math.Max(0, _states.Length - 1)));
     }
 
     private (double Height, double Baseline)? _defaultMetrics;
@@ -616,12 +616,6 @@ public sealed class TextViewLayout : ITextViewLayout
         }
         length = end - start;
     }
-
-    private int FindLineByY(double documentY)
-        => _metrics.FindLineByY(documentY);
-
-    private double GetLineY(int lineNumber)
-        => _metrics.GetLineY(lineNumber);
 
     private void EnsureStateCount()
     {

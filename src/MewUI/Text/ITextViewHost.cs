@@ -12,7 +12,7 @@ public interface ITextViewHost
     /// <summary>Raised after the document content changed or the document was replaced.</summary>
     event Action<ITextViewHost>? DocumentChanged;
 
-    /// <summary>Re-runs registered classifiers, generators, projections, and adornments.</summary>
+    /// <summary>Re-runs registered classifiers, generators, projections, and layers.</summary>
     void InvalidateTextView();
 
     /// <summary>
@@ -37,7 +37,7 @@ public interface ITextViewHost
     Rect TextViewportBounds { get; }
 
     /// <summary>Height of the whole document in view coordinates.</summary>
-    double DocumentHeight { get; }
+    double ExtentHeight { get; }
 
     /// <summary>Height of a line holding one character in the view's own style, independent of content.</summary>
     double DefaultLineHeight { get; }
@@ -46,10 +46,10 @@ public interface ITextViewHost
     double DefaultBaseline { get; }
 
     /// <summary>Line number whose row contains the document-space <paramref name="documentY"/>.</summary>
-    int GetLineNumberByVisualTop(double documentY);
+    int FindLineByY(double documentY);
 
     /// <summary>Document-space top of <paramref name="lineNumber"/>.</summary>
-    double GetVisualTopByLineNumber(int lineNumber);
+    double GetLineY(int lineNumber);
 
     /// <summary>Scroll offset of the view in document coordinates.</summary>
     Point ScrollOffset { get; }
@@ -67,8 +67,8 @@ public interface ITextViewHost
     TextViewLayerStack Layers { get; }
 
     /// <summary>Inserts a layer relative to a built-in anchor.</summary>
-    void InsertLayer(ITextViewLayer layer, TextAdornmentLayer anchor, TextLayerPosition position);
+    void InsertLayer(ITextViewLayer layer, TextViewLayerAnchor anchor, TextLayerPosition position);
 
     /// <summary>Repaints the layer stack without rebuilding any line.</summary>
-    void InvalidateLayer(TextAdornmentLayer anchor);
+    void InvalidateLayer(TextViewLayerAnchor anchor);
 }

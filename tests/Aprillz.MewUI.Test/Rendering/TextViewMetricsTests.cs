@@ -44,12 +44,12 @@ public sealed class TextViewMetricsTests
 
         for (int line = 0; line < 5; line++)
         {
-            double top = view.GetVisualTopByLineNumber(line);
-            Assert.AreEqual(line, view.GetLineNumberByVisualTop(top + 1),
+            double top = view.GetLineY(line);
+            Assert.AreEqual(line, view.FindLineByY(top + 1),
                 $"Line {line} at y={top} resolved to a different line.");
         }
 
-        Assert.IsGreaterThan(view.GetVisualTopByLineNumber(4), view.ExtentHeight,
+        Assert.IsGreaterThan(view.GetLineY(4), view.ExtentHeight,
             "The document height does not cover the last line.");
     }
 

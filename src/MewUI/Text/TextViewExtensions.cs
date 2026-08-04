@@ -38,21 +38,21 @@ public interface ITextElementGenerator
 }
 
 /// <summary>
-/// Anchor an adornment draws at. Every adornment paints under the content of its own layer, so the
-/// layer names what it sits beneath rather than what it covers.
+/// Built-in position an inserted layer is placed against. A layer inserted below an anchor paints
+/// under that anchor's own content, so an anchor names what a layer sits beneath, not what it covers.
 /// </summary>
-public enum TextAdornmentLayer
+public enum TextViewLayerAnchor
 {
-    /// <summary>Under the line backgrounds, the bottom of the stack.</summary>
+    /// <summary>The line backgrounds, the bottom of the stack.</summary>
     Background,
 
-    /// <summary>Under the selection highlight.</summary>
+    /// <summary>The selection highlight.</summary>
     Selection,
 
-    /// <summary>Under the glyphs.</summary>
+    /// <summary>The glyphs.</summary>
     Text,
 
-    /// <summary>Under the caret.</summary>
+    /// <summary>The caret.</summary>
     Caret
 }
 

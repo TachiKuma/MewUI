@@ -46,6 +46,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     {
         Cursor = CursorType.IBeam;
         Extensions = new TextViewExtensionPipeline();
+        _layers = new TextViewLayerStack(CreateBuiltInLayer);
         _verticalScrollBar = new ScrollBar { Orientation = Orientation.Vertical, IsVisible = false };
         _horizontalScrollBar = new ScrollBar { Orientation = Orientation.Horizontal, IsVisible = false };
         _verticalScrollBar.Parent = this;
@@ -113,7 +114,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         }
     }
 
-    /// <summary>Re-runs registered classifiers, generators, projections, and adornments.</summary>
+    /// <summary>Re-runs registered classifiers, generators, projections, and layers.</summary>
     public void InvalidateTextView()
     {
         // Rebuild instead of reset: extensions re-run against unchanged text, so the reader
@@ -160,7 +161,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             // Every anchor paints its extensions first and its own content after. The viewer draws
             // no caret, so that anchor holds extensions only; keeping it preserves the slot.
             var text = context.Text;
-            Layers.Draw(text, _contentBounds, anchor => DrawAnchorContent(text, anchor));
+            _layers.Draw(text, _contentBounds);
         }
         finally
         {
@@ -241,7 +242,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     public Rect TextViewportBounds => _contentBounds;
 
     /// <inheritdoc/>
-    public double DocumentHeight
+    public double ExtentHeight
     {
         get
         {
@@ -271,17 +272,17 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     }
 
     /// <inheritdoc/>
-    public int GetLineNumberByVisualTop(double documentY)
+    public int FindLineByY(double documentY)
     {
         EnsureView();
-        return _view?.GetLineNumberByVisualTop(documentY) ?? 0;
+        return _view?.FindLineByY(documentY) ?? 0;
     }
 
     /// <inheritdoc/>
-    public double GetVisualTopByLineNumber(int lineNumber)
+    public double GetLineY(int lineNumber)
     {
         EnsureView();
-        return _view?.GetVisualTopByLineNumber(lineNumber) ?? 0;
+        return _view?.GetLineY(lineNumber) ?? 0;
     }
 
     private void UpdateViewport()
@@ -357,7 +358,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             int lineNumber = _document.LineCount == 0
                 ? 0
                 : _document.GetLineByOffset(Math.Clamp(_scrollAnchorOffset, 0, _document.TextLength)).LineNumber;
-            return _view.GetVisualTopByLineNumber(lineNumber);
+            return _view.GetLineY(lineNumber);
         }
         return _view.GetCaretBounds(_scrollAnchorOffset).Y;
     }
@@ -507,22 +508,45 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         return new TextDrawOptions(Theme.Palette.WindowText, paint, Owner: line);
     }
 
-    private void DrawAnchorContent(ITextRenderContext text, TextAdornmentLayer anchor)
+    /// <summary>
+    /// The viewer's own drawing as layer entries. It paints no caret and no line background, so
+    /// those anchors hold nothing but still occupy their slot, keeping them insertable.
+    /// </summary>
+    private ITextViewLayer CreateBuiltInLayer(TextViewLayerAnchor anchor) => anchor switch
     {
-        if (_view is null)
-        {
-            return;
-        }
-        foreach (var line in _view.MaterializedLines)
+        TextViewLayerAnchor.Selection => new BuiltInLayer(this, DrawSelection),
+        TextViewLayerAnchor.Text => new BuiltInLayer(this, DrawGlyphs),
+        _ => new BuiltInLayer(this, null)
+    };
+
+    private void DrawSelection(ITextRenderContext text)
+    {
+        foreach (var line in _view!.MaterializedLines)
         {
             var options = CreateDrawOptions(line);
-            if (anchor == TextAdornmentLayer.Selection && !options.PaintSpans.IsEmpty)
+            if (!options.PaintSpans.IsEmpty)
             {
                 line.DrawBackground(text, GetLineOrigin(line), in options);
             }
-            else if (anchor == TextAdornmentLayer.Text)
+        }
+    }
+
+    private void DrawGlyphs(ITextRenderContext text)
+    {
+        foreach (var line in _view!.MaterializedLines)
+        {
+            var options = CreateDrawOptions(line);
+            line.DrawForeground(text, GetLineOrigin(line), in options);
+        }
+    }
+
+    private sealed class BuiltInLayer(SyntaxViewer owner, Action<ITextRenderContext>? draw) : ITextViewLayer
+    {
+        public void Draw(ITextRenderContext context, Rect viewportBounds)
+        {
+            if (draw is not null && owner._view is not null)
             {
-                line.DrawForeground(text, GetLineOrigin(line), in options);
+                draw(context);
             }
         }
     }
@@ -531,13 +555,13 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     public TextViewLayerStack Layers => _layers;
 
     /// <inheritdoc/>
-    public void InsertLayer(ITextViewLayer layer, TextAdornmentLayer anchor, TextLayerPosition position)
+    public void InsertLayer(ITextViewLayer layer, TextViewLayerAnchor anchor, TextLayerPosition position)
         => _layers.Insert(layer, anchor, position);
 
     /// <inheritdoc/>
-    public void InvalidateLayer(TextAdornmentLayer anchor) => InvalidateVisual();
+    public void InvalidateLayer(TextViewLayerAnchor anchor) => InvalidateVisual();
 
-    private readonly TextViewLayerStack _layers = new();
+    private readonly TextViewLayerStack _layers;
 
     private void ReplaceDocument(string value)
     {
