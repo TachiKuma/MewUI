@@ -20,11 +20,9 @@ internal sealed class ColumnRulerLayer(TextEditorOptions options, TextEditor edi
             return;
         }
 
-        // Snapped, or the rule lands between device pixels and shifts as the view scrolls.
         double scale = editor.EditorDpi / 96.0;
-        x = LayoutRounding.RoundToPixel(x, scale);
-        var rule = view.ResolvedColumnRulerPen;
-        var pen = rule with { Thickness = LayoutRounding.SnapThicknessToPixels(rule.Thickness, scale, 1) };
+        var pen = view.ResolvedColumnRulerPen.SnapThickness(scale);
+        x = pen.SnapStrokeCenter(x, scale);
 
         context.Graphics.DrawLine(
             new Point(x, viewportBounds.Y), new Point(x, viewportBounds.Bottom), pen.ToPen());
@@ -61,14 +59,12 @@ internal sealed class CurrentLineLayer(TextEditorOptions options, TextEditor edi
                     viewportBounds.Width,
                     line.Height),
                 scale);
-            var border = view.CurrentLineBorder;
+            var pen = view.CurrentLineBorder.SnapThickness(scale);
             context.Graphics.FillRectangle(bounds, view.CurrentLineBackground);
+            // Inset by half the stroke, which is centred on the edge it is given: on the snapped
+            // edge itself it would cover half a pixel on each side and blur as rows change height.
             context.Graphics.DrawRectangle(
-                bounds,
-                (border with
-                {
-                    Thickness = LayoutRounding.SnapThicknessToPixels(border.Thickness, scale, 1)
-                }).ToPen());
+                bounds.Deflate(new Thickness(pen.Thickness / 2)), pen.ToPen());
             return;
         }
     }
