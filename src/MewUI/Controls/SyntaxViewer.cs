@@ -26,8 +26,14 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     private TextViewLayout? _view;
     private IGraphicsFactory? _viewFactory;
     private Rect _contentBounds;
+    private const int ANCHOR_PIN_PASSES = 4;
+
     private double _verticalOffset;
     private double _horizontalOffset;
+    // Vertical scrolling is anchored to a document position; the pixel offset is derived from it
+    // so estimated-height corrections move the scroll bar, never the content. See MultiLineTextBox.
+    private int _scrollAnchorOffset;
+    private double _scrollAnchorDelta;
     private int _anchor;
     private int _caret;
     private long _documentVersion;
@@ -282,16 +288,78 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     {
         EnsureView();
         if (_view is null || _contentBounds.IsEmpty) return;
-        double maximum = Math.Max(0, _view.ExtentHeight - _contentBounds.Height);
-        _verticalOffset = Math.Clamp(_verticalOffset, 0, maximum);
         if (Wrap) _horizontalOffset = 0;
+        // Pin the scroll anchor: materialization replaces estimated heights with measured ones,
+        // and the derived pixel offset follows the anchor row so the content never drifts under a
+        // stationary viewport. Same scheme as MultiLineTextBox.
+        for (int pass = 0; pass < ANCHOR_PIN_PASSES; pass++)
+        {
+            _view.SetViewport(new TextViewport(
+                _contentBounds.Width,
+                _contentBounds.Height,
+                _horizontalOffset,
+                _verticalOffset));
+            bool settled = ApplyDerivedVerticalOffset(GetScrollAnchorDocumentY() + _scrollAnchorDelta);
+            SetHorizontalOffset(_horizontalOffset, false);
+            if (settled)
+            {
+                break;
+            }
+        }
+    }
+
+    /// <summary>Applies the pixel offset derived from the anchor; true when it did not move.</summary>
+    private bool ApplyDerivedVerticalOffset(double value)
+    {
+        double maximum = Math.Max(0, (_view?.ExtentHeight ?? 0) - _contentBounds.Height);
+        value = Math.Clamp(double.IsFinite(value) ? value : 0, 0, maximum);
+        if (Math.Abs(_verticalOffset - value) < 0.001)
+        {
+            return true;
+        }
+        _verticalOffset = value;
+        if (_verticalScrollBar.IsVisible) _verticalScrollBar.Value = value;
+        ScrollOffsetChanged?.Invoke(this);
+        return false;
+    }
+
+    /// <summary>Re-anchors to the row at the top of the viewport at the current pixel offset.</summary>
+    private void CaptureScrollAnchor()
+    {
+        if (_view is null || _contentBounds.IsEmpty)
+        {
+            _scrollAnchorOffset = 0;
+            _scrollAnchorDelta = _verticalOffset;
+            return;
+        }
         _view.SetViewport(new TextViewport(
             _contentBounds.Width,
             _contentBounds.Height,
             _horizontalOffset,
             _verticalOffset));
-        SetVerticalOffset(_verticalOffset, false);
-        SetHorizontalOffset(_horizontalOffset, false);
+        var hit = _view.HitTest(new Point(0, 0));
+        _scrollAnchorOffset = hit.DocumentOffset;
+        _scrollAnchorDelta = _verticalOffset - _view.GetCaretBounds(hit.DocumentOffset).Y;
+    }
+
+    /// <summary>
+    /// Document Y of the anchor's visual row. Without wrapping this is a metrics-tree read; a caret
+    /// query would re-cut a virtualized line's slice and fight the horizontal axis over it.
+    /// </summary>
+    private double GetScrollAnchorDocumentY()
+    {
+        if (_view is null)
+        {
+            return 0;
+        }
+        if (!Wrap)
+        {
+            int lineNumber = _document.LineCount == 0
+                ? 0
+                : _document.GetLineByOffset(Math.Clamp(_scrollAnchorOffset, 0, _document.TextLength)).LineNumber;
+            return _view.GetVisualTopByLineNumber(lineNumber);
+        }
+        return _view.GetCaretBounds(_scrollAnchorOffset).Y;
     }
 
     private void ArrangeScrollBars()
@@ -347,9 +415,10 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             return;
         }
         _verticalOffset = value;
+        CaptureScrollAnchor();
         if (_verticalScrollBar.IsVisible)
         {
-            _verticalScrollBar.Value = value;
+            _verticalScrollBar.Value = _verticalOffset;
         }
         ScrollOffsetChanged?.Invoke(this);
         if (invalidate)
@@ -475,6 +544,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         _document = new StringTextDocument(value, ++_documentVersion);
         _anchor = Math.Clamp(_anchor, 0, _document.TextLength);
         _caret = Math.Clamp(_caret, 0, _document.TextLength);
+        _scrollAnchorOffset = Math.Clamp(_scrollAnchorOffset, 0, _document.TextLength);
         ResetView();
         DocumentChanged?.Invoke(this);
     }
@@ -569,9 +639,11 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         EnsureView();
         if (_view is null || _contentBounds.IsEmpty) return;
         var caret = _view.GetCaretBounds(_caret);
-        if (caret.Y < _verticalOffset) _verticalOffset = caret.Y;
-        else if (caret.Bottom > _verticalOffset + _contentBounds.Height)
-            _verticalOffset = caret.Bottom - _contentBounds.Height;
+        double vertical = _verticalOffset;
+        if (caret.Y < vertical) vertical = caret.Y;
+        else if (caret.Bottom > vertical + _contentBounds.Height)
+            vertical = caret.Bottom - _contentBounds.Height;
+        SetVerticalOffset(vertical, false);
         UpdateViewport();
     }
 

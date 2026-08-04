@@ -31,6 +31,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     // Guard against an offset that oscillates instead of settling. Measured convergence is 2-3
     // passes and does not grow with the document, since each pass measures the lines it lands on.
     private const int SCROLL_SETTLE_PASSES = 8;
+    private const int ANCHOR_PIN_PASSES = 4;
 
     // Keeps the caret fully visible at the end of the longest line, whose width is the whole extent.
     private const double CARET_SLACK = 2;
@@ -43,6 +44,13 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     private Rect _contentBounds;
     private double _verticalOffset;
     private double _horizontalOffset;
+    // Vertical scrolling is anchored to a document position: estimated line heights move as lines
+    // materialize, and a pixel offset over them would let the content drift under a stationary
+    // viewport. The pixel offset is re-derived from the anchor every time the viewport is applied;
+    // pixel-space operations (wheel, scroll bar, caret tracking) re-capture the anchor at their
+    // target. The delta is the anchor row's distance above the viewport top.
+    private int _scrollAnchorOffset;
+    private double _scrollAnchorDelta;
     private readonly TextViewLayerStack _layers = new();
     private double _preferredCaretX = double.NaN;
     private bool _dragSelecting;
@@ -435,13 +443,89 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             return;
         }
+        // Pin the anchor: materializing the viewport may replace estimated heights above it with
+        // measured ones, which moves the anchor's document Y; the derived offset follows until the
+        // anchor row no longer moves. The viewport is applied before the anchor is read so slice
+        // virtualization sees real dimensions; when the offset settles the applied viewport is
+        // already the derived one.
+        for (int pass = 0; pass < ANCHOR_PIN_PASSES; pass++)
+        {
+            _view.SetViewport(new TextViewport(
+                _contentBounds.Width,
+                _contentBounds.Height,
+                _horizontalOffset,
+                _verticalOffset));
+            bool settled = ApplyDerivedVerticalOffset(GetAnchorDocumentY() + _scrollAnchorDelta);
+            SetHorizontalOffset(_horizontalOffset, false);
+            if (settled)
+            {
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Document Y of the anchor's visual row, in the same coordinate system the renderer draws
+    /// with. Without wrapping this is a pure metrics-tree read; a caret query would re-cut a
+    /// virtualized line's slice and fight the horizontal axis over it.
+    /// </summary>
+    private double GetAnchorDocumentY()
+    {
+        if (_view is null)
+        {
+            return 0;
+        }
+        if (!Wrap)
+        {
+            int lineNumber = _document.LineCount == 0
+                ? 0
+                : _document.GetLineByOffset(Math.Clamp(_scrollAnchorOffset, 0, _document.TextLength)).LineNumber;
+            return _view.GetVisualTopByLineNumber(lineNumber);
+        }
+        return _view.GetCaretBounds(_scrollAnchorOffset).Y;
+    }
+
+    /// <summary>
+    /// Applies the pixel offset derived from the anchor. Returns true when it did not move, i.e.
+    /// the anchor is pinned. Never re-captures the anchor.
+    /// </summary>
+    private bool ApplyDerivedVerticalOffset(double value)
+    {
+        double extent = _view?.ExtentHeight ?? 0;
+        // Near the document end both the anchor Y and the extent carry the same estimated heights
+        // above the viewport, so this clamp compares measured quantities and cannot drift content.
+        double maximum = Math.Max(0, extent - _contentBounds.Height);
+        value = Math.Clamp(double.IsFinite(value) ? value : 0, 0, maximum);
+        if (Math.Abs(_verticalOffset - value) < 0.001)
+        {
+            return true;
+        }
+        _verticalOffset = value;
+        if (_verticalScrollBar.IsVisible) _verticalScrollBar.Value = value;
+        ScrollOffsetChanged?.Invoke(this);
+        return false;
+    }
+
+    /// <summary>
+    /// Re-anchors to the row at the top of the viewport, materializing at the current pixel offset
+    /// first. The one place estimates decide content, which is why only pixel-space jumps call it.
+    /// </summary>
+    private void CaptureAnchor()
+    {
+        if (_view is null || _contentBounds.Width <= 0 || _contentBounds.Height <= 0)
+        {
+            _scrollAnchorOffset = 0;
+            _scrollAnchorDelta = _verticalOffset;
+            return;
+        }
         _view.SetViewport(new TextViewport(
             _contentBounds.Width,
             _contentBounds.Height,
             _horizontalOffset,
             _verticalOffset));
-        SetVerticalOffset(_verticalOffset, false);
-        SetHorizontalOffset(_horizontalOffset, false);
+        var hit = _view.HitTest(new Point(0, 0));
+        _scrollAnchorOffset = hit.DocumentOffset;
+        _scrollAnchorDelta = _verticalOffset - _view.GetCaretBounds(hit.DocumentOffset).Y;
     }
 
     private void ArrangeScrollBars()
@@ -866,7 +950,8 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         value = Math.Clamp(double.IsFinite(value) ? value : 0, 0, maximum);
         if (Math.Abs(_verticalOffset - value) < 0.001) return;
         _verticalOffset = value;
-        if (_verticalScrollBar.IsVisible) _verticalScrollBar.Value = value;
+        CaptureAnchor();
+        if (_verticalScrollBar.IsVisible) _verticalScrollBar.Value = _verticalOffset;
         ScrollOffsetChanged?.Invoke(this);
         if (invalidate) InvalidateVisual();
     }
@@ -899,6 +984,8 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         _editor.StateChanged += OnEditorStateChanged;
         _preferredCaretX = double.NaN;
         _verticalOffset = 0;
+        _scrollAnchorOffset = 0;
+        _scrollAnchorDelta = 0;
         ResetView();
         InvalidateMeasure();
         InvalidateVisual();
