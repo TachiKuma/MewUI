@@ -48,8 +48,23 @@ public sealed class FoldingMargin : AbstractMargin
 
     protected override void OnRenderTextViewport(IGraphicsContext context, Rect textViewport)
     {
+        double middleX = Bounds.X + Bounds.Width / 2;
         foreach ((var section, var box) in EnumerateBoxes(textViewport))
         {
+            // An expanded section marks how far it reaches with a line running down to its end
+            // row, so the gutter shows the extent the box would collapse.
+            if (!section.IsFolded)
+            {
+                double endY = ResolveEndY(section, textViewport);
+                if (endY > box.Bottom)
+                {
+                    context.DrawLine(
+                        new Point(middleX, box.Bottom), new Point(middleX, endY), FoldingMarkerBrush, 1);
+                    context.DrawLine(
+                        new Point(middleX, endY), new Point(middleX + BOX_SIZE / 2, endY), FoldingMarkerBrush, 1);
+                }
+            }
+
             if (FoldingMarkerBackgroundBrush.A > 0)
             {
                 context.FillRectangle(box, FoldingMarkerBackgroundBrush);
@@ -60,11 +75,29 @@ public sealed class FoldingMargin : AbstractMargin
                 new Point(box.X + 2, middleY), new Point(box.Right - 2, middleY), FoldingMarkerBrush, 1);
             if (section.IsFolded)
             {
-                double middleX = box.X + box.Width / 2;
+                double centerX = box.X + box.Width / 2;
                 context.DrawLine(
-                    new Point(middleX, box.Y + 2), new Point(middleX, box.Bottom - 2), FoldingMarkerBrush, 1);
+                    new Point(centerX, box.Y + 2), new Point(centerX, box.Bottom - 2), FoldingMarkerBrush, 1);
             }
         }
+    }
+
+    /// <summary>
+    /// Screen Y of the section's last row, clamped to the viewport so a section running past the
+    /// bottom still draws a line all the way down.
+    /// </summary>
+    private double ResolveEndY(FoldingSection section, Rect textViewport)
+    {
+        if (TextView is not TextView view)
+        {
+            return 0;
+        }
+        var document = view.Document;
+        int endOffset = Math.Clamp(section.EndOffset, 0, document.TextLength);
+        int endLine = document.GetLocation(endOffset).Line;
+        double documentY = view.GetVisualTopByDocumentLine(endLine);
+        double screenY = textViewport.Y + documentY - view.Host.ScrollOffset.Y + view.DefaultLineHeight / 2;
+        return Math.Min(screenY, textViewport.Bottom);
     }
 
     protected override void OnMouseDown(MouseEventArgs e)

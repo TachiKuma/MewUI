@@ -144,9 +144,13 @@ public class TextEditor : ContentControl
         {
             var margin = _leftMargins[index];
             margin.TextView = TextArea.TextView;
-            host.Children(margin.Column(index));
+            host.Children(margin);
+            // Assigned after the add: adding transfers the child away from the previous host grid,
+            // and the column set before that does not survive the move.
+            margin.Column(index);
         }
-        host.Children(_surface.Column(_leftMargins.Count));
+        host.Children(_surface);
+        _surface.Column(_leftMargins.Count);
         _marginHost = host;
         Content = host;
     }
@@ -241,6 +245,8 @@ public class TextEditor : ContentControl
 
     internal MultiLineTextBox Surface => _surface;
     internal Color WhitespaceMarkerColor => Theme.Palette.PlaceholderText;
+    internal Color ThemeSelectionBackground => Theme.Palette.SelectionBackground;
+    internal Color FoldingMarkerColor => Theme.Palette.PlaceholderText;
     internal ElementGeneratorAdapter ElementGeneratorAdapter => _elementGenerators;
     internal IList<IBackgroundRenderer> BackgroundRenderers => _backgroundRenderers.Renderers;
     internal IList<IVisualLineTransformer> LineTransformers => _lineTransformers.Transformers;

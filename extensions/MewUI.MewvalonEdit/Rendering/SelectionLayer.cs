@@ -41,10 +41,9 @@ internal sealed class SelectionLayer(TextArea textArea) : ITextViewLayer
         }
 
         var graphics = context.Graphics;
-        if (Background is Color background)
-        {
-            graphics.FillPath(geometry, background);
-        }
+        // Falls back to the theme so a layer left installed with its colors cleared paints what the
+        // host would have. Without this, clearing SelectionBrush would erase the selection.
+        graphics.FillPath(geometry, Background ?? textArea.Editor.ThemeSelectionBackground);
         if (Border is Color border)
         {
             graphics.DrawPath(geometry, border, 1);

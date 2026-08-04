@@ -35,6 +35,34 @@ public sealed class SelectionAndServiceTests
     }
 
     [TestMethod]
+    public void ClearingSelectionColorsDoesNotInstallAnEmptyLayer()
+    {
+        var editor = new TextEditor { Text = "select me" };
+
+        // Assigning null must not replace the host's selection pass with a layer that paints
+        // nothing. Replacement keeps the layer count, so the presence of the layer is the check.
+        editor.TextArea.SelectionBrush = null;
+        editor.TextArea.SelectionForeground = null;
+        editor.TextArea.SelectionBorder = null;
+        editor.TextArea.SelectionCornerRadius = 0;
+
+        Assert.IsFalse(editor.TextArea.TextView.Layers.Any(static layer => layer is SelectionLayer));
+    }
+
+    [TestMethod]
+    public void SettingAColorInstallsTheLayerAndClearingItKeepsIt()
+    {
+        var editor = new TextEditor { Text = "select me" };
+
+        editor.TextArea.SelectionBrush = Color.FromRgb(1, 2, 3);
+        Assert.IsTrue(editor.TextArea.TextView.Layers.Any(static layer => layer is SelectionLayer));
+
+        // Once installed it stays, and falls back to the theme rather than painting nothing.
+        editor.TextArea.SelectionBrush = null;
+        Assert.IsTrue(editor.TextArea.TextView.Layers.Any(static layer => layer is SelectionLayer));
+    }
+
+    [TestMethod]
     public void SelectionPropertiesShareOneLayer()
     {
         var editor = new TextEditor { Text = "select me" };

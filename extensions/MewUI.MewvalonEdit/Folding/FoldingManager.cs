@@ -1,3 +1,4 @@
+using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Folding;
@@ -18,6 +19,7 @@ public sealed class FoldingManager
         _projection = new FoldingProjection(this);
         _editor.Surface.Extensions.Projections.Add(_projection);
         _editor.Surface.Extensions.LineCollapsers.Add(_projection);
+        _editor.BackgroundRenderers.Add(new FoldedSectionRenderer(this));
         _margin = new FoldingMargin { FoldingManager = this };
         _editor.TextArea.LeftMargins.Add(_margin);
     }
@@ -148,6 +150,65 @@ public sealed class FoldingManager
         if (low == 0) return false;
         var range = _collapsedRanges[low - 1];
         return line.Offset > range.Start && line.Offset + line.Length <= range.End;
+    }
+
+    /// <summary>
+    /// Outlines the placeholder a collapsed section leaves behind. The projection turns the folded
+    /// range into placeholder text, so the box is found by mapping the section's source range
+    /// through the line's offset map rather than by measuring the text again.
+    /// </summary>
+    private sealed class FoldedSectionRenderer(FoldingManager manager) : Rendering.IBackgroundRenderer
+    {
+        // Under the glyphs, so the placeholder text stays readable on top of the box.
+        public Rendering.KnownLayer Layer => Rendering.KnownLayer.Text;
+
+        public void Draw(Rendering.TextView textView, IGraphicsContext context)
+        {
+            var folds = manager.Collapsed;
+            if (folds.Count == 0)
+            {
+                return;
+            }
+
+            var host = textView.Host;
+            var viewport = host.TextViewportBounds;
+            var scroll = host.ScrollOffset;
+            var color = manager._editor.FoldingMarkerColor;
+            var bounds = new List<Rect>();
+            foreach (var line in host.VisibleTextLines)
+            {
+                var logical = line.LogicalLine;
+                foreach (var folding in folds)
+                {
+                    if (folding.StartOffset < logical.Offset ||
+                        folding.StartOffset >= logical.Offset + logical.Length + 1)
+                    {
+                        continue;
+                    }
+
+                    int start = line.MapSourceOffsetToProjected(
+                        Math.Clamp(folding.StartOffset - logical.Offset, 0, logical.Length));
+                    int end = line.MapSourceOffsetToProjected(
+                        Math.Clamp(folding.EndOffset - logical.Offset, 0, logical.Length));
+                    if (end <= start)
+                    {
+                        continue;
+                    }
+
+                    bounds.Clear();
+                    line.GetRangeBounds(new TextRange(start, end - start), bounds);
+                    foreach (var rect in bounds)
+                    {
+                        var box = new Rect(
+                            viewport.X + line.DocumentX + rect.X - scroll.X,
+                            viewport.Y + line.DocumentY + rect.Y - scroll.Y,
+                            rect.Width,
+                            rect.Height).Deflate(new Thickness(0, 0.5, 0, 0.5));
+                        context.DrawRoundedRectangle(box, 2, 2, color, 1);
+                    }
+                }
+            }
+        }
     }
 
     private sealed class FoldingProjection(FoldingManager manager) : ITextProjection, ITextLineCollapser

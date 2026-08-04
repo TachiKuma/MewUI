@@ -55,44 +55,45 @@ public sealed class TextArea
         remove => _editor.Surface.TextEntered -= value;
     }
 
-    /// <summary>Background painted behind the selection. Null keeps the theme's selection.</summary>
+    /// <summary>Background painted behind the selection. Null restores the theme's selection.</summary>
     public Color? SelectionBrush
     {
         get => _selectionLayer?.Background;
-        set => EnsureSelectionLayer().Background = value;
+        set => ResolveSelectionLayer(value.HasValue)?.Background = value;
     }
 
     /// <summary>
-    /// Color the selected glyphs are repainted in. Null keeps them as they are, which is the
+    /// Color the selected glyphs are repainted in. Null leaves them as they are, which is the
     /// default because recoloring re-segments the runs on every drag frame.
     /// </summary>
     public Color? SelectionForeground
     {
         get => _selectionLayer?.Foreground;
-        set => EnsureSelectionLayer().Foreground = value;
+        set => ResolveSelectionLayer(value.HasValue)?.Foreground = value;
     }
 
     /// <summary>Outline drawn around the selection. Null draws none.</summary>
     public Color? SelectionBorder
     {
         get => _selectionLayer?.Border;
-        set => EnsureSelectionLayer().Border = value;
+        set => ResolveSelectionLayer(value.HasValue)?.Border = value;
     }
 
     /// <summary>Corner radius of the selection shape.</summary>
     public double SelectionCornerRadius
     {
         get => _selectionLayer?.CornerRadius ?? 0;
-        set => EnsureSelectionLayer().CornerRadius = value;
+        set => ResolveSelectionLayer(value != 0)?.CornerRadius = value;
     }
 
     /// <summary>
-    /// Installs the replacement selection layer on first use. Replacing the anchor stops the host
-    /// painting its own selection, so this must not happen until the caller asks for it.
+    /// The replacement selection layer, installed on the first appearance change. Replacing the
+    /// anchor stops the host painting its own selection, so clearing a property back to its default
+    /// must not install one; an editor that only ever clears keeps the theme's selection untouched.
     /// </summary>
-    private SelectionLayer EnsureSelectionLayer()
+    private SelectionLayer? ResolveSelectionLayer(bool install)
     {
-        if (_selectionLayer is null)
+        if (_selectionLayer is null && install)
         {
             _selectionLayer = new SelectionLayer(this);
             TextView.InsertLayer(_selectionLayer, KnownLayer.Selection, LayerInsertionPosition.Replace);
