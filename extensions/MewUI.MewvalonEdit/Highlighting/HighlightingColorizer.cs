@@ -48,7 +48,8 @@ public class HighlightingColorizer(IHighlightingDefinition definition, Func<bool
     /// <summary>Raised with the line range that must be repainted after a span crossed lines.</summary>
     public event Action<int, int>? HighlightingStateChanged;
 
-    private DocumentHighlighter GetHighlighter(TextDocument document)
+    /// <summary>The highlighter for this document, built on first use and reused after.</summary>
+    public DocumentHighlighter GetHighlighter(TextDocument document)
     {
         if (_highlighter is null || !ReferenceEquals(_highlighterDocument, document))
         {

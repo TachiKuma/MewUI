@@ -11,6 +11,7 @@ namespace Aprillz.MewUI.MewvalonEdit.Editing;
 public sealed class TextArea
 {
     private readonly TextEditor _editor;
+    private SelectionLayer? _selectionLayer;
 
     internal TextArea(TextEditor editor)
     {
@@ -52,6 +53,51 @@ public sealed class TextArea
     {
         add => _editor.Surface.TextEntered += value;
         remove => _editor.Surface.TextEntered -= value;
+    }
+
+    /// <summary>Background painted behind the selection. Null keeps the theme's selection.</summary>
+    public Color? SelectionBrush
+    {
+        get => _selectionLayer?.Background;
+        set => EnsureSelectionLayer().Background = value;
+    }
+
+    /// <summary>
+    /// Color the selected glyphs are repainted in. Null keeps them as they are, which is the
+    /// default because recoloring re-segments the runs on every drag frame.
+    /// </summary>
+    public Color? SelectionForeground
+    {
+        get => _selectionLayer?.Foreground;
+        set => EnsureSelectionLayer().Foreground = value;
+    }
+
+    /// <summary>Outline drawn around the selection. Null draws none.</summary>
+    public Color? SelectionBorder
+    {
+        get => _selectionLayer?.Border;
+        set => EnsureSelectionLayer().Border = value;
+    }
+
+    /// <summary>Corner radius of the selection shape.</summary>
+    public double SelectionCornerRadius
+    {
+        get => _selectionLayer?.CornerRadius ?? 0;
+        set => EnsureSelectionLayer().CornerRadius = value;
+    }
+
+    /// <summary>
+    /// Installs the replacement selection layer on first use. Replacing the anchor stops the host
+    /// painting its own selection, so this must not happen until the caller asks for it.
+    /// </summary>
+    private SelectionLayer EnsureSelectionLayer()
+    {
+        if (_selectionLayer is null)
+        {
+            _selectionLayer = new SelectionLayer(this);
+            TextView.InsertLayer(_selectionLayer, KnownLayer.Selection, LayerInsertionPosition.Replace);
+        }
+        return _selectionLayer;
     }
 
     /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>

@@ -65,6 +65,14 @@ public sealed class TextView
     /// <summary>Options of the editor this view belongs to.</summary>
     public TextEditorOptions Options => textArea.Editor.Options;
 
+    /// <summary>
+    /// Services registered on this view. A colorizer puts its highlighter here so code holding only
+    /// the view can find it.
+    /// </summary>
+    public ServiceContainer Services { get; } = new();
+
+    public object? GetService(Type serviceType) => Services.GetService(serviceType);
+
     /// <summary>Raised after the document was replaced.</summary>
     public event EventHandler? DocumentChanged
     {

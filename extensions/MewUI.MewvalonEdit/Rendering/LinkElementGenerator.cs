@@ -58,10 +58,10 @@ public class VisualLineLinkText : TextReplacementElement
 /// <summary>Underlines URLs found in the document text.</summary>
 public class LinkElementGenerator : VisualLineElementGenerator
 {
-    internal static readonly Regex DefaultLinkRegex =
+    public static readonly Regex DefaultLinkRegex =
         new(@"\b(https?://|ftp://|www\.)[\w\d\._/\-~%@()+:?&=#!]*[\w\d/]", RegexOptions.CultureInvariant);
 
-    internal static readonly Regex DefaultMailRegex =
+    public static readonly Regex DefaultMailRegex =
         new(@"\b[\w\d\.\-]+@[\w\d\.\-]+\.[a-z]{2,6}\b", RegexOptions.CultureInvariant);
 
     private readonly Regex _linkRegex;
@@ -127,4 +127,18 @@ public class LinkElementGenerator : VisualLineElementGenerator
 
     private TextRunStyle ResolveStyle()
         => (CurrentContext?.DefaultStyle ?? TextRunStyle.Default) with { Decoration = TextDecoration.Underline };
+}
+
+/// <summary>Underlines mail addresses and opens them through the mailto scheme.</summary>
+public class MailLinkElementGenerator : LinkElementGenerator
+{
+    public MailLinkElementGenerator() : base(DefaultMailRegex)
+    {
+    }
+
+    public MailLinkElementGenerator(Regex regex) : base(regex)
+    {
+    }
+
+    protected override string GetUriFromMatch(Match match) => "mailto:" + match.Value;
 }

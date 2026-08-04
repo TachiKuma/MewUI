@@ -312,6 +312,13 @@ public class TextEditor : ContentControl
             _colorizer = new HighlightingColorizer(_syntaxHighlighting, () => Theme.IsDark);
             _colorizer.HighlightingStateChanged += (_, _) => RequestHighlightingRefresh();
             LineTransformers.Insert(0, _colorizer);
+            // The highlighter is reachable from the view alone, as in AvalonEdit, so ported code
+            // that only holds a TextView can still ask for the document's highlighting state.
+            TextArea.TextView.Services.AddService<IHighlighter>(_colorizer.GetHighlighter(Document));
+        }
+        else
+        {
+            TextArea.TextView.Services.RemoveService(typeof(IHighlighter));
         }
         _surface.InvalidateTextView();
     }
