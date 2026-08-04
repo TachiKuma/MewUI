@@ -13,14 +13,12 @@ public sealed class FoldingSection : ISegment
         StartOffset = folding.StartOffset;
         EndOffset = folding.EndOffset;
         Title = folding.Name;
-        IsDefinition = folding.IsDefinition;
         _isFolded = folding.DefaultClosed;
     }
 
     public int StartOffset { get; internal set; }
     public int EndOffset { get; internal set; }
     public string? Title { get; set; }
-    public bool IsDefinition { get; internal set; }
 
     public bool IsFolded
     {

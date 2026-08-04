@@ -82,7 +82,6 @@ public sealed class FoldingManager
             else
             {
                 existing.Title = folding.Name;
-                existing.IsDefinition = folding.IsDefinition;
             }
             replacement.Add(existing);
         }

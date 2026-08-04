@@ -39,15 +39,18 @@ public sealed class SearchPanel : ITextClassifier
         return Install(textArea.Editor);
     }
 
-    public static void Uninstall(SearchPanel panel)
+    /// <summary>Detaches the panel from the editor. Calling it twice is harmless.</summary>
+    public void Uninstall()
     {
-        ArgumentNullException.ThrowIfNull(panel);
-        if (panel._uninstalled) return;
-        panel._uninstalled = true;
-        panel._editor.Surface.Extensions.Classifiers.Remove(panel);
-        panel._document.Changed -= panel.OnDocumentChanged;
-        panel._editor.DocumentChanged -= panel.OnEditorDocumentChanged;
-        panel._editor.InvalidateTextView();
+        if (_uninstalled)
+        {
+            return;
+        }
+        _uninstalled = true;
+        _editor.Surface.Extensions.Classifiers.Remove(this);
+        _document.Changed -= OnDocumentChanged;
+        _editor.DocumentChanged -= OnEditorDocumentChanged;
+        _editor.InvalidateTextView();
     }
 
     public string SearchPattern
@@ -155,7 +158,7 @@ public sealed class SearchPanel : ITextClassifier
         _editor.InvalidateTextView();
     }
 
-    public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
+    void ITextClassifier.Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
     {
         int lineStart = context.LogicalLine.Offset;
         int lineEnd = lineStart + context.LogicalLine.Length;

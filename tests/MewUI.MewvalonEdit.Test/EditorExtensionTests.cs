@@ -28,7 +28,7 @@ public sealed class EditorExtensionTests
         editor.Document = new TextDocument("alpha replacement");
         Assert.HasCount(1, search.Results);
 
-        SearchPanel.Uninstall(search);
+        search.Uninstall();
     }
 
     [TestMethod]
@@ -56,7 +56,7 @@ public sealed class EditorExtensionTests
             $"Incremental search allocated {allocated:N0} bytes, indicating a whole-document rescan.");
         Assert.HasCount(2, search.Results);
         Assert.AreEqual(text.LastIndexOf("needle", StringComparison.Ordinal) + 1, search.Results[1].Offset);
-        SearchPanel.Uninstall(search);
+        search.Uninstall();
     }
 
     [TestMethod]
