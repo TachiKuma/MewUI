@@ -535,13 +535,48 @@ public sealed class TextViewLayout : ITextViewLayout
             ? Math.Max(1, _defaultStyle.FontSize * 0.5)
             : Math.Max(0.01, sampleLayout.MeasuredSize.Width / sampleLength);
         double rowHeight = Math.Max(1, sampleLayout.ContentHeight);
-        state.VirtualNoWrap = new VirtualNoWrapState(source.Length, averageWidth);
+        bool uniform = IsUniformAdvance(sample, sampleLayout.MeasuredSize.Width, averageWidth);
+        state.VirtualNoWrap = new VirtualNoWrapState(source.Length, averageWidth, uniform);
         SetStateMetrics(lineNumber, rowHeight, state.VirtualNoWrap.EstimatedWidth);
         state.Version = _document.Version;
         state.SourceOffset = source.Offset;
         state.SourceLength = source.Length;
         state.Width = Viewport.Width;
     }
+
+    /// <summary>
+    /// Whether the sampled text advances one fixed width per character. A narrow and a wide glyph
+    /// must measure the same, and the sample as a whole must equal that width times its length, so
+    /// wide scripts or emoji mixed into a monospace font are not mistaken for uniform.
+    /// </summary>
+    private bool IsUniformAdvance(string sample, double sampleWidth, double averageWidth)
+    {
+        if (sample.Length == 0)
+        {
+            return false;
+        }
+
+        double narrow = MeasureProbe("i");
+        double wide = MeasureProbe("W");
+        if (narrow <= 0 || Math.Abs(narrow - wide) > 0.01)
+        {
+            return false;
+        }
+
+        // One pixel of slack over the whole sample: enough for rounding, far below one character.
+        return Math.Abs(sampleWidth - sample.Length * averageWidth) <= 1.0 &&
+               Math.Abs(averageWidth - narrow) <= 0.01;
+    }
+
+    private double MeasureProbe(string text)
+        => _engine.CreateLayout(new TextLayoutRequest
+        {
+            Text = text.AsMemory(),
+            Dpi = _dpi,
+            DefaultStyle = _defaultStyle,
+            Paragraph = _paragraph with { MaxWidth = double.PositiveInfinity, Wrapping = TextWrapping.NoWrap },
+            Transient = true
+        }).MeasuredSize.Width;
 
     private void NormalizeSliceBoundary(IReadOnlyDocumentLine source, ref int start, ref int length)
     {
@@ -712,24 +747,40 @@ public sealed class TextViewLayout : ITextViewLayout
         }
     }
 
-    private sealed class VirtualNoWrapState(int sourceLength, double averageCharacterWidth)
+    /// <summary>
+    /// Maps a horizontal scroll offset to a character offset inside one very long line.
+    /// </summary>
+    /// <remarks>
+    /// The mapping width is fixed at construction and never refined. Refining it would move which
+    /// characters a stationary viewport resolves to, so the text would crawl under the reader while
+    /// the estimate converged, and returning to an offset would land somewhere else. The refined
+    /// value is kept for the scroll extent alone, where being wrong only resizes the scrollbar.
+    /// </remarks>
+    private sealed class VirtualNoWrapState(int sourceLength, double averageCharacterWidth, bool isUniform)
     {
+        private readonly double _mappingCharacterWidth = Math.Max(0.01, averageCharacterWidth);
         private double _averageCharacterWidth = Math.Max(0.01, averageCharacterWidth);
+
+        /// <summary>
+        /// True when every character in the line advances the same amount, which makes the offset
+        /// and x mapping exact arithmetic rather than an estimate.
+        /// </summary>
+        public bool IsUniform => isUniform;
 
         public double EstimatedWidth => sourceLength * _averageCharacterWidth;
 
         public int GetOffsetForX(double x)
-            => Math.Clamp((int)Math.Floor(Math.Max(0, x) / _averageCharacterWidth), 0, sourceLength);
+            => Math.Clamp((int)Math.Floor(Math.Max(0, x) / _mappingCharacterWidth), 0, sourceLength);
 
         public double GetXForOffset(int offset)
-            => Math.Clamp(offset, 0, sourceLength) * _averageCharacterWidth;
+            => Math.Clamp(offset, 0, sourceLength) * _mappingCharacterWidth;
 
         public int GetLengthForWidth(double width)
-            => Math.Max(1, (int)Math.Ceiling(Math.Max(1, width) / _averageCharacterWidth));
+            => Math.Max(1, (int)Math.Ceiling(Math.Max(1, width) / _mappingCharacterWidth));
 
         public void Refine(int materializedLength, double measuredWidth)
         {
-            if (materializedLength <= 0 || measuredWidth <= 0)
+            if (isUniform || materializedLength <= 0 || measuredWidth <= 0)
             {
                 return;
             }
