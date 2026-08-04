@@ -44,8 +44,8 @@ public sealed class MainWindow : Window
         _foldingManager.FoldingsChanged += (_, _) => UpdateFoldingState();
         // Underlines URLs and mail addresses in the text and opens them on Ctrl+Click.
         _editor.TextArea.TextView.ElementGenerators.Add(new LinkElementGenerator());
-        _editor.TextArea.TextView.ElementGenerators.Add(
-            new MailLinkElementGenerator { LinkColor = Color.FromRgb(0x4E, 0x9A, 0xE8) });
+        // Neither generator carries a colour: appearance comes from the view, so both follow it.
+        _editor.TextArea.TextView.ElementGenerators.Add(new MailLinkElementGenerator());
         _optionsPanel = CreateOptionsPanel();
         _optionsPanel.IsVisible = false;
 
@@ -156,6 +156,17 @@ public sealed class MainWindow : Window
         };
         indentationSize.ValueChanged += value => _editor.Options.IndentationSize = (int)value;
 
+        var rulerPosition = new NumericUpDown
+        {
+            Minimum = 10,
+            Maximum = 200,
+            Step = 5,
+            Format = "0",
+            Value = _editor.Options.ColumnRulerPosition,
+            Width = 80
+        };
+        rulerPosition.ValueChanged += value => _editor.Options.ColumnRulerPosition = (int)value;
+
         return new Border
         {
             Width = 300,
@@ -177,6 +188,16 @@ public sealed class MainWindow : Window
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }
                     .Children(new TextBlock().Text("Indentation size").Width(180), indentationSize),
                 Toggle("Read only", _editor.IsReadOnly, value => _editor.IsReadOnly = value),
+                Toggle("Highlight current line", _editor.Options.HighlightCurrentLine,
+                    value => _editor.Options.HighlightCurrentLine = value),
+                Toggle("Show column ruler", _editor.Options.ShowColumnRuler,
+                    value => _editor.Options.ShowColumnRuler = value),
+                new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }
+                    .Children(new TextBlock().Text("Column ruler position").Width(180), rulerPosition),
+                // The colours live on the view, so one setting covers links from every generator.
+                Toggle("Custom link color", false, ApplyCustomLinkColor),
+                Toggle("Underline links", _editor.TextArea.TextView.LinkTextUnderline,
+                    value => _editor.TextArea.TextView.LinkTextUnderline = value),
                 // Setting any of these replaces the host's selection layer with the editor's own,
                 // which is the one consumer proving layer replacement works.
                 Toggle("Custom selection color", false, ApplyCustomSelection))
@@ -238,6 +259,13 @@ public sealed class MainWindow : Window
         area.SelectionBorder = enabled ? Color.FromRgb(0x4E, 0x9A, 0xE8) : null;
         area.SelectionCornerRadius = enabled ? 3 : 0;
         _editor.InvalidateTextView();
+    }
+
+    private void ApplyCustomLinkColor(bool enabled)
+    {
+        var view = _editor.TextArea.TextView;
+        view.LinkTextForegroundBrush = enabled ? Color.FromRgb(0xC0, 0x50, 0x20) : null;
+        view.LinkTextBackgroundBrush = enabled ? Color.FromArgb(0x20, 0xC0, 0x50, 0x20) : null;
     }
 
     private void ToggleFirstFolding()
