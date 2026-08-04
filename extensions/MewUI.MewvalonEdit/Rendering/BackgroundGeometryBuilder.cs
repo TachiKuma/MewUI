@@ -29,27 +29,40 @@ public sealed class BackgroundGeometryBuilder
         ArgumentNullException.ThrowIfNull(segment);
         foreach (var rect in GetRectsCore(textView, segment.Offset, segment.EndOffset, ExtendToFullWidthAtLineEnd))
         {
-            AddRectangle(rect);
+            AddRectangle(textView, rect);
         }
     }
 
-    /// <summary>Adds one rectangle in view coordinates.</summary>
-    public void AddRectangle(Rect rectangle)
+    /// <summary>
+    /// Adds one rectangle in view coordinates, aligned per <see cref="AlignToWholePixels"/>. The
+    /// view supplies the pixel size; use the four-coordinate overload for already aligned input.
+    /// </summary>
+    public void AddRectangle(TextView textView, Rect rectangle)
     {
-        var rect = rectangle;
-        if (BorderThickness > 0)
+        ArgumentNullException.ThrowIfNull(textView);
+        if (!AlignToWholePixels)
         {
-            rect = rect.Deflate(new Thickness(BorderThickness / 2));
+            AddRectangle(rectangle.Left, rectangle.Top, rectangle.Right, rectangle.Bottom);
+            return;
         }
-        if (AlignToWholePixels)
+
+        // Rounded on the outer edge and offset back by half the border, so a stroke of that width
+        // sits centred on a device pixel instead of straddling two.
+        double scale = textView.DpiScale;
+        double halfBorder = 0.5 * BorderThickness;
+        AddRectangle(
+            LayoutRounding.RoundToPixel(rectangle.Left - halfBorder, scale) + halfBorder,
+            LayoutRounding.RoundToPixel(rectangle.Top - halfBorder, scale) + halfBorder,
+            LayoutRounding.RoundToPixel(rectangle.Right + halfBorder, scale) - halfBorder,
+            LayoutRounding.RoundToPixel(rectangle.Bottom + halfBorder, scale) - halfBorder);
+    }
+
+    /// <summary>Adds one rectangle whose coordinates are already aligned.</summary>
+    public void AddRectangle(double left, double top, double right, double bottom)
+    {
+        if (right > left && bottom > top)
         {
-            double left = Math.Round(rect.X);
-            double top = Math.Round(rect.Y);
-            rect = new Rect(left, top, Math.Round(rect.Right) - left, Math.Round(rect.Bottom) - top);
-        }
-        if (rect.Width > 0 && rect.Height > 0)
-        {
-            _rectangles.Add(rect);
+            _rectangles.Add(new Rect(left, top, right - left, bottom - top));
         }
     }
 

@@ -40,6 +40,20 @@ public sealed class ElementGeneratorTests
         return runs;
     }
 
+    private static List<TextPaintSpan> Classify(TextEditor editor)
+    {
+        var spans = new List<TextPaintSpan>();
+        var context = new TextClassificationContext(
+            new LogicalTextLine(0, 0, editor.Text.Length, editor.Text.Length),
+            editor.Text.AsMemory(),
+            IdentityTextOffsetMap.Instance);
+        foreach (var classifier in editor.TextArea.TextView.Extensions.Classifiers)
+        {
+            classifier.Classify(in context, spans);
+        }
+        return spans;
+    }
+
     [TestMethod]
     public void GeneratedElementsBecomeInlineRuns()
     {
@@ -82,16 +96,21 @@ public sealed class ElementGeneratorTests
     }
 
     [TestMethod]
-    public void LinkGeneratorReplacesUrls()
+    public void LinkGeneratorDecoratesUrlsInsteadOfReplacingThem()
     {
         var editor = new TextEditor { Text = "see https://example.com/docs now" };
         editor.TextArea.TextView.ElementGenerators.Add(new LinkElementGenerator());
 
         var runs = Generate(editor);
+        var spans = Classify(editor);
 
-        var run = runs.Single();
-        Assert.AreEqual(4, run.Position);
-        Assert.AreEqual("https://example.com/docs".Length, run.Length);
+        // An inline run is one indivisible cluster. A link that became one would lose every caret
+        // position inside it, so the underline has to arrive as a paint span over the real text.
+        Assert.IsEmpty(runs);
+        var span = spans.Single();
+        Assert.AreEqual(4, span.Range.Start);
+        Assert.AreEqual("https://example.com/docs".Length, span.Range.Length);
+        Assert.AreEqual(TextDecoration.Underline, span.Decoration);
     }
 
     [TestMethod]

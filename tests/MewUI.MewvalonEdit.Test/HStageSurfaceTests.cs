@@ -12,8 +12,9 @@ public sealed class HStageSurfaceTests
     [TestMethod]
     public void GeometryBuilderRoundsAlignedRectanglesAndBuildsGeometry()
     {
+        var editor = new TextEditor { Text = "x" };
         var builder = new BackgroundGeometryBuilder { AlignToWholePixels = true, CornerRadius = 3 };
-        builder.AddRectangle(new Rect(1.4, 2.6, 10.2, 5.9));
+        builder.AddRectangle(editor.TextArea.TextView, new Rect(1.4, 2.6, 10.2, 5.9));
 
         var geometry = builder.CreateGeometry();
 

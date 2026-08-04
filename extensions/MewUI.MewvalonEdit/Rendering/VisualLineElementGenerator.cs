@@ -22,6 +22,19 @@ public abstract class VisualLineElementGenerator
     public abstract VisualLineElement? ConstructElement(int offset);
 }
 
+/// <summary>
+/// Range of document text a generator only decorates: the text keeps every caret position and the
+/// element contributes nothing but its <see cref="VisualLineElement.TextRunProperties"/>.
+/// </summary>
+public class VisualLineText : VisualLineElement
+{
+    public VisualLineText(int documentLength) : base(Math.Max(1, documentLength), documentLength)
+    {
+    }
+
+    protected internal sealed override bool ReplacesText => false;
+}
+
 /// <summary>Draws replacement text in place of the document range it covers.</summary>
 public class TextReplacementElement : VisualLineElement
 {
@@ -36,9 +49,6 @@ public class TextReplacementElement : VisualLineElement
     }
 
     public string Text { get; }
-
-    /// <summary>Color of the replacement text. Falls back to the document foreground when unset.</summary>
-    public Color? Foreground { get; set; }
 
     /// <summary>The replacement text is what occupies the visual surface.</summary>
     protected internal override string GetVisualText() => Text;
@@ -63,6 +73,8 @@ public class TextReplacementElement : VisualLineElement
             new TextLayoutRequest
             {
                 Text = Text.AsMemory(),
+                // Measuring at 96 while the view lays out at the real density clips the tail.
+                Dpi = Dpi,
                 DefaultStyle = _style,
                 Paragraph = new TextParagraphStyle { Wrapping = TextWrapping.NoWrap, MaxWidth = double.PositiveInfinity }
             },

@@ -80,7 +80,7 @@ public sealed class SearchPanel : ITextClassifier
         set { if (_wholeWords != value) { _wholeWords = value; Refresh(); } }
     }
 
-    public Color MarkerColor { get; set; } = Color.FromArgb(150, 255, 215, 0);
+    public Color MarkerBrush { get; set; } = Color.FromArgb(150, 255, 215, 0);
     public IReadOnlyList<SearchResult> Results => _results;
 
     public SearchResult? FindNext(int startOffset = -1)
@@ -170,7 +170,7 @@ public sealed class SearchPanel : ITextClassifier
             {
                 output.Add(new TextPaintSpan(
                     new TextRange(start - lineStart, end - start),
-                    Background: MarkerColor));
+                    Background: MarkerBrush));
             }
         }
     }

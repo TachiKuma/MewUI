@@ -6,7 +6,10 @@ using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
-/// <summary>Draws the document line numbers beside the text.</summary>
+/// <summary>
+/// Draws the document line numbers beside the text, in the inherited <c>Foreground</c> that
+/// <c>TextEditor.LineNumbersForeground</c> assigns.
+/// </summary>
 public sealed class LineNumberMargin : AbstractMargin
 {
     private const double LEFT_INSET = 4;
@@ -14,8 +17,6 @@ public sealed class LineNumberMargin : AbstractMargin
     private const int MIN_DIGITS = 2;
 
     private int _measuredDigits = -1;
-
-    public Color NumberForeground { get; set; } = Color.FromRgb(128, 128, 128);
 
     /// <summary>Re-measures when the document grows or shrinks past a digit boundary.</summary>
     public void SyncWidthToLineCount()
@@ -50,7 +51,7 @@ public sealed class LineNumberMargin : AbstractMargin
             var layout = GetNumberLayout(number);
             double y = textViewport.Y + line.DocumentY - scrollY;
             double x = Math.Max(Bounds.X + LEFT_INSET, Bounds.Right - layout.MeasuredSize.Width - RIGHT_INSET);
-            var options = new TextDrawOptions(NumberForeground);
+            var options = new TextDrawOptions(Foreground);
             context.Text.Draw(layout, new Point(x, y), in options);
         }
     }

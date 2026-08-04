@@ -11,14 +11,14 @@ using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit;
 
-public class TextEditor : ContentControl
+public class TextEditor : Control
 {
-    private TextDocument _document;
+    private const string PART_MARGIN_HOST = "PART_MarginHost";
+
     private readonly MultiLineTextBox _surface;
     private readonly LineNumberMargin _lineNumberMargin;
     private readonly System.Collections.ObjectModel.ObservableCollection<AbstractMargin> _leftMargins = [];
-    private Grid _marginHost = null!;
-    private IHighlightingDefinition? _syntaxHighlighting;
+    private Grid? _marginHost;
     private HighlightingColorizer? _colorizer;
     private readonly SpaceMarkerProjection _spaceMarkers;
     private readonly SpaceMarkerClassifier _spaceMarkerColors;
@@ -26,7 +26,6 @@ public class TextEditor : ContentControl
     private readonly LineTransformerAdapter _lineTransformers;
     private readonly ElementGeneratorAdapter _elementGenerators;
     private readonly BackgroundRendererRegistry _backgroundRenderers;
-    private bool _showLineNumbers;
     private bool _highlightingRefreshPending;
 
     public TextEditor()
@@ -40,8 +39,7 @@ public class TextEditor : ContentControl
         _elementGenerators = new ElementGeneratorAdapter(this);
         _backgroundRenderers = new BackgroundRendererRegistry(this);
         Options.PropertyChanged += OnOptionsChanged;
-        _document = new TextDocument();
-        _document.Changed += OnDocumentTextChanged;
+        var document = new TextDocument();
         StyleSheet = new StyleSheet();
         StyleSheet.Define<TextEditor>(CreateFrameStyle());
 
@@ -49,7 +47,7 @@ public class TextEditor : ContentControl
         // templated ScrollViewer encloses TextArea's left margins. The surface paints neither
         // border nor background: a square fill would cover the frame's rounded corners from the
         // inside. Font properties are inherited, so the surface must not take local values.
-        _surface = new MultiLineTextBox(_document.CoreDocument)
+        _surface = new MultiLineTextBox(document.CoreDocument)
         {
             Wrap = false,
             AcceptTab = true,
@@ -68,16 +66,25 @@ public class TextEditor : ContentControl
         // Ported transformers land below the whitespace markers, as AvalonEdit's baked marker
         // glyphs cannot be recolored by a colorizer.
         _surface.Extensions.Classifiers.Add(_lineTransformers);
+        // After the transformers so a link underline survives the colorizer's colours.
+        _surface.Extensions.Classifiers.Add(_elementGenerators);
         _surface.Extensions.Transformers.Add(_lineTransformers);
         _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
         _backgroundRenderers.RegisterInto(_surface);
         _surface.InsertLayer(_whitespaceMarkers, TextViewLayerAnchor.Text, TextLayerPosition.Below);
-        _lineNumberMargin = new LineNumberMargin { IsVisible = _showLineNumbers };
-        _marginHost = new Grid().Columns("Auto,*").Children(_surface.Column(1));
-        Content = _marginHost;
+        _surface.InsertLayer(
+            new CurrentLineLayer(Options, this), TextViewLayerAnchor.Background, TextLayerPosition.Above);
+        _surface.InsertLayer(
+            new ColumnRulerLayer(Options, this), TextViewLayerAnchor.Text, TextLayerPosition.Below);
+        _lineNumberMargin = new LineNumberMargin { IsVisible = ShowLineNumbers };
+        _lineNumberMargin.WithTheme((theme, margin) =>
+            margin.Foreground = LineNumbersForeground ?? theme.Palette.PlaceholderText);
+        // Assigned once the surface and the margin exist, because the change callback wires both.
+        Document = document;
+        Template = new DelegateControlTemplate<TextEditor>(BuildTemplate);
         TextArea = new TextArea(this);
-        _leftMargins.CollectionChanged += (_, _) => RebuildMargins();
+        _leftMargins.CollectionChanged += (_, _) => OnLeftMarginsChanged();
         _leftMargins.Add(_lineNumberMargin);
     }
 
@@ -132,44 +139,84 @@ public class TextEditor : ContentControl
 
     internal IList<AbstractMargin> LeftMargins => _leftMargins;
 
-    /// <summary>
-    /// Lays the margins out as leading grid columns, outermost first, and attaches each to the view
-    /// so it follows scrolling and line construction.
-    /// </summary>
+    private static Element BuildTemplate(TextEditor owner, ControlTemplateContext context)
+    {
+        var host = new Grid();
+        context.Register(PART_MARGIN_HOST, host);
+        // A templated control suppresses its own chrome, so the border has to draw it.
+        var chrome = new Border { Child = host, ClipToBounds = true };
+        context.BindChrome(chrome);
+        return chrome;
+    }
+
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        _marginHost = GetTemplateChild<Grid>(PART_MARGIN_HOST);
+        OnLeftMarginsChanged();
+    }
+
+    private void OnLeftMarginsChanged()
+    {
+        // Attachment stays here rather than in the template, so a margin is connected the moment it
+        // joins the collection whether or not a layout pass has run.
+        foreach (var margin in _leftMargins)
+        {
+            margin.TextView = TextArea.TextView;
+        }
+        RebuildMargins();
+    }
+
+    /// <summary>Lays the margins out as leading grid columns, outermost first.</summary>
     private void RebuildMargins()
     {
-        var columns = string.Join(',', Enumerable.Repeat("Auto", _leftMargins.Count).Append("*"));
-        var host = new Grid().Columns(columns);
+        if (_marginHost is not Grid host)
+        {
+            return;
+        }
+
+        host.Clear();
+        host.Columns(string.Join(',', Enumerable.Repeat("Auto", _leftMargins.Count).Append("*")));
         for (int index = 0; index < _leftMargins.Count; index++)
         {
             var margin = _leftMargins[index];
-            margin.TextView = TextArea.TextView;
             host.Children(margin);
-            // Assigned after the add: adding transfers the child away from the previous host grid,
-            // and the column set before that does not survive the move.
+            // After the add: adding re-parents the child and a column set before that is lost.
             margin.Column(index);
         }
         host.Children(_surface);
         _surface.Column(_leftMargins.Count);
-        _marginHost = host;
-        Content = host;
     }
 
+    public static readonly MewProperty<TextDocument?> DocumentProperty =
+        MewProperty<TextDocument?>.Register<TextEditor>(nameof(Document), null,
+            MewPropertyOptions.AffectsLayout,
+            static (self, oldValue, newValue) => self.OnDocumentPropertyChanged(oldValue, newValue),
+            validate: static (_, value) => ArgumentNullException.ThrowIfNull(value));
+
+    /// <summary>Document being edited. Never null; the editor creates one for itself.</summary>
     public TextDocument Document
     {
-        get => _document;
-        set
+        get => GetValue(DocumentProperty)!;
+        set => SetValue(DocumentProperty, value);
+    }
+
+    private void OnDocumentPropertyChanged(TextDocument? oldValue, TextDocument? newValue)
+    {
+        if (oldValue is not null)
         {
-            ArgumentNullException.ThrowIfNull(value);
-            if (ReferenceEquals(_document, value)) return;
-            _document.Changed -= OnDocumentTextChanged;
-            _document = value;
-            _document.Changed += OnDocumentTextChanged;
-            _surface.Document = value.CoreDocument;
-            _lineNumberMargin.SyncWidthToLineCount();
-            DocumentChanged?.Invoke(this, EventArgs.Empty);
-            TextChanged?.Invoke(this, EventArgs.Empty);
+            oldValue.Changed -= OnDocumentTextChanged;
         }
+        if (newValue is null)
+        {
+            return;
+        }
+
+        newValue.Changed += OnDocumentTextChanged;
+        _surface.Document = newValue.CoreDocument;
+        _lineNumberMargin.SyncWidthToLineCount();
+        DocumentChanged?.Invoke(this, EventArgs.Empty);
+        TextChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public TextEditorOptions Options { get; }
@@ -182,50 +229,66 @@ public class TextEditor : ContentControl
         set => Document.Text = value ?? string.Empty;
     }
 
+    public static readonly MewProperty<IHighlightingDefinition?> SyntaxHighlightingProperty =
+        MewProperty<IHighlightingDefinition?>.Register<TextEditor>(nameof(SyntaxHighlighting), null,
+            MewPropertyOptions.AffectsRender,
+            static (self, _, _) => self.ApplyHighlighting());
+
     public IHighlightingDefinition? SyntaxHighlighting
     {
-        get => _syntaxHighlighting;
-        set
-        {
-            if (ReferenceEquals(_syntaxHighlighting, value)) return;
-            _syntaxHighlighting = value;
-            ApplyHighlighting();
-        }
+        get => GetValue(SyntaxHighlightingProperty);
+        set => SetValue(SyntaxHighlightingProperty, value);
     }
+
+    public static readonly MewProperty<bool> WordWrapProperty =
+        MewProperty<bool>.Register<TextEditor>(nameof(WordWrap), false,
+            MewPropertyOptions.AffectsLayout,
+            static (self, _, newValue) => self._surface.Wrap = newValue);
 
     public bool WordWrap
     {
-        get => _surface.Wrap;
-        set => _surface.Wrap = value;
+        get => GetValue(WordWrapProperty);
+        set => SetValue(WordWrapProperty, value);
     }
+
+    public static readonly MewProperty<bool> IsReadOnlyProperty =
+        MewProperty<bool>.Register<TextEditor>(nameof(IsReadOnly), false,
+            MewPropertyOptions.None,
+            static (self, _, newValue) => self._surface.IsReadOnly = newValue);
 
     public bool IsReadOnly
     {
-        get => _surface.IsReadOnly;
-        set => _surface.IsReadOnly = value;
+        get => GetValue(IsReadOnlyProperty);
+        set => SetValue(IsReadOnlyProperty, value);
     }
+
+    public static readonly MewProperty<bool> ShowLineNumbersProperty =
+        MewProperty<bool>.Register<TextEditor>(nameof(ShowLineNumbers), false,
+            MewPropertyOptions.AffectsLayout,
+            static (self, _, newValue) => self._lineNumberMargin.IsVisible = newValue);
 
     public bool ShowLineNumbers
     {
-        get => _showLineNumbers;
-        set
-        {
-            if (_showLineNumbers == value) return;
-            _showLineNumbers = value;
-            _lineNumberMargin.IsVisible = value;
-            InvalidateMeasure();
-            InvalidateVisual();
-        }
+        get => GetValue(ShowLineNumbersProperty);
+        set => SetValue(ShowLineNumbersProperty, value);
     }
 
-    public Color LineNumbersForeground
+    public static readonly MewProperty<Color?> LineNumbersForegroundProperty =
+        MewProperty<Color?>.Register<TextEditor>(nameof(LineNumbersForeground), null,
+            MewPropertyOptions.AffectsRender,
+            static (self, _, newValue) => self.ApplyLineNumbersForeground(newValue));
+
+    /// <summary>Colour of the line numbers. Null follows the theme.</summary>
+    public Color? LineNumbersForeground
     {
-        get => _lineNumberMargin.NumberForeground;
-        set
-        {
-            _lineNumberMargin.NumberForeground = value;
-            _lineNumberMargin.InvalidateVisual();
-        }
+        get => GetValue(LineNumbersForegroundProperty);
+        set => SetValue(LineNumbersForegroundProperty, value);
+    }
+
+    private void ApplyLineNumbersForeground(Color? value)
+    {
+        // A local value, or the inherited Foreground would hand the numbers the body text colour.
+        _lineNumberMargin.Foreground = value ?? Theme.Palette.PlaceholderText;
     }
 
     public int CaretOffset
@@ -244,7 +307,16 @@ public class TextEditor : ContentControl
     public double HorizontalOffset => _surface.HorizontalOffset;
 
     internal MultiLineTextBox Surface => _surface;
-    internal Color WhitespaceMarkerColor => Theme.Palette.PlaceholderText;
+
+    /// <summary>Pixel density the text is laid out at. Generated elements measure at the same one.</summary>
+    internal uint EditorDpi => GetDpi();
+    internal Color WhitespaceMarkerColor => TextArea.TextView.ResolvedNonPrintableCharacter;
+
+    internal Color PlaceholderColor => Theme.Palette.PlaceholderText;
+
+    internal Color AccentColor => Theme.Palette.Accent;
+
+    internal Color ControlBorderColor => Theme.Palette.ControlBorder;
     internal Color ThemeSelectionBackground => Theme.Palette.SelectionBackground;
     internal Color FoldingMarkerColor => Theme.Palette.PlaceholderText;
     internal ElementGeneratorAdapter ElementGeneratorAdapter => _elementGenerators;
@@ -255,8 +327,15 @@ public class TextEditor : ContentControl
     public event EventHandler? TextChanged;
     public event EventHandler? DocumentChanged;
 
+    public static readonly MewProperty<System.Text.Encoding?> EncodingProperty =
+        MewProperty<System.Text.Encoding?>.Register<TextEditor>(nameof(Encoding), null);
+
     /// <summary>Encoding used by <see cref="Save(Stream)"/>. <see cref="Load(Stream)"/> stores what it detected.</summary>
-    public System.Text.Encoding? Encoding { get; set; }
+    public System.Text.Encoding? Encoding
+    {
+        get => GetValue(EncodingProperty);
+        set => SetValue(EncodingProperty, value);
+    }
 
     public void Load(string fileName)
     {
@@ -300,7 +379,7 @@ public class TextEditor : ContentControl
     protected override void OnDispose()
     {
         Options.PropertyChanged -= OnOptionsChanged;
-        _document.Changed -= OnDocumentTextChanged;
+        Document.Changed -= OnDocumentTextChanged;
         base.OnDispose();
     }
 
@@ -311,11 +390,11 @@ public class TextEditor : ContentControl
             LineTransformers.Remove(_colorizer);
             _colorizer = null;
         }
-        if (_syntaxHighlighting is not null)
+        if (SyntaxHighlighting is IHighlightingDefinition definition)
         {
             // First in the list: syntax colors are the base layer, so whitespace markers and search
             // highlights registered later keep their own colors where the ranges overlap.
-            _colorizer = new HighlightingColorizer(_syntaxHighlighting, () => Theme.IsDark);
+            _colorizer = new HighlightingColorizer(definition, () => Theme.IsDark);
             _colorizer.HighlightingStateChanged += (_, _) => RequestHighlightingRefresh();
             LineTransformers.Insert(0, _colorizer);
             // The highlighter is reachable from the view alone, as in AvalonEdit, so ported code

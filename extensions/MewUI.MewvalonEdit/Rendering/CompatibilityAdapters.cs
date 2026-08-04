@@ -129,7 +129,8 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
 /// every element into an engine inline run at its projected position, and input routing looks up
 /// the element under a document offset.
 /// </summary>
-internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementGenerator, ITextProjection
+internal sealed class ElementGeneratorAdapter(TextEditor editor)
+    : ITextElementGenerator, ITextProjection, ITextClassifier
 {
     private readonly GenerationContext _context = new(editor);
     private readonly Dictionary<int, CachedScan> _scans = [];
@@ -197,11 +198,49 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementG
         var scan = EnsureScanned(context.LogicalLine);
         foreach (var element in scan.Elements)
         {
+            if (!element.ReplacesText)
+            {
+                continue;
+            }
             int start = context.OffsetMap.MapFromSource(element.RelativeTextOffset);
             int end = context.OffsetMap.MapFromSource(element.RelativeTextOffset + element.DocumentLength);
             if (end > start)
             {
                 output.Add(new InlineRun(start, end - start, new ElementInline(element)));
+            }
+        }
+    }
+
+    /// <summary>Paints the elements that only decorate their range.</summary>
+    public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
+    {
+        if (Generators.Count == 0)
+        {
+            return;
+        }
+
+        // Not inline runs: one run is one cluster, which would remove every caret position inside.
+        var scan = EnsureScanned(context.LogicalLine);
+        foreach (var element in scan.Elements)
+        {
+            if (element.ReplacesText)
+            {
+                continue;
+            }
+            element.PrepareForPaint(editor.TextArea.TextView);
+            var properties = element.TextRunProperties;
+            var foreground = element.Foreground ?? properties.ForegroundBrush;
+            var background = element.BackgroundBrush ?? properties.BackgroundBrush;
+            if (!foreground.HasValue && !background.HasValue && properties.TextDecorations == TextDecoration.None)
+            {
+                continue;
+            }
+            int start = context.OffsetMap.MapFromSource(element.RelativeTextOffset);
+            int end = context.OffsetMap.MapFromSource(element.RelativeTextOffset + element.DocumentLength);
+            if (end > start)
+            {
+                output.Add(new TextPaintSpan(
+                    new TextRange(start, end - start), foreground, background, properties.TextDecorations));
             }
         }
     }
@@ -296,6 +335,7 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementG
                     continue;
                 }
                 element.RelativeTextOffset = bestOffset - lineStart;
+                element.Dpi = editor.EditorDpi;
                 elements.Add(element);
                 offset = bestOffset + Math.Max(1, element.DocumentLength);
             }

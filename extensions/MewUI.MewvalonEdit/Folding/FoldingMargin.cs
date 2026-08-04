@@ -40,8 +40,34 @@ public sealed class FoldingMargin : AbstractMargin
         }
     }
 
-    public Color FoldingMarkerBrush { get; set; } = Color.FromRgb(128, 128, 128);
-    public Color FoldingMarkerBackgroundBrush { get; set; } = Color.Transparent;
+    public static readonly MewProperty<Color?> FoldingMarkerBrushProperty =
+        MewProperty<Color?>.Register<FoldingMargin>(nameof(FoldingMarkerBrush), null,
+            MewPropertyOptions.AffectsRender);
+
+    public static readonly MewProperty<Color?> FoldingMarkerBackgroundBrushProperty =
+        MewProperty<Color?>.Register<FoldingMargin>(nameof(FoldingMarkerBackgroundBrush), null,
+            MewPropertyOptions.AffectsRender);
+
+    /// <summary>Outline and line colour. Null follows the theme, so it tracks light and dark.</summary>
+    public Color? FoldingMarkerBrush
+    {
+        get => GetValue(FoldingMarkerBrushProperty);
+        set => SetValue(FoldingMarkerBrushProperty, value);
+    }
+
+    /// <summary>
+    /// Fill of the marker box. Null takes the theme's control background, which is what keeps the
+    /// extent line from running through the box; AvalonEdit fills it with a solid brush for the
+    /// same reason.
+    /// </summary>
+    public Color? FoldingMarkerBackgroundBrush
+    {
+        get => GetValue(FoldingMarkerBackgroundBrushProperty);
+        set => SetValue(FoldingMarkerBackgroundBrushProperty, value);
+    }
+
+    private Color ResolvedMarker => FoldingMarkerBrush ?? Theme.Palette.PlaceholderText;
+    private Color ResolvedMarkerBackground => FoldingMarkerBackgroundBrush ?? Theme.Palette.ControlBackground;
 
     protected override Size MeasureContent(Size availableSize)
         => new(MARGIN_WIDTH, Math.Max(1, availableSize.Height));
@@ -59,25 +85,23 @@ public sealed class FoldingMargin : AbstractMargin
                 if (endY > box.Bottom)
                 {
                     context.DrawLine(
-                        new Point(middleX, box.Bottom), new Point(middleX, endY), FoldingMarkerBrush, 1);
+                        new Point(middleX, box.Bottom), new Point(middleX, endY), ResolvedMarker, 1);
                     context.DrawLine(
-                        new Point(middleX, endY), new Point(middleX + BOX_SIZE / 2, endY), FoldingMarkerBrush, 1);
+                        new Point(middleX, endY), new Point(middleX + BOX_SIZE / 2, endY), ResolvedMarker, 1);
                 }
             }
 
-            if (FoldingMarkerBackgroundBrush.A > 0)
-            {
-                context.FillRectangle(box, FoldingMarkerBackgroundBrush);
-            }
-            context.DrawRectangle(box, FoldingMarkerBrush, 1);
+            // Filled before the outline so the extent line drawn above stops at the box edge.
+            context.FillRectangle(box, ResolvedMarkerBackground);
+            context.DrawRectangle(box, ResolvedMarker, 1);
             double middleY = box.Y + box.Height / 2;
             context.DrawLine(
-                new Point(box.X + 2, middleY), new Point(box.Right - 2, middleY), FoldingMarkerBrush, 1);
+                new Point(box.X + 2, middleY), new Point(box.Right - 2, middleY), ResolvedMarker, 1);
             if (section.IsFolded)
             {
                 double centerX = box.X + box.Width / 2;
                 context.DrawLine(
-                    new Point(centerX, box.Y + 2), new Point(centerX, box.Bottom - 2), FoldingMarkerBrush, 1);
+                    new Point(centerX, box.Y + 2), new Point(centerX, box.Bottom - 2), ResolvedMarker, 1);
             }
         }
     }

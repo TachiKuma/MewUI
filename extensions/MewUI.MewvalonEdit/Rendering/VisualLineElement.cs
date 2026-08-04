@@ -80,6 +80,25 @@ public class VisualLineElement
     /// <summary>Background painted behind the range. Equivalent to setting it through <see cref="TextRunProperties"/>.</summary>
     public Color? BackgroundBrush { get; set; }
 
+    /// <summary>Colour of the range. Equivalent to setting it through <see cref="TextRunProperties"/>.</summary>
+    public Color? Foreground { get; set; }
+
+    /// <summary>
+    /// True when the element paints in place of the document text, making the range one indivisible
+    /// unit; false decorates the text and leaves every caret position inside it.
+    /// </summary>
+    protected internal virtual bool ReplacesText => true;
+
+    /// <summary>Pixel density to measure and draw at. Assigned while the line is scanned.</summary>
+    protected internal uint Dpi { get; internal set; } = 96;
+
+    /// <summary>
+    /// Called before the element is painted, for appearance the view owns rather than the element.
+    /// </summary>
+    protected internal virtual void PrepareForPaint(TextView textView)
+    {
+    }
+
     /// <summary>Size this element occupies. Generated elements override it; a restyled range keeps the document text.</summary>
     public virtual InlineMetrics Measure() => default;
 

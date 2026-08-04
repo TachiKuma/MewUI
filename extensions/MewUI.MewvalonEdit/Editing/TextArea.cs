@@ -8,7 +8,7 @@ using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.MewvalonEdit.Editing;
 
-public sealed class TextArea
+public sealed class TextArea : MewObject
 {
     private readonly TextEditor _editor;
     private SelectionLayer? _selectionLayer;
@@ -55,12 +55,36 @@ public sealed class TextArea
         remove => _editor.Surface.TextEntered -= value;
     }
 
+    public static readonly MewProperty<Color?> SelectionBrushProperty =
+        MewProperty<Color?>.Register<TextArea>(nameof(SelectionBrush), null,
+            MewPropertyOptions.AffectsRender,
+            static (self, _, newValue) =>
+            {
+                var layer = self.ResolveSelectionLayer(newValue.HasValue);
+                if (layer is not null)
+                {
+                    layer.Background = newValue;
+                }
+            });
+
     /// <summary>Background painted behind the selection. Null restores the theme's selection.</summary>
     public Color? SelectionBrush
     {
-        get => _selectionLayer?.Background;
-        set => ResolveSelectionLayer(value.HasValue)?.Background = value;
+        get => GetValue(SelectionBrushProperty);
+        set => SetValue(SelectionBrushProperty, value);
     }
+
+    public static readonly MewProperty<Color?> SelectionForegroundProperty =
+        MewProperty<Color?>.Register<TextArea>(nameof(SelectionForeground), null,
+            MewPropertyOptions.AffectsRender,
+            static (self, _, newValue) =>
+            {
+                var layer = self.ResolveSelectionLayer(newValue.HasValue);
+                if (layer is not null)
+                {
+                    layer.Foreground = newValue;
+                }
+            });
 
     /// <summary>
     /// Color the selected glyphs are repainted in. Null leaves them as they are, which is the
@@ -68,22 +92,55 @@ public sealed class TextArea
     /// </summary>
     public Color? SelectionForeground
     {
-        get => _selectionLayer?.Foreground;
-        set => ResolveSelectionLayer(value.HasValue)?.Foreground = value;
+        get => GetValue(SelectionForegroundProperty);
+        set => SetValue(SelectionForegroundProperty, value);
     }
+
+    public static readonly MewProperty<Color?> SelectionBorderProperty =
+        MewProperty<Color?>.Register<TextArea>(nameof(SelectionBorder), null,
+            MewPropertyOptions.AffectsRender,
+            static (self, _, newValue) =>
+            {
+                var layer = self.ResolveSelectionLayer(newValue.HasValue);
+                if (layer is not null)
+                {
+                    layer.Border = newValue;
+                }
+            });
 
     /// <summary>Outline drawn around the selection. Null draws none.</summary>
     public Color? SelectionBorder
     {
-        get => _selectionLayer?.Border;
-        set => ResolveSelectionLayer(value.HasValue)?.Border = value;
+        get => GetValue(SelectionBorderProperty);
+        set => SetValue(SelectionBorderProperty, value);
     }
+
+    public static readonly MewProperty<double> SelectionCornerRadiusProperty =
+        MewProperty<double>.Register<TextArea>(nameof(SelectionCornerRadius), 0,
+            MewPropertyOptions.AffectsRender,
+            static (self, _, newValue) =>
+            {
+                var layer = self.ResolveSelectionLayer(newValue != 0);
+                if (layer is not null)
+                {
+                    layer.CornerRadius = newValue;
+                }
+            });
 
     /// <summary>Corner radius of the selection shape.</summary>
     public double SelectionCornerRadius
     {
-        get => _selectionLayer?.CornerRadius ?? 0;
-        set => ResolveSelectionLayer(value != 0)?.CornerRadius = value;
+        get => GetValue(SelectionCornerRadiusProperty);
+        set => SetValue(SelectionCornerRadiusProperty, value);
+    }
+
+    protected override void OnMewPropertyChanged(MewProperty property)
+    {
+        // No visual tree here, so AffectsRender invalidates nothing by itself.
+        if (property.AffectsRender)
+        {
+            _editor.InvalidateTextView();
+        }
     }
 
     /// <summary>

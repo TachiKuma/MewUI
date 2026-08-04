@@ -63,6 +63,25 @@ public sealed class SelectionAndServiceTests
     }
 
     [TestMethod]
+    public void SelectionColoursCanBeBound()
+    {
+        var editor = new TextEditor { Text = "select me" };
+        var colour = new ObservableValue<Color?>(null);
+
+        editor.TextArea.SetBinding(
+            Aprillz.MewUI.MewvalonEdit.Editing.TextArea.SelectionBrushProperty, colour);
+
+        // A binding that carries no colour yet must not install the replacement either, for the
+        // same reason a read must not: it would drop the theme's selection.
+        Assert.IsFalse(editor.TextArea.TextView.Layers.Any(static layer => layer is SelectionLayer));
+
+        colour.Value = Color.FromRgb(0x30, 0x60, 0xC0);
+
+        Assert.AreEqual(Color.FromRgb(0x30, 0x60, 0xC0), editor.TextArea.SelectionBrush);
+        Assert.IsTrue(editor.TextArea.TextView.Layers.Any(static layer => layer is SelectionLayer));
+    }
+
+    [TestMethod]
     public void SelectionPropertiesShareOneLayer()
     {
         var editor = new TextEditor { Text = "select me" };

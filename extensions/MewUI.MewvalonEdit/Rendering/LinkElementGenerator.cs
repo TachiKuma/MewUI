@@ -5,11 +5,13 @@ using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
-/// <summary>Link text that opens its target in the system browser. Mirrors VisualLineLinkText.</summary>
-public class VisualLineLinkText : TextReplacementElement
+/// <summary>
+/// Link text that opens its target in the system browser. It decorates the document text rather
+/// than replacing it, so a link stays editable and the caret still moves inside it.
+/// </summary>
+public class VisualLineLinkText : VisualLineText
 {
-    public VisualLineLinkText(string text, int documentLength, TextRunStyle style)
-        : base(text, documentLength, style)
+    public VisualLineLinkText(int documentLength) : base(documentLength)
     {
     }
 
@@ -18,6 +20,17 @@ public class VisualLineLinkText : TextReplacementElement
 
     /// <summary>Requires Ctrl+Click to follow the link, leaving a plain click for the caret.</summary>
     public bool RequireControlModifierForClick { get; set; } = true;
+
+    protected internal override void PrepareForPaint(TextView textView)
+    {
+        ArgumentNullException.ThrowIfNull(textView);
+        // Assigned every time, not filled in when empty: the scan cache outlives a colour change,
+        // so a value kept from the last paint would never be replaced.
+        Foreground = textView.ResolvedLinkTextForeground;
+        BackgroundBrush = textView.LinkTextBackgroundBrush;
+        TextRunProperties.SetTextDecorations(
+            textView.LinkTextUnderline ? TextDecoration.Underline : TextDecoration.None);
+    }
 
     protected internal override void OnQueryCursor(QueryCursorEventArgs e)
     {
@@ -73,15 +86,12 @@ public class LinkElementGenerator : VisualLineElementGenerator
     public LinkElementGenerator(Regex regex)
         => _linkRegex = regex ?? throw new ArgumentNullException(nameof(regex));
 
-    /// <summary>Color of the generated link text. Falls back to the document foreground when unset.</summary>
-    public Color? LinkColor { get; set; }
-
     /// <summary>Requires Ctrl+Click to follow generated links. Default true, as in AvalonEdit.</summary>
     public bool RequireControlModifierForClick { get; set; } = true;
 
     /// <summary>Builds the link element. Override to substitute a subclass, e.g. one intercepting navigation.</summary>
-    protected virtual VisualLineLinkText CreateLinkElement(string text, int documentLength, TextRunStyle style)
-        => new(text, documentLength, style);
+    protected virtual VisualLineLinkText CreateLinkElement(string text, int documentLength)
+        => new(documentLength);
 
     /// <summary>Target for a matched text. The default treats the match itself as the URI.</summary>
     protected virtual string GetUriFromMatch(Match match)
@@ -97,11 +107,9 @@ public class LinkElementGenerator : VisualLineElementGenerator
         {
             return null;
         }
-        var element = CreateLinkElement(match.Value, match.Length, ResolveStyle());
-        element.Foreground = LinkColor;
+        var element = CreateLinkElement(match.Value, match.Length);
         element.NavigateUri = GetUriFromMatch(match);
         element.RequireControlModifierForClick = RequireControlModifierForClick;
-        element.TextRunProperties.SetTextDecorations(TextDecoration.Underline);
         return element;
     }
 
@@ -124,9 +132,6 @@ public class LinkElementGenerator : VisualLineElementGenerator
         matchOffset = match.Success ? startOffset + match.Index : -1;
         return match;
     }
-
-    private TextRunStyle ResolveStyle()
-        => (CurrentContext?.DefaultStyle ?? TextRunStyle.Default) with { Decoration = TextDecoration.Underline };
 }
 
 /// <summary>Underlines mail addresses and opens them through the mailto scheme.</summary>

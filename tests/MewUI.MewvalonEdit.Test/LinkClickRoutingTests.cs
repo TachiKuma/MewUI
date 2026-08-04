@@ -16,8 +16,7 @@ public sealed class LinkClickRoutingTests
 {
     private const string TEXT = "see https://example.com/docs now";
 
-    private sealed class RecordingLinkText(string text, int documentLength, TextRunStyle style)
-        : VisualLineLinkText(text, documentLength, style)
+    private sealed class RecordingLinkText(int documentLength) : VisualLineLinkText(documentLength)
     {
         public List<string> Navigated { get; } = [];
 
@@ -26,8 +25,8 @@ public sealed class LinkClickRoutingTests
 
     private sealed class RecordingLinkGenerator : LinkElementGenerator
     {
-        protected override VisualLineLinkText CreateLinkElement(string text, int documentLength, TextRunStyle style)
-            => new RecordingLinkText(text, documentLength, style);
+        protected override VisualLineLinkText CreateLinkElement(string text, int documentLength)
+            => new RecordingLinkText(documentLength);
     }
 
     private static RecordingLinkText ConstructLink()

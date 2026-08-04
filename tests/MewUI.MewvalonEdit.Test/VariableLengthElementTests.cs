@@ -78,15 +78,17 @@ public sealed class VariableLengthElementTests
     }
 
     [TestMethod]
-    public void LengthPreservingElementsKeepTheIdentityProjection()
+    public void DecoratingElementsKeepTheIdentityProjectionAndStayOutOfTheRuns()
     {
         var editor = new TextEditor { Text = "see www.example.com now" };
         editor.TextArea.TextView.ElementGenerators.Add(new LinkElementGenerator(LinkElementGenerator.DefaultLinkRegex));
 
         (var projected, var runs) = RunPipeline(editor);
 
+        // The text is untouched on both counts: the projection leaves it alone and no inline run
+        // takes it out of the engine's hands.
         Assert.AreEqual(editor.Text, projected.Text.ToString());
-        Assert.ContainsSingle(runs);
+        Assert.IsEmpty(runs);
     }
 
     [TestMethod]

@@ -11,48 +11,46 @@ namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 /// </summary>
 public abstract class AbstractMargin : Control, ITextViewConnect
 {
-    private TextView? _textView;
+    public static readonly MewProperty<TextView?> TextViewProperty =
+        MewProperty<TextView?>.Register<AbstractMargin>(nameof(TextView), null,
+            MewPropertyOptions.AffectsLayout,
+            static (self, oldValue, newValue) => self.AttachToTextView(oldValue, newValue));
 
     /// <summary>View this margin sits beside. Setting it runs the connect and disconnect hooks.</summary>
     public TextView? TextView
     {
-        get => _textView;
-        set
-        {
-            if (ReferenceEquals(_textView, value))
-            {
-                return;
-            }
-
-            var old = _textView;
-            if (old is not null)
-            {
-                old.Host.LinesChanged -= OnHostLinesChanged;
-                old.Host.ScrollOffsetChanged -= OnHostScrolled;
-                RemoveFromTextView(old);
-            }
-
-            _textView = value;
-            var oldDocument = old?.Document;
-            if (value is not null)
-            {
-                value.Host.LinesChanged += OnHostLinesChanged;
-                value.Host.ScrollOffsetChanged += OnHostScrolled;
-                AddToTextView(value);
-            }
-
-            OnTextViewChanged(old, value);
-            if (!ReferenceEquals(oldDocument, Document))
-            {
-                OnDocumentChanged(oldDocument, Document);
-            }
-            InvalidateMeasure();
-            InvalidateVisual();
-        }
+        get => GetValue(TextViewProperty);
+        set => SetValue(TextViewProperty, value);
     }
 
     /// <summary>Document behind <see cref="TextView"/>, or null while unattached.</summary>
-    public TextDocument? Document => _textView?.Document;
+    public TextDocument? Document => TextView?.Document;
+
+    private void AttachToTextView(TextView? oldValue, TextView? newValue)
+    {
+        if (oldValue is not null)
+        {
+            oldValue.Host.LinesChanged -= OnHostLinesChanged;
+            oldValue.Host.ScrollOffsetChanged -= OnHostScrolled;
+            RemoveFromTextView(oldValue);
+        }
+
+        var oldDocument = oldValue?.Document;
+        if (newValue is not null)
+        {
+            newValue.Host.LinesChanged += OnHostLinesChanged;
+            newValue.Host.ScrollOffsetChanged += OnHostScrolled;
+            AddToTextView(newValue);
+        }
+
+        OnTextViewChanged(oldValue, newValue);
+        if (!ReferenceEquals(oldDocument, Document))
+        {
+            OnDocumentChanged(oldDocument, Document);
+        }
+        // AffectsLayout covers the measure pass; the repaint is not implied by it.
+        InvalidateVisual();
+    }
 
     /// <summary>Called after <see cref="TextView"/> changed.</summary>
     protected virtual void OnTextViewChanged(TextView? oldValue, TextView? newValue)
@@ -81,12 +79,12 @@ public abstract class AbstractMargin : Control, ITextViewConnect
     protected sealed override void OnRender(IGraphicsContext context)
     {
         OnRenderMargin(context);
-        if (_textView is null)
+        if (TextView is not TextView view)
         {
             return;
         }
 
-        var textViewport = _textView.Host.TextViewportBounds;
+        var textViewport = view.Host.TextViewportBounds;
         var clip = Bounds.Intersect(new Rect(Bounds.X, textViewport.Y, Bounds.Width, textViewport.Height));
         if (clip.IsEmpty)
         {

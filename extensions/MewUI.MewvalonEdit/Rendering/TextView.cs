@@ -14,7 +14,7 @@ public enum LayerInsertionPosition
 }
 
 /// <summary>Rendering-side view of the editor, carrying the extension registrations.</summary>
-public sealed class TextView
+public sealed class TextView : MewObject
 {
     private readonly TextArea textArea;
     private Action<int>? _constructionStarting;
@@ -30,6 +30,105 @@ public sealed class TextView
         host.LineConstructionStarting += (_, firstLine) => _constructionStarting?.Invoke(firstLine);
         host.LinesChanged += _ => _linesChanged?.Invoke();
         host.ScrollOffsetChanged += _ => _scrollOffsetChanged?.Invoke();
+    }
+
+    public static readonly MewProperty<Color?> LinkTextForegroundBrushProperty =
+        MewProperty<Color?>.Register<TextView>(nameof(LinkTextForegroundBrush), null,
+            MewPropertyOptions.AffectsRender);
+
+    public static readonly MewProperty<Color?> LinkTextBackgroundBrushProperty =
+        MewProperty<Color?>.Register<TextView>(nameof(LinkTextBackgroundBrush), null,
+            MewPropertyOptions.AffectsRender);
+
+    public static readonly MewProperty<bool> LinkTextUnderlineProperty =
+        MewProperty<bool>.Register<TextView>(nameof(LinkTextUnderline), true,
+            MewPropertyOptions.AffectsRender);
+
+    public static readonly MewProperty<Color?> NonPrintableCharacterBrushProperty =
+        MewProperty<Color?>.Register<TextView>(nameof(NonPrintableCharacterBrush), null,
+            MewPropertyOptions.AffectsRender);
+
+    /// <summary>Colour of link text. Null follows the theme.</summary>
+    public Color? LinkTextForegroundBrush
+    {
+        get => GetValue(LinkTextForegroundBrushProperty);
+        set => SetValue(LinkTextForegroundBrushProperty, value);
+    }
+
+    /// <summary>Background painted behind link text. Null paints none.</summary>
+    public Color? LinkTextBackgroundBrush
+    {
+        get => GetValue(LinkTextBackgroundBrushProperty);
+        set => SetValue(LinkTextBackgroundBrushProperty, value);
+    }
+
+    /// <summary>Whether link text is underlined. Clearing it leaves the link clickable.</summary>
+    public bool LinkTextUnderline
+    {
+        get => GetValue(LinkTextUnderlineProperty);
+        set => SetValue(LinkTextUnderlineProperty, value);
+    }
+
+    /// <summary>Colour of the space, tab and end-of-line markers. Null follows the theme.</summary>
+    public Color? NonPrintableCharacterBrush
+    {
+        get => GetValue(NonPrintableCharacterBrushProperty);
+        set => SetValue(NonPrintableCharacterBrushProperty, value);
+    }
+
+    public static readonly MewProperty<ColorPen?> ColumnRulerPenProperty =
+        MewProperty<ColorPen?>.Register<TextView>(nameof(ColumnRulerPen), null,
+            MewPropertyOptions.AffectsRender);
+
+    // Translucent so they read on either theme, which is why these two carry a fixed default
+    // instead of the null-follows-the-theme the other colours use.
+    public static readonly MewProperty<Color> CurrentLineBackgroundProperty =
+        MewProperty<Color>.Register<TextView>(nameof(CurrentLineBackground),
+            Color.FromArgb(22, 20, 220, 224), MewPropertyOptions.AffectsRender);
+
+    public static readonly MewProperty<ColorPen> CurrentLineBorderProperty =
+        MewProperty<ColorPen>.Register<TextView>(nameof(CurrentLineBorder),
+            new ColorPen(Color.FromArgb(52, 0, 255, 110)), MewPropertyOptions.AffectsRender);
+
+    /// <summary>Stroke of the column rule. Null follows the theme.</summary>
+    public ColorPen? ColumnRulerPen
+    {
+        get => GetValue(ColumnRulerPenProperty);
+        set => SetValue(ColumnRulerPenProperty, value);
+    }
+
+    /// <summary>Background of the line holding the caret.</summary>
+    public Color CurrentLineBackground
+    {
+        get => GetValue(CurrentLineBackgroundProperty);
+        set => SetValue(CurrentLineBackgroundProperty, value);
+    }
+
+    /// <summary>Stroke of the outline drawn around the line holding the caret.</summary>
+    public ColorPen CurrentLineBorder
+    {
+        get => GetValue(CurrentLineBorderProperty);
+        set => SetValue(CurrentLineBorderProperty, value);
+    }
+
+    internal double DpiScale => textArea.Editor.EditorDpi / 96.0;
+
+    internal ColorPen ResolvedColumnRulerPen
+        => ColumnRulerPen ?? new ColorPen(textArea.Editor.ControlBorderColor);
+
+    internal Color ResolvedLinkTextForeground
+        => LinkTextForegroundBrush ?? textArea.Editor.AccentColor;
+
+    internal Color ResolvedNonPrintableCharacter
+        => NonPrintableCharacterBrush ?? textArea.Editor.PlaceholderColor;
+
+    protected override void OnMewPropertyChanged(MewProperty property)
+    {
+        // No visual tree here, so AffectsRender invalidates nothing by itself.
+        if (property.AffectsRender)
+        {
+            textArea.Editor.InvalidateTextView();
+        }
     }
 
     /// <summary>Renderers painting into the known layers, in registration order.</summary>
@@ -167,6 +266,9 @@ public sealed class TextView
                 new TextLayoutRequest
                 {
                     Text = "x".AsMemory(),
+                    // Measured at the density the view lays out at, or every width derived from
+                    // this one lands on the wrong column above 100% scaling.
+                    Dpi = textArea.Editor.EditorDpi,
                     DefaultStyle = new TextRunStyle(FontFamily, textArea.Editor.FontSize, textArea.Editor.FontWeight),
                     Paragraph = new TextParagraphStyle
                     {
