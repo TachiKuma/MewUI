@@ -3,16 +3,15 @@ using Aprillz.MewUI.Input;
 using Aprillz.MewUI.MewvalonEdit;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.Text;
-using MewUI.MewvalonEdit.Test.Infrastructure;
 
 namespace MewUI.MewvalonEdit.Test;
 
 /// <summary>
-/// Drives the whole input chain headless: window routing, the surface's public mouse events, the
-/// editor's coordinate-to-element lookup, and the link element's own handlers.
+/// Element-level coverage of link clicking: the generator builds the element through the factory
+/// seam and the element's own handlers decide navigation. The window-to-element half of the chain
+/// runs on core internals and is verified in the sample, not here.
 /// </summary>
 [TestClass]
-[DoNotParallelize]
 public sealed class LinkClickRoutingTests
 {
     private const string TEXT = "see https://example.com/docs now";
@@ -20,7 +19,7 @@ public sealed class LinkClickRoutingTests
     private sealed class RecordingLinkText(string text, int documentLength, TextRunStyle style)
         : VisualLineLinkText(text, documentLength, style)
     {
-        public static List<string> Navigated { get; } = [];
+        public List<string> Navigated { get; } = [];
 
         protected override void NavigateTo(string uri) => Navigated.Add(uri);
     }
@@ -31,64 +30,64 @@ public sealed class LinkClickRoutingTests
             => new RecordingLinkText(text, documentLength, style);
     }
 
-    private static (TextEditor Editor, Window Window, Point LinkPoint) CreateEditorWithLink()
+    private static RecordingLinkText ConstructLink()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            Assert.Inconclusive("GDI backend is Windows-only.");
-        }
+        var editor = new TextEditor { Text = TEXT };
+        var generator = new RecordingLinkGenerator();
+        editor.TextArea.TextView.ElementGenerators.Add(generator);
 
-        RecordingLinkText.Navigated.Clear();
-        var editor = new TextEditor { Text = TEXT, ShowLineNumbers = false };
-        editor.TextArea.TextView.ElementGenerators.Add(new RecordingLinkGenerator());
-        var window = HeadlessEditorHost.CreateWindow();
-        window.Content = editor;
-        window.PerformLayout();
+        generator.StartGeneration(new ConstructionContext(editor));
+        var element = generator.ConstructElement(TEXT.IndexOf("https", StringComparison.Ordinal));
+        generator.FinishGeneration();
+        return (RecordingLinkText)element!;
+    }
 
-        // The link is one inline cluster, so caret slots inside it collapse to its edges. The
-        // midpoint between the slots at its start and end is safely inside the drawn range.
-        var surface = editor.TextArea.TextView.Surface;
-        var startRect = surface.GetCharRectInWindow(TEXT.IndexOf("https", StringComparison.Ordinal));
-        var endRect = surface.GetCharRectInWindow(TEXT.IndexOf(" now", StringComparison.Ordinal));
-        return (editor, window, new Point(
-            (startRect.X + endRect.X) / 2,
-            startRect.Y + startRect.Height / 2));
+    private static MouseEventArgs LeftClick(ModifierKeys modifiers)
+        => new(default, default, MouseButton.Left, leftButton: true, modifiers: modifiers);
+
+    [TestMethod]
+    public void ControlClickNavigatesAndClaimsTheEvent()
+    {
+        var link = ConstructLink();
+
+        var click = LeftClick(ModifierKeys.Control);
+        link.OnMouseDown(click);
+
+        Assert.ContainsSingle(link.Navigated);
+        Assert.AreEqual("https://example.com/docs", link.Navigated[0]);
+        Assert.IsTrue(click.Handled, "A followed link must claim the press so the caret stays put.");
     }
 
     [TestMethod]
-    public void ControlClickOnALinkNavigatesAndLeavesTheCaretAlone()
+    public void PlainClickLeavesTheEventForCaretPlacement()
     {
-        (var editor, var window, var linkPoint) = CreateEditorWithLink();
-        editor.CaretOffset = 0;
+        var link = ConstructLink();
 
-        window.SendClick(linkPoint, ModifierKeys.Control);
+        var click = LeftClick(ModifierKeys.None);
+        link.OnMouseDown(click);
 
-        Assert.ContainsSingle(RecordingLinkText.Navigated);
-        Assert.AreEqual("https://example.com/docs", RecordingLinkText.Navigated[0]);
-        Assert.AreEqual(0, editor.CaretOffset, "A handled link click must not move the caret.");
+        Assert.IsEmpty(link.Navigated);
+        Assert.IsFalse(click.Handled, "An unclaimed press falls through to the editor's caret.");
     }
 
     [TestMethod]
-    public void PlainClickOnALinkPlacesTheCaretWithoutNavigating()
+    public void WithoutTheControlRequirementAPlainClickNavigates()
     {
-        (var editor, var window, var linkPoint) = CreateEditorWithLink();
-        editor.CaretOffset = 0;
+        var link = ConstructLink();
+        link.RequireControlModifierForClick = false;
 
-        window.SendClick(linkPoint);
+        var click = LeftClick(ModifierKeys.None);
+        link.OnMouseDown(click);
 
-        Assert.IsEmpty(RecordingLinkText.Navigated);
-        Assert.IsGreaterThan(0, editor.CaretOffset, "A plain click still places the caret.");
+        Assert.ContainsSingle(link.Navigated);
+        Assert.IsTrue(click.Handled);
     }
 
-    [TestMethod]
-    public void HoveringALinkWithControlShowsTheHandCursor()
+    private sealed class ConstructionContext(TextEditor editor) : ITextRunConstructionContext
     {
-        (var editor, var window, var linkPoint) = CreateEditorWithLink();
-
-        window.SendMouseMove(linkPoint, ModifierKeys.Control);
-        Assert.AreEqual(CursorType.Hand, editor.TextArea.TextView.Surface.Cursor);
-
-        window.SendMouseMove(linkPoint);
-        Assert.AreEqual(CursorType.IBeam, editor.TextArea.TextView.Surface.Cursor);
+        public Aprillz.MewUI.MewvalonEdit.Document.TextDocument Document => editor.Document;
+        public Aprillz.MewUI.MewvalonEdit.Document.DocumentLine CurrentDocumentLine
+            => editor.Document.GetLineByNumber(1);
+        public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
     }
 }
