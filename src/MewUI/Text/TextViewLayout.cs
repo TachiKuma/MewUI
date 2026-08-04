@@ -317,6 +317,18 @@ public sealed class TextViewLayout : ITextViewLayout
     {
         var state = _states[lineNumber];
         var source = _document.GetLineByNumber(lineNumber);
+        if (sourceOffset.HasValue && state.VirtualNoWrap is not null &&
+            state.Layout is not null && !state.Dirty &&
+            state.SourceOffset == source.Offset && state.SourceLength == source.Length &&
+            state.Width == Viewport.Width &&
+            sourceOffset.Value >= state.SliceStart &&
+            sourceOffset.Value <= state.SliceStart + state.SliceLength)
+        {
+            // A slice sits at its estimated x, so two slices of one line do not share a coordinate
+            // system. Re-cutting the line around a caret would place the caret in a different
+            // system than the text on screen, and the two would disagree by the estimate error.
+            return state.Layout;
+        }
         if (ShouldVirtualizeWrap(source) &&
             (state.Virtual is null || state.Dirty || state.SourceLength != source.Length || state.Width != Viewport.Width))
         {
@@ -339,11 +351,17 @@ public sealed class TextViewLayout : ITextViewLayout
                 ? virtualState.GetRowForOffset(sourceOffset.Value)
                 : virtualState.GetRowForY(Math.Max(0, (targetDocumentY ?? documentY) - documentY));
             visualRowOffset = Math.Max(0, targetRow - VirtualWrapOverscanRows);
-            sliceStart = virtualState.GetOffsetForRow(visualRowOffset);
             int requiredRows = Math.Max(1,
                 (int)Math.Ceiling(Viewport.Height / virtualState.RowHeight) + VirtualWrapOverscanRows * 2 + 1);
-            sliceLength = Math.Min(source.Length - sliceStart,
-                Math.Max(VirtualSliceMinimumLength, virtualState.GetLengthForRows(requiredRows)));
+            int requiredCharacters = Math.Max(
+                VirtualSliceMinimumLength, virtualState.GetLengthForRows(requiredRows));
+            // The target row comes from an estimate and can point past the last real row, which
+            // would leave an empty slice at the very end of the line.
+            sliceStart = Math.Clamp(
+                virtualState.GetOffsetForRow(visualRowOffset),
+                0,
+                Math.Max(0, source.Length - requiredCharacters));
+            sliceLength = Math.Min(source.Length - sliceStart, requiredCharacters);
             NormalizeSliceBoundary(source, ref sliceStart, ref sliceLength);
             visualRowOffset = virtualState.GetRowForOffset(sliceStart);
             layoutY = documentY + visualRowOffset * virtualState.RowHeight;
@@ -460,7 +478,12 @@ public sealed class TextViewLayout : ITextViewLayout
         else if (state.VirtualNoWrap is { } activeNoWrap)
         {
             activeNoWrap.Refine(sliceLength, textLayout.MeasuredSize.Width);
-            SetStateMetrics(lineNumber, Math.Max(1, textLayout.ContentHeight), activeNoWrap.EstimatedWidth);
+            // The estimate may fall short of the slice we just measured, and the scroll limit comes
+            // from it. Anything already measured has to stay reachable.
+            SetStateMetrics(
+                lineNumber,
+                Math.Max(1, textLayout.ContentHeight),
+                Math.Max(activeNoWrap.EstimatedWidth, layoutX + textLayout.MeasuredSize.Width));
         }
         else
         {
@@ -580,7 +603,8 @@ public sealed class TextViewLayout : ITextViewLayout
 
     private void NormalizeSliceBoundary(IReadOnlyDocumentLine source, ref int start, ref int length)
     {
-        if (start > 0 && char.IsLowSurrogate(_document.GetCharAt(source.Offset + start)))
+        if (start > 0 && start < source.Length &&
+            char.IsLowSurrogate(_document.GetCharAt(source.Offset + start)))
         {
             start--;
             length++;

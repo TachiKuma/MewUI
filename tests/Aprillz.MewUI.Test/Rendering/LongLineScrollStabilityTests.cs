@@ -65,6 +65,69 @@ public sealed class LongLineScrollStabilityTests
             "Returning to the same offset landed on different text.");
     }
 
+    [TestMethod]
+    public void WrappedLongLineMaterializesAtEveryOffsetPastTheEstimate()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var source = new StringTextDocument(new string('W', LINE_LENGTH));
+        var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            source,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.Wrap },
+            new TextViewExtensionPipeline(),
+            dpi: 96);
+        var viewport = new TextViewport(300, 200, 0, 0);
+        view.SetViewport(viewport);
+
+        // The row estimate is refined while scrolling, so an offset that was inside the line can
+        // end up past its last row. That must still resolve to text, not to an empty slice.
+        double height = view.ExtentHeight;
+        foreach (double fraction in new[] { 0.5, 0.9, 0.99, 1.0, 1.5 })
+        {
+            view.SetViewport(viewport with { VerticalOffset = height * fraction });
+
+            Assert.IsNotEmpty(view.MaterializedLines, $"Nothing materialized at {fraction:P0} of the line.");
+            Assert.IsGreaterThan(0, view.MaterializedLines[0].LogicalLine.Length,
+                $"An empty slice was built at {fraction:P0} of the line.");
+        }
+    }
+
+    [TestMethod]
+    public void CaretLandsOnTheCharacterThatWasHitInsideAVirtualizedLine()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        // One character of snapping is inherent: a hit inside a glyph resolves to its boundary.
+        // Anything beyond that means the caret and the text are in different coordinate systems.
+        const double WIDEST_CHARACTER = 13;
+
+        using var view = CreateView("Segoe UI", out _);
+        var viewport = new TextViewport(600, 40, 0, 0);
+        view.SetViewport(viewport);
+        double offsetX = Math.Floor(view.ExtentWidth / 2);
+        view.SetViewport(viewport with { HorizontalOffset = offsetX });
+
+        for (int screenX = 0; screenX < 600; screenX += 13)
+        {
+            int hit = view.HitTest(new Point(screenX, 5)).DocumentOffset;
+            double caretScreenX = view.GetCaretBounds(hit).X - offsetX;
+
+            Assert.IsLessThan(WIDEST_CHARACTER, Math.Abs(caretScreenX - screenX),
+                $"Hitting {screenX} put the caret at {caretScreenX:F1}.");
+        }
+    }
+
     private static string DescribeFirstLine(TextViewLayout view)
     {
         var line = view.MaterializedLines[0];
