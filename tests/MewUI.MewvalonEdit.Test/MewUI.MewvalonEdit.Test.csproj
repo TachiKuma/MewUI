@@ -10,6 +10,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\extensions\MewUI.MewvalonEdit\MewUI.MewvalonEdit.csproj" />
+    <!-- Metrics-dependent tests need a text engine; registered through the backend's public API. -->
+    <ProjectReference Include="..\..\src\MewUI.Backend.Gdi\MewUI.Backend.Gdi.csproj"
+                      Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
   </ItemGroup>
 
 </Project>

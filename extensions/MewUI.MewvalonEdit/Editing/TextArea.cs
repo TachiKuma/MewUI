@@ -4,6 +4,7 @@ using Aprillz.MewUI.Input;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Indentation;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
+using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.MewvalonEdit.Editing;
 
@@ -53,7 +54,34 @@ public sealed class TextArea
         remove => _editor.Surface.TextEntered -= value;
     }
 
+    /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>
+    public IReadOnlySectionProvider? ReadOnlySectionProvider
+    {
+        get => _editor.Surface.ReadOnlySections;
+        set => _editor.Surface.ReadOnlySections = value;
+    }
+
+    /// <summary>Raised after the document was replaced.</summary>
+    public event EventHandler? DocumentChanged
+    {
+        add => _editor.DocumentChanged += value;
+        remove => _editor.DocumentChanged -= value;
+    }
+
+    /// <summary>Raised after an option changed.</summary>
+    public event System.ComponentModel.PropertyChangedEventHandler? OptionChanged
+    {
+        add => Options.PropertyChanged += value;
+        remove => Options.PropertyChanged -= value;
+    }
+
     public void ReplaceSelection(string? text) => _editor.Surface.ReplaceSelection(text);
+
+    /// <summary>Inserts text as if typed, replacing the selection.</summary>
+    public void PerformTextInput(string text) => ReplaceSelection(text);
+
+    /// <summary>Collapses the selection to the caret.</summary>
+    public void ClearSelection() => _editor.Select(_editor.CaretOffset, 0);
 
     private void OnEditingStateChanged()
     {

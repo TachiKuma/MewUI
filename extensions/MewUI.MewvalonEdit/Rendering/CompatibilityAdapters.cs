@@ -389,17 +389,12 @@ internal sealed class BackgroundRendererRegistry(TextEditor editor)
         {
             // Below the anchor, because an AvalonEdit background renderer paints under the content
             // of the layer it names.
-            host.InsertLayer(new LayerBridge(editor, layer, Renderers), ToAnchor(layer), TextLayerPosition.Below);
+            host.InsertLayer(
+                new LayerBridge(editor, layer, Renderers),
+                TextView.ToAnchor(layer),
+                TextLayerPosition.Below);
         }
     }
-
-    private static TextAdornmentLayer ToAnchor(KnownLayer layer) => layer switch
-    {
-        KnownLayer.Background => TextAdornmentLayer.Background,
-        KnownLayer.Selection => TextAdornmentLayer.Selection,
-        KnownLayer.Caret => TextAdornmentLayer.Caret,
-        _ => TextAdornmentLayer.Text
-    };
 
     private sealed class LayerBridge(TextEditor editor, KnownLayer layer, IList<IBackgroundRenderer> renderers)
         : ITextViewLayer
