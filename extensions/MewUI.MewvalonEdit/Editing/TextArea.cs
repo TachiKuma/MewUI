@@ -27,6 +27,13 @@ public sealed class TextArea
     public TextSelection Selection { get; }
     public TextView TextView { get; }
 
+    /// <summary>
+    /// Margins placed left of the text, outermost first. Adding one attaches it to the view; the
+    /// line number margin is the built-in entry that <see cref="TextEditor.ShowLineNumbers"/> adds
+    /// and removes.
+    /// </summary>
+    public IList<AbstractMargin> LeftMargins => _editor.LeftMargins;
+
     public IIndentationStrategy? IndentationStrategy
     {
         get => _editor.IndentationStrategy;

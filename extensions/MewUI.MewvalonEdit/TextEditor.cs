@@ -16,6 +16,8 @@ public class TextEditor : ContentControl
     private TextDocument _document;
     private readonly MultiLineTextBox _surface;
     private readonly LineNumberMargin _lineNumberMargin;
+    private readonly System.Collections.ObjectModel.ObservableCollection<AbstractMargin> _leftMargins = [];
+    private Grid _marginHost = null!;
     private IHighlightingDefinition? _syntaxHighlighting;
     private HighlightingColorizer? _colorizer;
     private readonly SpaceMarkerProjection _spaceMarkers;
@@ -66,13 +68,12 @@ public class TextEditor : ContentControl
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
         _backgroundRenderers.RegisterInto(_surface);
         _surface.InsertLayer(_whitespaceMarkers, TextAdornmentLayer.Text, TextLayerPosition.Below);
-        _lineNumberMargin = new LineNumberMargin(this) { IsVisible = _showLineNumbers };
-        Content = new Grid()
-            .Columns("Auto,*")
-            .Children(
-                _surface.Column(1),
-                _lineNumberMargin.Column(0));
+        _lineNumberMargin = new LineNumberMargin { IsVisible = _showLineNumbers };
+        _marginHost = new Grid().Columns("Auto,*").Children(_surface.Column(1));
+        Content = _marginHost;
         TextArea = new TextArea(this);
+        _leftMargins.CollectionChanged += (_, _) => RebuildMargins();
+        _leftMargins.Add(_lineNumberMargin);
     }
 
     /// <summary>
@@ -123,6 +124,27 @@ public class TextEditor : ContentControl
                 },
             ],
         };
+
+    internal IList<AbstractMargin> LeftMargins => _leftMargins;
+
+    /// <summary>
+    /// Lays the margins out as leading grid columns, outermost first, and attaches each to the view
+    /// so it follows scrolling and line construction.
+    /// </summary>
+    private void RebuildMargins()
+    {
+        var columns = string.Join(',', Enumerable.Repeat("Auto", _leftMargins.Count).Append("*"));
+        var host = new Grid().Columns(columns);
+        for (int index = 0; index < _leftMargins.Count; index++)
+        {
+            var margin = _leftMargins[index];
+            margin.TextView = TextArea.TextView;
+            host.Children(margin.Column(index));
+        }
+        host.Children(_surface.Column(_leftMargins.Count));
+        _marginHost = host;
+        Content = host;
+    }
 
     public TextDocument Document
     {

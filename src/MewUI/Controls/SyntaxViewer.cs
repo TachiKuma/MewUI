@@ -228,6 +228,13 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     }
 
     /// <inheritdoc/>
+    public IReadOnlyList<TextLineLayout> VisibleTextLines
+        => _view?.MaterializedLines ?? Array.Empty<TextLineLayout>();
+
+    /// <inheritdoc/>
+    public Rect TextViewportBounds => _contentBounds;
+
+    /// <inheritdoc/>
     public double DocumentHeight
     {
         get

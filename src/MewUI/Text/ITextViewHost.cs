@@ -30,6 +30,12 @@ public interface ITextViewHost
     /// <summary>Raised after the visible lines were built.</summary>
     event Action<ITextViewHost>? LinesChanged;
 
+    /// <summary>Lines currently laid out, in document order. A margin reads these to place its rows.</summary>
+    IReadOnlyList<TextLineLayout> VisibleTextLines { get; }
+
+    /// <summary>Area the text is drawn into, excluding chrome.</summary>
+    Rect TextViewportBounds { get; }
+
     /// <summary>Height of the whole document in view coordinates.</summary>
     double DocumentHeight { get; }
 

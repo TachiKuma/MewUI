@@ -1,13 +1,13 @@
 using System.Globalization;
 
 using Aprillz.MewUI;
-using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
-internal sealed class LineNumberMargin(TextEditor editor) : TextViewportMargin(editor)
+/// <summary>Draws the document line numbers beside the text.</summary>
+public sealed class LineNumberMargin : AbstractMargin
 {
     private const double LEFT_INSET = 4;
     private const double RIGHT_INSET = 6;
@@ -18,13 +18,16 @@ internal sealed class LineNumberMargin(TextEditor editor) : TextViewportMargin(e
     public Color NumberForeground { get; set; } = Color.FromRgb(128, 128, 128);
 
     /// <summary>Re-measures when the document grows or shrinks past a digit boundary.</summary>
-    internal void SyncWidthToLineCount()
+    public void SyncWidthToLineCount()
     {
         if (GetDigitCount() != _measuredDigits)
         {
             InvalidateMeasure();
         }
     }
+
+    protected override void OnDocumentChanged(Document.TextDocument? oldValue, Document.TextDocument? newValue)
+        => SyncWidthToLineCount();
 
     protected override Size MeasureContent(Size availableSize)
     {
@@ -35,11 +38,17 @@ internal sealed class LineNumberMargin(TextEditor editor) : TextViewportMargin(e
 
     protected override void OnRenderTextViewport(IGraphicsContext context, Rect textViewport)
     {
-        foreach (var line in Editor.Surface.VisibleTextLines)
+        if (TextView is not { } view)
+        {
+            return;
+        }
+
+        double scrollY = view.Host.ScrollOffset.Y;
+        foreach (var line in view.Host.VisibleTextLines)
         {
             string number = (line.LogicalLine.LineNumber + 1).ToString(CultureInfo.InvariantCulture);
             var layout = GetNumberLayout(number);
-            double y = textViewport.Y + line.DocumentY - Editor.Surface.VerticalOffset;
+            double y = textViewport.Y + line.DocumentY - scrollY;
             double x = Math.Max(Bounds.X + LEFT_INSET, Bounds.Right - layout.MeasuredSize.Width - RIGHT_INSET);
             var options = new TextDrawOptions(NumberForeground);
             context.Text.Draw(layout, new Point(x, y), in options);
@@ -47,7 +56,10 @@ internal sealed class LineNumberMargin(TextEditor editor) : TextViewportMargin(e
     }
 
     private int GetDigitCount()
-        => Math.Max(MIN_DIGITS, Editor.Document.LineCount.ToString(CultureInfo.InvariantCulture).Length);
+    {
+        int lineCount = TextView?.Host.Document.LineCount ?? 1;
+        return Math.Max(MIN_DIGITS, lineCount.ToString(CultureInfo.InvariantCulture).Length);
+    }
 
     // Measures the widest digits rather than estimating from font size, so proportional fonts
     // and high DPI do not clip the number.
@@ -59,7 +71,7 @@ internal sealed class LineNumberMargin(TextEditor editor) : TextViewportMargin(e
             {
                 Text = number.AsMemory(),
                 Dpi = GetDpi(),
-                DefaultStyle = new TextRunStyle(Editor.FontFamily, Editor.FontSize, Editor.FontWeight),
+                DefaultStyle = new TextRunStyle(FontFamily, FontSize, FontWeight),
                 Paragraph = new TextParagraphStyle { Wrapping = TextWrapping.NoWrap }
             },
             TextLayoutCachePolicy.Content);

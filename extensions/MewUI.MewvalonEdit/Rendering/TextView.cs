@@ -22,6 +22,9 @@ public sealed class TextView(TextArea textArea)
     /// <summary>The editing surface as a text view host, for host-neutral extensions.</summary>
     public ITextViewHost Host => textArea.Editor.Surface;
 
+    /// <summary>Document the view presents.</summary>
+    public Document.TextDocument Document => textArea.Editor.Document;
+
     public string FontFamily
     {
         get => textArea.Editor.FontFamily;
