@@ -1,6 +1,7 @@
 <Project Sdk="MSTest.Sdk/4.0.1">
 
   <PropertyGroup>
+    <AssemblyName>Aprillz.MewUI.MewvalonEdit.Test</AssemblyName>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -10,6 +11,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\extensions\MewUI.MewvalonEdit\MewUI.MewvalonEdit.csproj" />
+    <ProjectReference Include="..\..\src\MewUI.Backend.Gdi\MewUI.Backend.Gdi.csproj"
+                      Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
   </ItemGroup>
 
 </Project>

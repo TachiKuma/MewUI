@@ -37,15 +37,21 @@ public class VisualLineLinkText : TextReplacementElement
         {
             return;
         }
+        NavigateTo(NavigateUri);
+        e.Handled = true;
+    }
+
+    /// <summary>Opens the target. Override to intercept navigation, e.g. for in-app handling.</summary>
+    protected virtual void NavigateTo(string uri)
+    {
         try
         {
-            Process.Start(new ProcessStartInfo(NavigateUri) { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
         }
         catch (SystemException)
         {
             // No handler for the scheme is the user's configuration, not the editor's failure.
         }
-        e.Handled = true;
     }
 }
 
@@ -73,6 +79,10 @@ public class LinkElementGenerator : VisualLineElementGenerator
     /// <summary>Requires Ctrl+Click to follow generated links. Default true, as in AvalonEdit.</summary>
     public bool RequireControlModifierForClick { get; set; } = true;
 
+    /// <summary>Builds the link element. Override to substitute a subclass, e.g. one intercepting navigation.</summary>
+    protected virtual VisualLineLinkText CreateLinkElement(string text, int documentLength, TextRunStyle style)
+        => new(text, documentLength, style);
+
     /// <summary>Target for a matched text. The default treats the match itself as the URI.</summary>
     protected virtual string GetUriFromMatch(Match match)
         => match.Value.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "http://" + match.Value : match.Value;
@@ -87,12 +97,10 @@ public class LinkElementGenerator : VisualLineElementGenerator
         {
             return null;
         }
-        var element = new VisualLineLinkText(match.Value, match.Length, ResolveStyle())
-        {
-            Foreground = LinkColor,
-            NavigateUri = GetUriFromMatch(match),
-            RequireControlModifierForClick = RequireControlModifierForClick
-        };
+        var element = CreateLinkElement(match.Value, match.Length, ResolveStyle());
+        element.Foreground = LinkColor;
+        element.NavigateUri = GetUriFromMatch(match);
+        element.RequireControlModifierForClick = RequireControlModifierForClick;
         element.TextRunProperties.SetTextDecorations(TextDecoration.Underline);
         return element;
     }

@@ -1,3 +1,3 @@
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("MewUI.MewvalonEdit.Test")]
+[assembly: InternalsVisibleTo("Aprillz.MewUI.MewvalonEdit.Test")]
