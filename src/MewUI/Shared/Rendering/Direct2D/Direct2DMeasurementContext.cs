@@ -200,10 +200,13 @@ internal sealed unsafe class Direct2DMeasurementContext : MeasureGraphicsContext
                         nextLocal++;
                     }
 
+                    // A run whose glyphs were all deleted still maps every character to a glyph
+                    // slot, so the map runs past the glyph array. Those slots carry no width.
+                    int clusterStart = Math.Min(glyphStart, run.GlyphIndices.Length);
                     int nextGlyph = nextLocal < run.ClusterMap.Length
                         ? run.ClusterMap[nextLocal]
                         : run.GlyphIndices.Length;
-                    nextGlyph = Math.Clamp(nextGlyph, glyphStart, run.GlyphIndices.Length);
+                    nextGlyph = Math.Clamp(nextGlyph, clusterStart, run.GlyphIndices.Length);
                     double clusterEnd = run.BaselineOriginX + glyphPrefix[nextGlyph];
                     for (int textIndex = local; textIndex < nextLocal; textIndex++)
                     {
