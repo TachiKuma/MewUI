@@ -4,6 +4,7 @@ using Aprillz.MewUI.MewvalonEdit;
 using Aprillz.MewUI.MewvalonEdit.CodeCompletion;
 using Aprillz.MewUI.MewvalonEdit.Folding;
 using Aprillz.MewUI.MewvalonEdit.Highlighting;
+using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.MewvalonEdit.Search;
 
 namespace Aprillz.MewUI.MewvalonEdit.Sample;
@@ -14,6 +15,8 @@ public sealed class MainWindow : Window
     private readonly SearchPanel _search;
     private readonly FoldingManager _foldingManager;
     private readonly BraceFoldingStrategy _braceFolding = new();
+    private readonly XmlFoldingStrategy _xmlFolding = new() { ShowAttributesWhenFolded = true };
+    private readonly TextBlock _foldingState = new();
     private readonly TextBlock _position = new();
     private readonly TextBlock _selection = new();
     private readonly TextBlock _documentState = new();
@@ -30,25 +33,34 @@ public sealed class MainWindow : Window
         _editor = new TextEditor
         {
             FontFamily = "Consolas",
-            FontSize = 14,
+            FontSize = 13,
             ShowLineNumbers = true,
             WordWrap = false
         };
         _search = SearchPanel.Install(_editor.TextArea);
+        // Installing the manager attaches the folding margin beside the line numbers; its boxes
+        // toggle a section on click.
         _foldingManager = FoldingManager.Install(_editor.TextArea);
+        _foldingManager.FoldingsChanged += (_, _) => UpdateFoldingState();
+        // Underlines URLs and mail addresses in the text and opens them on Ctrl+Click.
+        _editor.TextArea.TextView.ElementGenerators.Add(new LinkElementGenerator());
+        _editor.TextArea.TextView.ElementGenerators.Add(
+            new MailLinkElementGenerator { LinkColor = Color.FromRgb(0x4E, 0x9A, 0xE8) });
         _optionsPanel = CreateOptionsPanel();
         _optionsPanel.IsVisible = false;
 
         _editor.TextArea.Caret.PositionChanged += (_, _) => UpdateStatus();
         _editor.TextArea.SelectionChanged += (_, _) => UpdateStatus();
+        _editor.TextArea.TextEntered += _ => UpdateStatus();
         _editor.TextChanged += (_, _) =>
         {
             UpdateDocumentState();
-            if (_editor.SyntaxHighlighting?.Name == "C#") UpdateFoldings(braces: true);
+            UpdateFoldings(_editor.SyntaxHighlighting?.Name);
         };
 
         LoadSample(SampleText.CSharp, "C#");
         Content = new DockPanel()
+            .Spacing(8)
             .Children(
                 CreateToolbar().DockTop(),
                 CreateStatusBar().DockBottom(),
@@ -146,7 +158,7 @@ public sealed class MainWindow : Window
 
         return new Border
         {
-            Width = 340,
+            Width = 300,
             Padding = new Thickness(12),
             BorderThickness = 1,
             Child = new StackPanel
@@ -164,7 +176,10 @@ public sealed class MainWindow : Window
                     value => _editor.Options.ConvertTabsToSpaces = value),
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }
                     .Children(new TextBlock().Text("Indentation size").Width(180), indentationSize),
-                Toggle("Read only", _editor.IsReadOnly, value => _editor.IsReadOnly = value))
+                Toggle("Read only", _editor.IsReadOnly, value => _editor.IsReadOnly = value),
+                // Setting any of these replaces the host's selection layer with the editor's own,
+                // which is the one consumer proving layer replacement works.
+                Toggle("Custom selection color", false, ApplyCustomSelection))
         }.WithTheme((theme, border) => border
             .Background(theme.Palette.ContainerBackground)
             .BorderBrush(theme.Palette.ControlBorder));
@@ -178,7 +193,7 @@ public sealed class MainWindow : Window
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 18
-            }.Children(_position, _selection, _documentState, _encoding, _searchState));
+            }.Children(_position, _selection, _documentState, _foldingState, _encoding, _searchState));
 
     private void LoadSample(string text, string highlightingName)
     {
@@ -186,17 +201,43 @@ public sealed class MainWindow : Window
         _editor.CaretOffset = 0;
         _editor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition(highlightingName);
         _search.Refresh();
-        UpdateFoldings(highlightingName == "C#");
+        UpdateFoldings(highlightingName);
         UpdateStatus();
         UpdateDocumentState(highlightingName);
     }
 
-    private void UpdateFoldings(bool braces)
+    /// <summary>Picks the folding strategy the loaded language has one for.</summary>
+    private void UpdateFoldings(string? language)
     {
-        if (braces)
-            _braceFolding.UpdateFoldings(_foldingManager, _editor.Document);
-        else
-            _foldingManager.UpdateFoldings([], -1);
+        switch (language)
+        {
+            case "C#":
+                _braceFolding.UpdateFoldings(_foldingManager, _editor.Document);
+                break;
+            case "XML":
+                _xmlFolding.UpdateFoldings(_foldingManager, _editor.Document);
+                break;
+            default:
+                _foldingManager.UpdateFoldings([], -1);
+                break;
+        }
+        UpdateFoldingState();
+    }
+
+    private void UpdateFoldingState()
+    {
+        int total = _foldingManager.AllFoldings.Count();
+        int folded = _foldingManager.AllFoldings.Count(static folding => folding.IsFolded);
+        _foldingState.Text = $"Foldings: {folded}/{total}";
+    }
+
+    private void ApplyCustomSelection(bool enabled)
+    {
+        var area = _editor.TextArea;
+        area.SelectionBrush = enabled ? Color.FromArgb(0x60, 0x4E, 0x9A, 0xE8) : null;
+        area.SelectionBorder = enabled ? Color.FromRgb(0x4E, 0x9A, 0xE8) : null;
+        area.SelectionCornerRadius = enabled ? 3 : 0;
+        _editor.InvalidateTextView();
     }
 
     private void ToggleFirstFolding()

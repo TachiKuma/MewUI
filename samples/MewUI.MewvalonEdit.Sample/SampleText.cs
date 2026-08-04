@@ -6,6 +6,9 @@ internal static class SampleText
         using System.Collections.Generic;
         using System.Linq;
 
+        // Docs: https://github.com/aprillz/mewui and mail to team@example.com
+        // Ctrl+Click a link above to open it; hovering with Ctrl shows the hand cursor.
+
         namespace Aprillz.MewUI.MewvalonEdit.Sample;
 
         [Obsolete("Use CreateAsync instead")]
@@ -32,9 +35,18 @@ internal static class SampleText
     public const string Xml = """
         <?xml version="1.0" encoding="utf-8"?>
         <catalog generated="true">
-          <!-- XML highlighting and editing use the same text surface. -->
+          <!-- XML highlighting and editing use the same text surface.
+               This comment spans lines, so the folding strategy collapses it too. -->
           <book id="42" language="ko-KR">
             <title>MewvalonEdit</title>
+            <author>Aprillz</author>
+            <chapters>
+              <chapter number="1">Layers</chapter>
+              <chapter number="2">Elements</chapter>
+            </chapters>
+          </book>
+          <book id="43" language="en-US">
+            <title>Folding</title>
             <author>Aprillz</author>
           </book>
         </catalog>
