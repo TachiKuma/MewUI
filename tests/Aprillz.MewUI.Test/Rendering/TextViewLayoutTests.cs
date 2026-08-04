@@ -204,7 +204,7 @@ public sealed class TextViewLayoutTests
     }
 
     [TestMethod]
-    public void ExtensionPipeline_ProjectsClassifiesTransformsGeneratesAndCollectsAdornments()
+    public void ExtensionPipeline_ProjectsClassifiesTransformsAndGenerates()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -218,7 +218,6 @@ public sealed class TextViewLayoutTests
         extensions.Classifiers.Add(new PrefixClassifier());
         extensions.Transformers.Add(new SuffixTransformer());
         extensions.ElementGenerators.Add(new EllipsisInlineGenerator());
-        extensions.AdornmentProviders.Add(new MarkerAdornmentProvider());
 
         using var factory = new GdiGraphicsFactory();
         using var view = new TextViewLayout(
@@ -232,7 +231,6 @@ public sealed class TextViewLayoutTests
 
         var line = view.MaterializedLines[0];
         Assert.HasCount(1, line.PaintSpans);
-        Assert.HasCount(1, line.Adornments);
 
         var projectedCaret = line.GetCaretBounds(new CharacterHit(4, 0));
         var hit = view.HitTest(new Point(projectedCaret.X, projectedCaret.Y + projectedCaret.Height * 0.5));
@@ -388,18 +386,6 @@ public sealed class TextViewLayoutTests
     {
         public InlineMetrics Measure() => new(20, 16, 12);
         public void Draw(ITextRenderContext context, Point origin) { }
-    }
-
-    private sealed class MarkerAdornmentProvider : ITextAdornmentProvider
-    {
-        public void GetAdornments(in TextAdornmentContext context, IList<ITextAdornment> output)
-            => output.Add(new MarkerAdornment());
-    }
-
-    private sealed class MarkerAdornment : ITextAdornment
-    {
-        public TextAdornmentLayer Layer => TextAdornmentLayer.Text;
-        public void Draw(ITextRenderContext context, TextLineLayout line, Point origin) { }
     }
 
     private sealed class FoldingProjection : ITextProjection

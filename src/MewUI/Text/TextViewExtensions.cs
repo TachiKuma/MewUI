@@ -56,23 +56,6 @@ public enum TextAdornmentLayer
     Caret
 }
 
-public interface ITextAdornment
-{
-    TextAdornmentLayer Layer { get; }
-    void Draw(ITextRenderContext context, TextLineLayout line, Point origin);
-}
-
-/// <summary>Adornment input. <see cref="Text"/> is the projected display text; <see cref="OffsetMap"/> converts between its offsets and source document offsets.</summary>
-public readonly record struct TextAdornmentContext(
-    LogicalTextLine LogicalLine,
-    ReadOnlyMemory<char> Text,
-    ITextOffsetMap OffsetMap);
-
-public interface ITextAdornmentProvider
-{
-    void GetAdornments(in TextAdornmentContext context, IList<ITextAdornment> output);
-}
-
 public interface ITextOffsetMap
 {
     int MapToSource(int projectedOffset);
@@ -122,7 +105,6 @@ public sealed class TextViewExtensionPipeline
     public IList<ITextClassifier> Classifiers { get; } = new List<ITextClassifier>();
     public IList<ITextLineTransformer> Transformers { get; } = new List<ITextLineTransformer>();
     public IList<ITextElementGenerator> ElementGenerators { get; } = new List<ITextElementGenerator>();
-    public IList<ITextAdornmentProvider> AdornmentProviders { get; } = new List<ITextAdornmentProvider>();
     public IList<ITextProjection> Projections { get; } = new List<ITextProjection>();
     public IList<ITextLineCollapser> LineCollapsers { get; } = new List<ITextLineCollapser>();
 }

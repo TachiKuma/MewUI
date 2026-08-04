@@ -66,7 +66,7 @@ public sealed class SyntaxViewerTests
     }
 
     [TestMethod]
-    public void ViewerRunsClassifierAndAdornmentOnlyForMaterializedLines()
+    public void ViewerRunsTheClassifierOnlyForMaterializedLines()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -80,7 +80,6 @@ public sealed class SyntaxViewerTests
         try
         {
             var classifier = new CountingClassifier();
-            var adornmentProvider = new CountingAdornmentProvider();
             var viewer = new SyntaxViewer
             {
                 Width = 320,
@@ -88,7 +87,6 @@ public sealed class SyntaxViewerTests
                 Text = string.Join('\n', Enumerable.Range(0, 10_000).Select(static value => $"keyword value{value}"))
             };
             viewer.Extensions.Classifiers.Add(classifier);
-            viewer.Extensions.AdornmentProviders.Add(adornmentProvider);
             viewer.InvalidateTextView();
             viewer.Select(0, 7);
 
@@ -101,8 +99,6 @@ public sealed class SyntaxViewerTests
             Assert.IsGreaterThan(0, viewer.MaterializedLineCount);
             Assert.IsLessThan(50, viewer.MaterializedLineCount);
             Assert.AreEqual(viewer.MaterializedLineCount, classifier.InvocationCount);
-            Assert.AreEqual(viewer.MaterializedLineCount, adornmentProvider.InvocationCount);
-            Assert.AreEqual(viewer.MaterializedLineCount, adornmentProvider.DrawCount);
             Assert.AreEqual("keyword", viewer.SelectedText);
             Assert.IsGreaterThan(0, factory.TextEngine.ManagedCache.Count);
         }
@@ -124,26 +120,6 @@ public sealed class SyntaxViewerTests
             {
                 output.Add(new TextPaintSpan(new TextRange(0, length), Foreground: Color.Blue));
             }
-        }
-    }
-
-    private sealed class CountingAdornmentProvider : ITextAdornmentProvider
-    {
-        public int InvocationCount { get; private set; }
-        public int DrawCount { get; private set; }
-
-        public void GetAdornments(in TextAdornmentContext context, IList<ITextAdornment> output)
-        {
-            InvocationCount++;
-            output.Add(new CountingAdornment(this));
-        }
-
-        private sealed class CountingAdornment(CountingAdornmentProvider owner) : ITextAdornment
-        {
-            public TextAdornmentLayer Layer => TextAdornmentLayer.Text;
-
-            public void Draw(ITextRenderContext context, TextLineLayout line, Point origin)
-                => owner.DrawCount++;
         }
     }
 }

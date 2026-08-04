@@ -75,14 +75,12 @@ public sealed class TextLineLayout
         double documentY,
         ITextOffsetMap offsetMap,
         IReadOnlyList<TextPaintSpan> paintSpans,
-        IReadOnlyList<ITextAdornment> adornments,
         int visualRowOffset = 0)
     {
         LogicalLine = logicalLine;
         _layout = layout;
         OffsetMap = offsetMap;
         PaintSpans = paintSpans;
-        Adornments = adornments;
         DocumentX = documentX;
         DocumentY = documentY;
         _visualLines = new List<VisualTextLine>(layout.Lines.Count);
@@ -105,7 +103,6 @@ public sealed class TextLineLayout
     public double Height => _layout.ContentHeight;
     public ITextOffsetMap OffsetMap { get; }
     public IReadOnlyList<TextPaintSpan> PaintSpans { get; }
-    public IReadOnlyList<ITextAdornment> Adornments { get; }
     public double DocumentX { get; private set; }
     public double DocumentY { get; private set; }
 
@@ -128,12 +125,8 @@ public sealed class TextLineLayout
     /// <summary>Draws the whole line. Hosts that interleave layers call the individual passes instead.</summary>
     public void Draw(ITextRenderContext context, Point origin, in TextDrawOptions options)
     {
-        DrawAdornmentLayer(context, origin, TextAdornmentLayer.Background);
         DrawBackground(context, origin, in options);
-        DrawAdornmentLayer(context, origin, TextAdornmentLayer.Selection);
-        DrawAdornmentLayer(context, origin, TextAdornmentLayer.Text);
         DrawForeground(context, origin, in options);
-        DrawAdornmentLayer(context, origin, TextAdornmentLayer.Caret);
     }
 
     /// <summary>Paint-span backgrounds of this line.</summary>
@@ -148,16 +141,6 @@ public sealed class TextLineLayout
     {
         ArgumentNullException.ThrowIfNull(context);
         context.DrawForeground(_layout, new Point(origin.X + DocumentX, origin.Y), Combine(in options));
-    }
-
-    /// <summary>
-    /// Adornments registered for <paramref name="layer"/>. They belong under that layer's own
-    /// content, so the host calls this before painting the layer.
-    /// </summary>
-    public void DrawAdornmentLayer(ITextRenderContext context, Point origin, TextAdornmentLayer layer)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        DrawAdornments(context, new Point(origin.X + DocumentX, origin.Y), layer);
     }
 
     private TextDrawOptions Combine(in TextDrawOptions options)
@@ -188,17 +171,6 @@ public sealed class TextLineLayout
 
     public int MapSourceOffsetToProjected(int sourceOffset)
         => OffsetMap.MapFromSource(sourceOffset);
-
-    private void DrawAdornments(ITextRenderContext context, Point origin, TextAdornmentLayer layer)
-    {
-        foreach (var adornment in Adornments)
-        {
-            if (adornment.Layer == layer)
-            {
-                adornment.Draw(context, this, origin);
-            }
-        }
-    }
 
     internal void SetDocumentPosition(double documentX, double documentY)
     {

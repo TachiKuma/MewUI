@@ -227,7 +227,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         var text = context.Text;
         Layers.Draw(text, _contentBounds, anchor =>
         {
-            DrawLayerExtensions(text, anchor);
             DrawAnchorContent(context, text, anchor, selection);
         });
     }
@@ -282,18 +281,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
                         new Rect(caret.X, caret.Y, 1, Math.Max(1, caret.Height)), Theme.Palette.WindowText);
                 }
                 break;
-        }
-    }
-
-    private void DrawLayerExtensions(ITextRenderContext context, TextAdornmentLayer layer)
-    {
-        if (_view is null)
-        {
-            return;
-        }
-        foreach (var line in _view.MaterializedLines)
-        {
-            line.DrawAdornmentLayer(context, GetLineOrigin(line), layer);
         }
     }
 

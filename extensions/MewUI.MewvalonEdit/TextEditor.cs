@@ -7,6 +7,7 @@ using Aprillz.MewUI.MewvalonEdit.Highlighting;
 using Aprillz.MewUI.MewvalonEdit.Indentation;
 using Aprillz.MewUI.MewvalonEdit.Editing;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit;
 
@@ -19,7 +20,7 @@ public class TextEditor : ContentControl
     private HighlightingColorizer? _colorizer;
     private readonly SpaceMarkerProjection _spaceMarkers;
     private readonly SpaceMarkerClassifier _spaceMarkerColors;
-    private readonly WhitespaceAdornmentProvider _whitespaceAdornments;
+    private readonly WhitespaceMarkerLayer _whitespaceMarkers;
     private readonly LineTransformerAdapter _lineTransformers;
     private readonly ElementGeneratorAdapter _elementGenerators;
     private readonly BackgroundRendererRegistry _backgroundRenderers;
@@ -32,7 +33,7 @@ public class TextEditor : ContentControl
         IndentationStrategy = new DefaultIndentationStrategy();
         _spaceMarkers = new SpaceMarkerProjection(Options);
         _spaceMarkerColors = new SpaceMarkerClassifier(Options, this);
-        _whitespaceAdornments = new WhitespaceAdornmentProvider(Options, this);
+        _whitespaceMarkers = new WhitespaceMarkerLayer(Options, this);
         _lineTransformers = new LineTransformerAdapter(this);
         _elementGenerators = new ElementGeneratorAdapter(this);
         _backgroundRenderers = new BackgroundRendererRegistry(this);
@@ -64,7 +65,7 @@ public class TextEditor : ContentControl
         _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
         _backgroundRenderers.RegisterInto(_surface);
-        _surface.Extensions.AdornmentProviders.Add(_whitespaceAdornments);
+        _surface.InsertLayer(_whitespaceMarkers, TextAdornmentLayer.Text, TextLayerPosition.Below);
         _lineNumberMargin = new LineNumberMargin(this) { IsVisible = _showLineNumbers };
         Content = new Grid()
             .Columns("Auto,*")

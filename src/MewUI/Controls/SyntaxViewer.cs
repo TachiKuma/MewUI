@@ -154,11 +154,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             // Every anchor paints its extensions first and its own content after. The viewer draws
             // no caret, so that anchor holds extensions only; keeping it preserves the slot.
             var text = context.Text;
-            Layers.Draw(text, _contentBounds, anchor =>
-            {
-                DrawLayerExtensions(text, anchor);
-                DrawAnchorContent(text, anchor);
-            });
+            Layers.Draw(text, _contentBounds, anchor => DrawAnchorContent(text, anchor));
         }
         finally
         {
@@ -466,18 +462,6 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     public void InvalidateLayer(TextAdornmentLayer anchor) => InvalidateVisual();
 
     private readonly TextViewLayerStack _layers = new();
-
-    private void DrawLayerExtensions(ITextRenderContext context, TextAdornmentLayer layer)
-    {
-        if (_view is null)
-        {
-            return;
-        }
-        foreach (var line in _view.MaterializedLines)
-        {
-            line.DrawAdornmentLayer(context, GetLineOrigin(line), layer);
-        }
-    }
 
     private void ReplaceDocument(string value)
     {

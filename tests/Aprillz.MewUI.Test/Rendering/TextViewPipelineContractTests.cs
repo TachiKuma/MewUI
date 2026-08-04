@@ -42,7 +42,6 @@ public sealed class TextViewPipelineContractTests
         var recorder = new OffsetMapRecorder();
         extensions.Projections.Add(projection);
         extensions.Classifiers.Add(recorder);
-        extensions.AdornmentProviders.Add(recorder);
         using var view = new TextViewLayout(
             factory.TextEngine,
             document,
@@ -58,7 +57,6 @@ public sealed class TextViewPipelineContractTests
         Assert.AreEqual(4, recorder.ClassifiedMap.MapToSource(0));
         Assert.AreEqual(9, recorder.ClassifiedMap.MapToSource(5));
         Assert.AreEqual(1, recorder.ClassifiedMap.MapFromSource(5));
-        Assert.AreSame(recorder.ClassifiedMap, recorder.AdornedMap);
     }
 
     /// <summary>Drops the first N characters so projected offsets shift against the source.</summary>
@@ -74,10 +72,9 @@ public sealed class TextViewPipelineContractTests
         public int MapFromSource(int sourceOffset) => Math.Max(0, sourceOffset - shift);
     }
 
-    private sealed class OffsetMapRecorder : ITextClassifier, ITextAdornmentProvider
+    private sealed class OffsetMapRecorder : ITextClassifier
     {
         public ITextOffsetMap? ClassifiedMap { get; private set; }
-        public ITextOffsetMap? AdornedMap { get; private set; }
         public string? ClassifiedText { get; private set; }
 
         public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
@@ -85,8 +82,5 @@ public sealed class TextViewPipelineContractTests
             ClassifiedMap = context.OffsetMap;
             ClassifiedText = context.Text.ToString();
         }
-
-        public void GetAdornments(in TextAdornmentContext context, IList<ITextAdornment> output)
-            => AdornedMap = context.OffsetMap;
     }
 }

@@ -419,12 +419,6 @@ public sealed class TextViewLayout : ITextViewLayout
             transformer.Transform(in transformContext, geometryRuns, inlines);
         }
 
-        var adornments = new List<ITextAdornment>();
-        var adornmentContext = new TextAdornmentContext(logical, text.AsMemory(), offsetMap);
-        foreach (var provider in _extensions.AdornmentProviders)
-        {
-            provider.GetAdornments(in adornmentContext, adornments);
-        }
         var paragraph = _paragraph with { MaxWidth = Viewport.Width };
         var request = new TextLayoutRequest
         {
@@ -444,7 +438,6 @@ public sealed class TextViewLayout : ITextViewLayout
             layoutY,
             offsetMap,
             paintSpans,
-            adornments,
             visualRowOffset);
 
         state.Layout = layout;
