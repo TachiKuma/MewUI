@@ -9,6 +9,7 @@ partial class GalleryView
     {
         var runDemo = new TextBlock()
             .Width(620)
+            .FontSize(16)
             .TextWrapping(TextWrapping.Wrap)
             .Inlines(
                 new Run("Normal text, "),
@@ -136,8 +137,8 @@ partial class GalleryView
     {
         var viewer = new SyntaxViewer
         {
-            Width = 620,
-            Height = 330,
+            Width = 680,
+            Height = 360,
             Wrap = false,
             FontFamily = "Consolas",
             Text = """

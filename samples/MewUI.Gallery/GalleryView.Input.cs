@@ -125,8 +125,8 @@ partial class GalleryView
         var classifier = new FindHighlightClassifier();
 
         var box = new MultiLineTextBox()
-            .Height(170)
-            .Width(290)
+            .Height(240)
+            .Width(360)
             .Wrap(true)
             .Text(FIND_DEMO_TEXT);
         box.Extensions.Classifiers.Add(classifier);
