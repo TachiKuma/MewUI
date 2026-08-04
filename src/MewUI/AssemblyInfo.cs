@@ -11,5 +11,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Aprillz.MewUI.Platform.X11")]
 [assembly: InternalsVisibleTo("Aprillz.MewUI.Platform.MacOS")]
 [assembly: InternalsVisibleTo("Aprillz.MewUI.Test")]
-[assembly: InternalsVisibleTo("Aprillz.MewUI.MewvalonEdit.Test")]
 [assembly: InternalsVisibleTo("Aprillz.MewUI.Benchmarks")]
