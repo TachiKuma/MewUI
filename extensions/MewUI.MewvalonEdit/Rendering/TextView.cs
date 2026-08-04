@@ -39,5 +39,43 @@ public sealed class TextView(TextArea textArea)
 
     public void Redraw() => textArea.Editor.InvalidateTextView();
 
+    /// <summary>
+    /// Lines currently laid out, in document order. Rebuilt from the engine's materialized lines on
+    /// each read, so hold one only within a single pass over the view.
+    /// </summary>
+    public IReadOnlyList<VisualLine> VisualLines
+    {
+        get
+        {
+            var host = Host;
+            var lines = host.VisibleTextLines;
+            var result = new VisualLine[lines.Count];
+            for (int index = 0; index < lines.Count; index++)
+            {
+                result[index] = Wrap(lines[index]);
+            }
+            return result;
+        }
+    }
+
+    /// <summary>The laid-out line containing the document line number, or null when not visible.</summary>
+    public VisualLine? GetVisualLine(int documentLineNumber)
+    {
+        foreach (var line in Host.VisibleTextLines)
+        {
+            if (line.LogicalLine.LineNumber == documentLineNumber - 1)
+            {
+                return Wrap(line);
+            }
+        }
+        return null;
+    }
+
+    private VisualLine Wrap(TextLineLayout line)
+        => new(
+            line,
+            Document.GetLineByOffset(line.LogicalLine.Offset),
+            textArea.Editor.ElementGeneratorAdapter.GetScannedElements(line.LogicalLine.Offset));
+
     internal MultiLineTextBox Surface => textArea.Editor.Surface;
 }

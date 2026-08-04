@@ -43,6 +43,16 @@ public sealed class TextArea
     public event EventHandler? SelectionChanged;
     public event Action<TextInputEventArgs>? TextEntering;
 
+    /// <summary>
+    /// Raised after typed or composed text reached the document, once per commit. During an IME
+    /// composition only the final commit raises it, which makes it the completion trigger point.
+    /// </summary>
+    public event Action<string>? TextEntered
+    {
+        add => _editor.Surface.TextEntered += value;
+        remove => _editor.Surface.TextEntered -= value;
+    }
+
     public void ReplaceSelection(string? text) => _editor.Surface.ReplaceSelection(text);
 
     private void OnEditingStateChanged()

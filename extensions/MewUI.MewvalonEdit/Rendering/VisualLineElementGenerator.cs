@@ -40,6 +40,9 @@ public class TextReplacementElement : VisualLineElement
     /// <summary>Color of the replacement text. Falls back to the document foreground when unset.</summary>
     public Color? Foreground { get; set; }
 
+    /// <summary>The replacement text is what occupies the visual surface.</summary>
+    protected internal override string GetVisualText() => Text;
+
     public override InlineMetrics Measure()
     {
         var layout = CreateLayout();

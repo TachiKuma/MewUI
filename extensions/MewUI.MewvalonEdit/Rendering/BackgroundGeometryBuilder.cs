@@ -1,12 +1,94 @@
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Editing;
+using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
-/// <summary>Maps document segments to view rectangles, as AvalonEdit's builder does for background renderers.</summary>
-public static class BackgroundGeometryBuilder
+/// <summary>Maps document segments to view rectangles and geometry, as AvalonEdit's builder does for background renderers.</summary>
+public sealed class BackgroundGeometryBuilder
 {
+    private readonly List<Rect> _rectangles = [];
+
+    /// <summary>Radius of the geometry's corners.</summary>
+    public double CornerRadius { get; set; }
+
+    /// <summary>Snaps rectangle edges to whole pixels, keeping 1px marker borders crisp.</summary>
+    public bool AlignToWholePixels { get; set; }
+
+    /// <summary>Half of this inset is taken off each rectangle so a stroked border stays inside it.</summary>
+    public double BorderThickness { get; set; }
+
+    /// <summary>Extends rectangles that reach a line end to the right edge of the viewport.</summary>
+    public bool ExtendToFullWidthAtLineEnd { get; set; }
+
+    /// <summary>Adds the visible rectangles of the segment.</summary>
+    public void AddSegment(TextView textView, ISegment segment)
+    {
+        ArgumentNullException.ThrowIfNull(textView);
+        ArgumentNullException.ThrowIfNull(segment);
+        foreach (var rect in GetRectsCore(textView, segment.Offset, segment.EndOffset, ExtendToFullWidthAtLineEnd))
+        {
+            AddRectangle(rect);
+        }
+    }
+
+    /// <summary>Adds one rectangle in view coordinates.</summary>
+    public void AddRectangle(Rect rectangle)
+    {
+        var rect = rectangle;
+        if (BorderThickness > 0)
+        {
+            rect = rect.Deflate(new Thickness(BorderThickness / 2));
+        }
+        if (AlignToWholePixels)
+        {
+            double left = Math.Round(rect.X);
+            double top = Math.Round(rect.Y);
+            rect = new Rect(left, top, Math.Round(rect.Right) - left, Math.Round(rect.Bottom) - top);
+        }
+        if (rect.Width > 0 && rect.Height > 0)
+        {
+            _rectangles.Add(rect);
+        }
+    }
+
+    /// <summary>Geometry of everything added so far, or null when nothing was added.</summary>
+    public PathGeometry? CreateGeometry()
+    {
+        if (_rectangles.Count == 0)
+        {
+            return null;
+        }
+        var geometry = new PathGeometry();
+        foreach (var rect in _rectangles)
+        {
+            double radius = Math.Min(CornerRadius, Math.Min(rect.Width, rect.Height) / 2);
+            if (radius <= 0)
+            {
+                geometry.MoveTo(rect.X, rect.Y);
+                geometry.LineTo(rect.Right, rect.Y);
+                geometry.LineTo(rect.Right, rect.Bottom);
+                geometry.LineTo(rect.X, rect.Bottom);
+                geometry.Close();
+            }
+            else
+            {
+                geometry.MoveTo(rect.X + radius, rect.Y);
+                geometry.LineTo(rect.Right - radius, rect.Y);
+                geometry.ArcTo(rect.Right, rect.Y, rect.Right, rect.Y + radius, radius);
+                geometry.LineTo(rect.Right, rect.Bottom - radius);
+                geometry.ArcTo(rect.Right, rect.Bottom, rect.Right - radius, rect.Bottom, radius);
+                geometry.LineTo(rect.X + radius, rect.Bottom);
+                geometry.ArcTo(rect.X, rect.Bottom, rect.X, rect.Bottom - radius, radius);
+                geometry.LineTo(rect.X, rect.Y + radius);
+                geometry.ArcTo(rect.X, rect.Y, rect.X + radius, rect.Y, radius);
+                geometry.Close();
+            }
+        }
+        return geometry;
+    }
+
     /// <summary>Rectangles covering the visible parts of <paramref name="segment"/>, in view coordinates.</summary>
     public static IEnumerable<Rect> GetRectsForSegment(
         TextView textView,

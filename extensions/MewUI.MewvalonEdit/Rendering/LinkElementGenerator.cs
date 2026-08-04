@@ -1,7 +1,53 @@
+using System.Diagnostics;
 using System.Text.RegularExpressions;
+using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
+
+/// <summary>Link text that opens its target in the system browser. Mirrors VisualLineLinkText.</summary>
+public class VisualLineLinkText : TextReplacementElement
+{
+    public VisualLineLinkText(string text, int documentLength, TextRunStyle style)
+        : base(text, documentLength, style)
+    {
+    }
+
+    /// <summary>Target opened on click. Mail addresses carry the mailto prefix already.</summary>
+    public string NavigateUri { get; set; } = string.Empty;
+
+    /// <summary>Requires Ctrl+Click to follow the link, leaving a plain click for the caret.</summary>
+    public bool RequireControlModifierForClick { get; set; } = true;
+
+    protected internal override void OnQueryCursor(QueryCursorEventArgs e)
+    {
+        if (!RequireControlModifierForClick || (e.Modifiers & ModifierKeys.Control) != 0)
+        {
+            e.Cursor = CursorType.Hand;
+        }
+    }
+
+    protected internal override void OnMouseDown(MouseEventArgs e)
+    {
+        if (e.Button != MouseButton.Left || NavigateUri.Length == 0)
+        {
+            return;
+        }
+        if (RequireControlModifierForClick && (e.Modifiers & ModifierKeys.Control) == 0)
+        {
+            return;
+        }
+        try
+        {
+            Process.Start(new ProcessStartInfo(NavigateUri) { UseShellExecute = true });
+        }
+        catch (SystemException)
+        {
+            // No handler for the scheme is the user's configuration, not the editor's failure.
+        }
+        e.Handled = true;
+    }
+}
 
 /// <summary>Underlines URLs found in the document text.</summary>
 public class LinkElementGenerator : VisualLineElementGenerator
@@ -24,6 +70,13 @@ public class LinkElementGenerator : VisualLineElementGenerator
     /// <summary>Color of the generated link text. Falls back to the document foreground when unset.</summary>
     public Color? LinkColor { get; set; }
 
+    /// <summary>Requires Ctrl+Click to follow generated links. Default true, as in AvalonEdit.</summary>
+    public bool RequireControlModifierForClick { get; set; } = true;
+
+    /// <summary>Target for a matched text. The default treats the match itself as the URI.</summary>
+    protected virtual string GetUriFromMatch(Match match)
+        => match.Value.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "http://" + match.Value : match.Value;
+
     public override int GetFirstInterestedOffset(int startOffset)
         => Match(startOffset, out int matchOffset).Success ? matchOffset : -1;
 
@@ -34,9 +87,11 @@ public class LinkElementGenerator : VisualLineElementGenerator
         {
             return null;
         }
-        var element = new TextReplacementElement(match.Value, match.Length, ResolveStyle())
+        var element = new VisualLineLinkText(match.Value, match.Length, ResolveStyle())
         {
-            Foreground = LinkColor
+            Foreground = LinkColor,
+            NavigateUri = GetUriFromMatch(match),
+            RequireControlModifierForClick = RequireControlModifierForClick
         };
         element.TextRunProperties.SetTextDecorations(TextDecoration.Underline);
         return element;

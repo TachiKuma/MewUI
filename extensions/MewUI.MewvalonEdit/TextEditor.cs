@@ -59,6 +59,11 @@ public class TextEditor : ContentControl
             CornerRadius = 0
         };
         _surface.TextInput += OnSurfaceTextInput;
+        _surface.MouseDown += OnSurfaceMouseDown;
+        _surface.MouseMove += OnSurfaceMouseMove;
+        // The generator projection runs first so it scans raw document text; the space markers
+        // then restyle whatever survives, including projected replacement text.
+        _surface.Extensions.Projections.Add(_elementGenerators);
         _surface.Extensions.Projections.Add(_spaceMarkers);
         // Ported transformers land below the whitespace markers, as AvalonEdit's baked marker
         // glyphs cannot be recolored by a colorizer.
@@ -236,12 +241,45 @@ public class TextEditor : ContentControl
 
     internal MultiLineTextBox Surface => _surface;
     internal Color WhitespaceMarkerColor => Theme.Palette.PlaceholderText;
+    internal ElementGeneratorAdapter ElementGeneratorAdapter => _elementGenerators;
     internal IList<IBackgroundRenderer> BackgroundRenderers => _backgroundRenderers.Renderers;
     internal IList<IVisualLineTransformer> LineTransformers => _lineTransformers.Transformers;
     internal IList<VisualLineElementGenerator> ElementGenerators => _elementGenerators.Generators;
 
     public event EventHandler? TextChanged;
     public event EventHandler? DocumentChanged;
+
+    /// <summary>Encoding used by <see cref="Save(Stream)"/>. <see cref="Load(Stream)"/> stores what it detected.</summary>
+    public System.Text.Encoding? Encoding { get; set; }
+
+    public void Load(string fileName)
+    {
+        using var stream = File.OpenRead(fileName);
+        Load(stream);
+    }
+
+    public void Load(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        using var reader = new StreamReader(stream, System.Text.Encoding.UTF8,
+            detectEncodingFromByteOrderMarks: true, leaveOpen: true);
+        Text = reader.ReadToEnd();
+        Encoding = reader.CurrentEncoding;
+    }
+
+    public void Save(string fileName)
+    {
+        using var stream = File.Create(fileName);
+        Save(stream);
+    }
+
+    public void Save(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        var writer = new StreamWriter(stream, Encoding ?? new System.Text.UTF8Encoding(false), leaveOpen: true);
+        writer.Write(Text);
+        writer.Flush();
+    }
 
     public void Select(int start, int length) => _surface.Select(start, length);
     public void SelectAll() => _surface.SelectAll();
@@ -305,6 +343,59 @@ public class TextEditor : ContentControl
     {
         _lineNumberMargin?.SyncWidthToLineCount();
         TextChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnSurfaceMouseDown(MouseEventArgs e)
+    {
+        if (e.Handled)
+        {
+            return;
+        }
+        // Ahead of the surface's own caret placement: its OnMouseDown raises this event first and
+        // honors Handled, which is the AvalonEdit "if (!e.Handled) route to element" structure.
+        FindElementAtPoint(ToWindowPoint(e))?.OnMouseDown(e);
+    }
+
+    private void OnSurfaceMouseMove(MouseEventArgs e)
+    {
+        var position = ToWindowPoint(e);
+        if (FindElementAtPoint(position) is not VisualLineElement element)
+        {
+            _surface.Cursor = CursorType.IBeam;
+            return;
+        }
+        var query = new QueryCursorEventArgs(position, e.Modifiers);
+        element.OnQueryCursor(query);
+        _surface.Cursor = query.Cursor ?? CursorType.IBeam;
+    }
+
+    private Point ToWindowPoint(MouseEventArgs e)
+    {
+        var local = e.GetPosition(_surface);
+        return new Point(local.X + _surface.Bounds.X, local.Y + _surface.Bounds.Y);
+    }
+
+    private VisualLineElement? FindElementAtPoint(Point position)
+    {
+        var viewport = _surface.TextViewportBounds;
+        if (!viewport.Contains(position))
+        {
+            return null;
+        }
+        ITextViewHost host = _surface;
+        double documentX = position.X - viewport.X + host.ScrollOffset.X;
+        double documentY = position.Y - viewport.Y + host.ScrollOffset.Y;
+        foreach (var line in host.VisibleTextLines)
+        {
+            if (documentY < line.DocumentY || documentY >= line.DocumentY + line.Height)
+            {
+                continue;
+            }
+            var hit = line.HitTest(new Point(documentX - line.DocumentX, documentY - line.DocumentY));
+            int sourceOffset = line.MapProjectedOffsetToSource(hit.FirstCharacterIndex);
+            return _elementGenerators.FindElementAt(line.LogicalLine.Offset + sourceOffset);
+        }
+        return null;
     }
 
     private void OnSurfaceTextInput(TextInputEventArgs e)

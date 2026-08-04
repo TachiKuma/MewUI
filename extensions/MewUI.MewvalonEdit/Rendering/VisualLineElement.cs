@@ -1,6 +1,17 @@
+using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
+
+/// <summary>Cursor query an element answers while the pointer is over it.</summary>
+public sealed class QueryCursorEventArgs(Point position, ModifierKeys modifiers)
+{
+    public Point Position { get; } = position;
+    public ModifierKeys Modifiers { get; } = modifiers;
+
+    /// <summary>Cursor to show. Leave null to keep the editor's own text cursor.</summary>
+    public CursorType? Cursor { get; set; }
+}
 
 /// <summary>Font selection of a text run. Replaces WPF's Typeface.</summary>
 public sealed record Typeface(string FontFamily, FontWeight Weight = FontWeight.Normal, bool Italic = false);
@@ -74,6 +85,26 @@ public class VisualLineElement
 
     /// <summary>Paints this element. Generated elements override it.</summary>
     public virtual void Draw(ITextRenderContext context, Point origin)
+    {
+    }
+
+    /// <summary>
+    /// Text this element occupies on the visual surface. Differs from the document text only when
+    /// <see cref="VisualLength"/> and <see cref="DocumentLength"/> differ; the default fills with
+    /// object replacement characters since the element paints over them anyway.
+    /// </summary>
+    protected internal virtual string GetVisualText() => new('￼', VisualLength);
+
+    /// <summary>
+    /// Called when the pointer is pressed over this element, before the editor moves the caret.
+    /// Setting <see cref="MouseEventArgs.Handled"/> claims the press and skips caret placement.
+    /// </summary>
+    protected internal virtual void OnMouseDown(MouseEventArgs e)
+    {
+    }
+
+    /// <summary>Called while the pointer is over this element to pick the cursor.</summary>
+    protected internal virtual void OnQueryCursor(QueryCursorEventArgs e)
     {
     }
 }

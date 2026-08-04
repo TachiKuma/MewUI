@@ -123,15 +123,69 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
 }
 
 /// <summary>
-/// Runs the registered <see cref="VisualLineElementGenerator"/>s over a line and turns the elements
-/// they build into engine inline runs, following AvalonEdit's scan protocol.
+/// Runs the registered <see cref="VisualLineElementGenerator"/>s over a line, following AvalonEdit's
+/// scan protocol. One cached scan per line serves three consumers: the projection stage replaces the
+/// document text of elements whose visual and document lengths differ, the generation stage turns
+/// every element into an engine inline run at its projected position, and input routing looks up
+/// the element under a document offset.
 /// </summary>
-internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementGenerator
+internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementGenerator, ITextProjection
 {
     private readonly GenerationContext _context = new(editor);
+    private readonly Dictionary<int, CachedScan> _scans = [];
+    private long _scanVersion = -1;
 
     public IList<VisualLineElementGenerator> Generators { get; } =
         new ExtensionList<VisualLineElementGenerator>(editor.InvalidateTextView);
+
+    public ProjectedText Project(in TextProjectionContext context)
+    {
+        var identity = new ProjectedText(context.SourceText, IdentityTextOffsetMap.Instance);
+        if (Generators.Count == 0)
+        {
+            return identity;
+        }
+
+        var scan = EnsureScanned(context.LogicalLine);
+        bool changesLength = false;
+        foreach (var element in scan.Elements)
+        {
+            if (element.VisualLength != element.DocumentLength)
+            {
+                changesLength = true;
+                break;
+            }
+        }
+        if (!changesLength)
+        {
+            return identity;
+        }
+
+        var source = context.SourceText.Span;
+        var builder = new System.Text.StringBuilder(source.Length);
+        var segments = new List<ReplacementOffsetMap.Segment>();
+        int consumed = 0;
+        foreach (var element in scan.Elements)
+        {
+            if (element.VisualLength == element.DocumentLength)
+            {
+                continue;
+            }
+            int start = element.RelativeTextOffset;
+            if (start < consumed || start + element.DocumentLength > source.Length)
+            {
+                continue;
+            }
+            builder.Append(source[consumed..start]);
+            string visual = element.GetVisualText();
+            segments.Add(new ReplacementOffsetMap.Segment(
+                start, element.DocumentLength, builder.Length, visual.Length));
+            builder.Append(visual);
+            consumed = start + element.DocumentLength;
+        }
+        builder.Append(source[consumed..]);
+        return new ProjectedText(builder.ToString().AsMemory(), new ReplacementOffsetMap([.. segments]));
+    }
 
     public void Generate(in TextElementContext context, IList<InlineRun> output)
     {
@@ -140,7 +194,72 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementG
             return;
         }
 
-        var logical = context.LogicalLine;
+        var scan = EnsureScanned(context.LogicalLine);
+        foreach (var element in scan.Elements)
+        {
+            int start = context.OffsetMap.MapFromSource(element.RelativeTextOffset);
+            int end = context.OffsetMap.MapFromSource(element.RelativeTextOffset + element.DocumentLength);
+            if (end > start)
+            {
+                output.Add(new InlineRun(start, end - start, new ElementInline(element)));
+            }
+        }
+    }
+
+    /// <summary>Elements of an already scanned line, keyed by its laid-out start offset.</summary>
+    public IReadOnlyList<VisualLineElement> GetScannedElements(int lineOffset)
+        => editor.Document.Version == _scanVersion && _scans.TryGetValue(lineOffset, out var scan)
+            ? scan.Elements
+            : Array.Empty<VisualLineElement>();
+
+    /// <summary>Element covering the document offset on an already scanned line, if any.</summary>
+    public VisualLineElement? FindElementAt(int documentOffset)
+    {
+        if (editor.Document.Version != _scanVersion)
+        {
+            return null;
+        }
+        foreach ((int lineStart, var scan) in _scans)
+        {
+            if (documentOffset < lineStart || documentOffset >= lineStart + scan.Length)
+            {
+                continue;
+            }
+            int relative = documentOffset - lineStart;
+            foreach (var element in scan.Elements)
+            {
+                if (relative >= element.RelativeTextOffset &&
+                    relative < element.RelativeTextOffset + Math.Max(1, element.DocumentLength))
+                {
+                    return element;
+                }
+            }
+            return null;
+        }
+        return null;
+    }
+
+    private CachedScan EnsureScanned(in LogicalTextLine logical)
+    {
+        long version = editor.Document.Version;
+        if (version != _scanVersion)
+        {
+            _scans.Clear();
+            _scanVersion = version;
+        }
+        if (_scans.TryGetValue(logical.Offset, out var cached) && cached.Length == logical.Length)
+        {
+            return cached;
+        }
+
+        var scan = new CachedScan(logical.Length, RunScan(logical));
+        _scans[logical.Offset] = scan;
+        return scan;
+    }
+
+    private List<VisualLineElement> RunScan(in LogicalTextLine logical)
+    {
+        var elements = new List<VisualLineElement>();
         int lineStart = logical.Offset;
         int lineEnd = lineStart + logical.Length;
         _context.CurrentDocumentLine = editor.Document.GetLineByOffset(lineStart);
@@ -177,7 +296,7 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementG
                     continue;
                 }
                 element.RelativeTextOffset = bestOffset - lineStart;
-                output.Add(new InlineRun(element.RelativeTextOffset, element.DocumentLength, new ElementInline(element)));
+                elements.Add(element);
                 offset = bestOffset + Math.Max(1, element.DocumentLength);
             }
         }
@@ -188,7 +307,10 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementG
                 generator.FinishGeneration();
             }
         }
+        return elements;
     }
+
+    private readonly record struct CachedScan(int Length, List<VisualLineElement> Elements);
 
     private sealed class ElementInline(VisualLineElement element) : IInlineTextObject
     {
@@ -202,6 +324,52 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor) : ITextElementG
         public TextDocument Document => editor.Document;
         public DocumentLine CurrentDocumentLine { get; set; } = null!;
         public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
+    }
+}
+
+/// <summary>
+/// Line-relative offset map for ranges whose projected text has a different length than the
+/// document text. Offsets inside a replaced range collapse to its start on both axes, which is
+/// what places the caret before a folded region rather than inside it.
+/// </summary>
+internal sealed class ReplacementOffsetMap(ReplacementOffsetMap.Segment[] segments) : ITextOffsetMap
+{
+    internal readonly record struct Segment(int SourceStart, int SourceLength, int ProjectedStart, int ProjectedLength);
+
+    public int MapFromSource(int sourceOffset)
+    {
+        int delta = 0;
+        foreach (var segment in segments)
+        {
+            if (sourceOffset < segment.SourceStart)
+            {
+                break;
+            }
+            if (sourceOffset < segment.SourceStart + segment.SourceLength)
+            {
+                return segment.ProjectedStart;
+            }
+            delta += segment.ProjectedLength - segment.SourceLength;
+        }
+        return sourceOffset + delta;
+    }
+
+    public int MapToSource(int projectedOffset)
+    {
+        int delta = 0;
+        foreach (var segment in segments)
+        {
+            if (projectedOffset < segment.ProjectedStart)
+            {
+                break;
+            }
+            if (projectedOffset < segment.ProjectedStart + segment.ProjectedLength)
+            {
+                return segment.SourceStart;
+            }
+            delta += segment.SourceLength - segment.ProjectedLength;
+        }
+        return projectedOffset + delta;
     }
 }
 

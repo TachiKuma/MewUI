@@ -6,6 +6,7 @@ public sealed class FoldingManager
 {
     private readonly TextEditor _editor;
     private readonly FoldingProjection _projection;
+    private readonly FoldingMargin _margin;
     private readonly List<FoldingSection> _foldings = [];
     private readonly List<FoldingSection> _collapsed = [];
     private readonly List<(int Start, int End)> _collapsedRanges = [];
@@ -17,6 +18,8 @@ public sealed class FoldingManager
         _projection = new FoldingProjection(this);
         _editor.Surface.Extensions.Projections.Add(_projection);
         _editor.Surface.Extensions.LineCollapsers.Add(_projection);
+        _margin = new FoldingMargin { FoldingManager = this };
+        _editor.TextArea.LeftMargins.Add(_margin);
     }
 
     public IEnumerable<FoldingSection> AllFoldings => _foldings;
@@ -41,6 +44,8 @@ public sealed class FoldingManager
         manager._uninstalled = true;
         manager._editor.Surface.Extensions.Projections.Remove(manager._projection);
         manager._editor.Surface.Extensions.LineCollapsers.Remove(manager._projection);
+        manager._editor.TextArea.LeftMargins.Remove(manager._margin);
+        manager._margin.FoldingManager = null;
         manager._editor.InvalidateTextView();
     }
 

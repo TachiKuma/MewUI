@@ -18,8 +18,13 @@ public sealed class WhitespaceAndThemeTests
         var pipeline = editor.TextArea.TextView.Extensions;
         var logical = new LogicalTextLine(0, 0, 3, 3);
 
-        var projected = pipeline.Projections[0].Project(
-            new TextProjectionContext(logical, editor.Text.AsMemory()));
+        // Run every projection in registration order, as the engine does; the element generator
+        // projection sits ahead of the space markers and passes text without generators through.
+        var projected = new ProjectedText(editor.Text.AsMemory(), IdentityTextOffsetMap.Instance);
+        foreach (var projection in pipeline.Projections)
+        {
+            projected = projection.Project(new TextProjectionContext(logical, projected.Text));
+        }
         Assert.AreEqual("a·b", projected.Text.ToString());
 
         var spans = new List<TextPaintSpan>();
