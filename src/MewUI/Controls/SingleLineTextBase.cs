@@ -406,9 +406,9 @@ public abstract class SingleLineTextBase : TextBase
                 Theme.Palette.SelectionBackground,
                 out var selectionSpan))
         {
-            // Selection paints only the background; keeping the glyph colors avoids the
-            // foreground-segment repaint whose boundaries shift on every drag frame.
-            spans.Add(selectionSpan with { Foreground = null });
+            // Recoloring the glyphs re-segments the runs on every drag frame, so the default keeps
+            // their colors and only SelectionForeground opts into the cost.
+            spans.Add(selectionSpan with { Foreground = SelectionForeground });
         }
 
         if (_editor.IsComposing)

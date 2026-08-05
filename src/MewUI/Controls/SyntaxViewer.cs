@@ -22,6 +22,10 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             MewPropertyOptions.AffectsLayout | MewPropertyOptions.AffectsRender,
             static (self, _, _) => self.ResetView());
 
+    public static readonly MewProperty<Color?> SelectionForegroundProperty =
+        MewProperty<Color?>.Register<SyntaxViewer>(nameof(SelectionForeground), null,
+            MewPropertyOptions.AffectsRender);
+
     private StringTextDocument _document = new(string.Empty);
     private TextViewLayout? _view;
     private IGraphicsFactory? _viewFactory;
@@ -59,6 +63,16 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     {
         get => GetValue(TextProperty);
         set => SetValue(TextProperty, value ?? string.Empty);
+    }
+
+    /// <summary>
+    /// Color the selected glyphs are painted in. Null keeps the colors they already have, so a
+    /// colorized document stays readable through a selection.
+    /// </summary>
+    public Color? SelectionForeground
+    {
+        get => GetValue(SelectionForegroundProperty);
+        set => SetValue(SelectionForegroundProperty, value);
     }
 
     public bool Wrap
@@ -503,7 +517,9 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             Theme.Palette.SelectionText,
             Theme.Palette.SelectionBackground,
             out var span)
-            ? [span with { Foreground = null }]
+            // Recoloring the glyphs re-segments the runs on every drag frame, so the default keeps
+            // their colors and only SelectionForeground opts into the cost.
+            ? [span with { Foreground = SelectionForeground }]
             : [];
         return new TextDrawOptions(Theme.Palette.WindowText, paint, Owner: line);
     }

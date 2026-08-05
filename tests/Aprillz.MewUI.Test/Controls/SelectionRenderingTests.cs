@@ -47,13 +47,66 @@ public sealed class SelectionRenderingTests
             "Selecting text painted nothing in SyntaxViewer.");
     }
 
-    private static byte[] RenderMultiLine(int selectionLength)
+    /// <summary>
+    /// The default keeps the glyph colors, so a selection foreground has to reach the glyph pass to
+    /// mean anything. Painting it anywhere below the text is invisible and would pass a round-trip test.
+    /// </summary>
+    [TestMethod]
+    public void SelectionForegroundRepaintsTheSelectedGlyphs()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        byte[] keptColors = RenderMultiLine(selectionLength: 6);
+        byte[] recolored = RenderMultiLine(selectionLength: 6, selectionForeground: Color.FromRgb(0xE0, 0x10, 0x10));
+
+        Assert.IsGreaterThan(0, CountDifferingPixels(keptColors, recolored),
+            "SelectionForeground painted nothing: the selected glyphs kept their colors.");
+    }
+
+    [TestMethod]
+    public void TextBoxSelectionForegroundRepaintsTheSelectedGlyphs()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        byte[] keptColors = RenderTextBox(selectionLength: 6);
+        byte[] recolored = RenderTextBox(selectionLength: 6, selectionForeground: Color.FromRgb(0xE0, 0x10, 0x10));
+
+        Assert.IsGreaterThan(0, CountDifferingPixels(keptColors, recolored),
+            "SelectionForeground painted nothing in TextBox.");
+    }
+
+    [TestMethod]
+    public void SyntaxViewerSelectionForegroundRepaintsTheSelectedGlyphs()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        byte[] keptColors = RenderSyntaxViewer(selectionLength: 6);
+        byte[] recolored = RenderSyntaxViewer(selectionLength: 6, selectionForeground: Color.FromRgb(0xE0, 0x10, 0x10));
+
+        Assert.IsGreaterThan(0, CountDifferingPixels(keptColors, recolored),
+            "SelectionForeground painted nothing in SyntaxViewer.");
+    }
+
+    private static byte[] RenderMultiLine(int selectionLength, Color? selectionForeground = null)
     {
         var textBox = new MultiLineTextBox
         {
             Text = "select this line",
             Wrap = false,
-            SkipViewportCull = true
+            SkipViewportCull = true,
+            SelectionForeground = selectionForeground
         };
         textBox.Measure(new Size(WIDTH, HEIGHT));
         textBox.Arrange(new Rect(0, 0, WIDTH, HEIGHT));
@@ -64,12 +117,29 @@ public sealed class SelectionRenderingTests
         return Render(textBox);
     }
 
-    private static byte[] RenderSyntaxViewer(int selectionLength)
+    private static byte[] RenderTextBox(int selectionLength, Color? selectionForeground = null)
+    {
+        var textBox = new TextBox
+        {
+            Text = "select this line",
+            SelectionForeground = selectionForeground
+        };
+        textBox.Measure(new Size(WIDTH, HEIGHT));
+        textBox.Arrange(new Rect(0, 0, WIDTH, HEIGHT));
+        if (selectionLength > 0)
+        {
+            textBox.Select(0, selectionLength);
+        }
+        return Render(textBox);
+    }
+
+    private static byte[] RenderSyntaxViewer(int selectionLength, Color? selectionForeground = null)
     {
         var viewer = new SyntaxViewer
         {
             Text = "select this line",
-            SkipViewportCull = true
+            SkipViewportCull = true,
+            SelectionForeground = selectionForeground
         };
         viewer.Measure(new Size(WIDTH, HEIGHT));
         viewer.Arrange(new Rect(0, 0, WIDTH, HEIGHT));

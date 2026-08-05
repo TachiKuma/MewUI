@@ -279,12 +279,32 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
 
     private void DrawGlyphs(ITextRenderContext text)
     {
+        var selection = _editor.Selection;
         foreach (var line in _view!.MaterializedLines)
         {
-            var options = new TextDrawOptions(Foreground, CreateCompositionSpans(line), Owner: line);
+            var options = new TextDrawOptions(Foreground, CreateGlyphSpans(line, selection), Owner: line);
             line.DrawForeground(text, GetLineOrigin(line), in options);
         }
         DrawCompositionUnderlines(_graphics!, _contentBounds.Right);
+    }
+
+    /// <summary>
+    /// Composition spans plus the selection recolor. Recoloring re-segments the runs on every drag
+    /// frame, so it happens only where <see cref="TextBase.SelectionForeground"/> asks for it.
+    /// </summary>
+    private TextPaintSpan[] CreateGlyphSpans(TextLineLayout line, TextRange selection)
+    {
+        var composition = CreateCompositionSpans(line);
+        if (SelectionForeground is not Color foreground ||
+            !TextSelectionPresentation.TryCreateSpan(
+                line.LogicalLine, selection, foreground, default, out var span))
+        {
+            return composition;
+        }
+        var spans = new TextPaintSpan[composition.Length + 1];
+        spans[0] = span with { Background = null };
+        composition.CopyTo(spans, 1);
+        return spans;
     }
 
     private void DrawCaret(ITextRenderContext text)
@@ -333,8 +353,8 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
             return [];
         }
 
-        // Selection paints only the background; keeping the glyph colors avoids the
-        // foreground-segment repaint whose boundaries shift on every drag frame.
+        // This pass paints the background; the recolor belongs to the glyph pass, which is the
+        // only one that reads a span foreground.
         return [selectionSpan with { Foreground = null }];
     }
 

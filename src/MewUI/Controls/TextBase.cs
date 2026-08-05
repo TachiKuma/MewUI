@@ -36,6 +36,10 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         MewProperty<bool>.Register<TextBase>(nameof(IsReadOnly), false,
             MewPropertyOptions.AffectsRender);
 
+    public static readonly MewProperty<Color?> SelectionForegroundProperty =
+        MewProperty<Color?>.Register<TextBase>(nameof(SelectionForeground), null,
+            MewPropertyOptions.AffectsRender);
+
     public static readonly MewProperty<bool> AcceptTabProperty =
         MewProperty<bool>.Register<TextBase>(nameof(AcceptTab), false);
 
@@ -100,6 +104,16 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     public int SelectionStart => GetValue(SelectionStartProperty);
     public int SelectionLength => GetValue(SelectionLengthProperty);
+
+    /// <summary>
+    /// Color the selected glyphs are painted in. Null keeps the colors they already have, so a
+    /// colorized document stays readable through a selection.
+    /// </summary>
+    public Color? SelectionForeground
+    {
+        get => GetValue(SelectionForegroundProperty);
+        set => SetValue(SelectionForegroundProperty, value);
+    }
 
     public event Action<string>? TextChanged;
 
