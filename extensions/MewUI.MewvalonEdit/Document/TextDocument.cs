@@ -16,7 +16,8 @@ public sealed class TextDocument : ITextSource
 
     public TextDocument(string? text)
     {
-        _document = new EditableTextDocument(text);
+        // Terminators are kept so a file read into the editor comes back out unchanged.
+        _document = EditableTextDocument.CreatePreservingLineEndings(text);
         _version = new TextSourceVersion(this, 0);
         _document.Changed += OnChanged;
     }

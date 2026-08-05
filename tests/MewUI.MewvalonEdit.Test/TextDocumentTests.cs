@@ -101,6 +101,36 @@ public sealed class TextDocumentTests
         Assert.AreEqual(7, entry.GetNewOffset(4, AnchorMovementType.AfterInsertion));
     }
 
+    /// <summary>A file opened in the editor has to come back out with the terminators it arrived with.</summary>
+    [TestMethod]
+    public void EditorRoundTripsTheTerminatorsItWasGiven()
+    {
+        const string SOURCE = "one\r\ntwo\r\nthree";
+        var editor = new TextEditor { Text = SOURCE };
+
+        Assert.AreEqual(SOURCE, editor.Text);
+        Assert.AreEqual(2, editor.Document.GetLineByNumber(1).DelimiterLength);
+        Assert.AreEqual(3, editor.Document.LineCount);
+    }
+
+    /// <summary>
+    /// Pressing Enter continues the terminator already in use, so a CRLF file does not gain a lone
+    /// line feed. AvalonEdit takes the same terminator from the caret's line.
+    /// </summary>
+    [TestMethod]
+    public void EnterContinuesTheSurroundingTerminator()
+    {
+        var editor = new TextEditor { Text = "one\r\ntwo" };
+        editor.CaretOffset = editor.Text.Length;
+
+        Assert.AreEqual("\r\n", TextUtilities.GetNewLineFromDocument(editor.Document, 2));
+
+        editor.Document.Replace(editor.Text.Length, 0, TextUtilities.GetNewLineFromDocument(editor.Document, 2));
+
+        Assert.AreEqual("one\r\ntwo\r\n", editor.Text);
+        Assert.AreEqual(3, editor.Document.LineCount);
+    }
+
     [TestMethod]
     public void DocumentUsesAvalonEditOneBasedLocations()
     {

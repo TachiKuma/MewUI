@@ -55,6 +55,7 @@ public class TextEditor : Control
             BorderThickness = 0,
             CornerRadius = 0
         };
+        _surface.KeyDown += OnSurfaceKeyDown;
         _surface.TextInput += OnSurfaceTextInput;
         _surface.MouseDown += OnSurfaceMouseDown;
         _surface.MouseMove += OnSurfaceMouseMove;
@@ -484,6 +485,25 @@ public class TextEditor : Control
         return null;
     }
 
+    /// <summary>
+    /// Claims Enter so the inserted terminator matches the one already in use around the caret.
+    /// The surface would insert a line feed, which turns a CRLF file into a mixed one.
+    /// </summary>
+    private void OnSurfaceKeyDown(KeyEventArgs e)
+    {
+        if (e.Handled || e.Key != Key.Enter || IsReadOnly || !Document.CoreDocument.PreservesLineEndings)
+        {
+            return;
+        }
+        string newLine = TextUtilities.GetNewLineFromDocument(Document, Document.GetLocation(CaretOffset).Line);
+        if (newLine == "\n")
+        {
+            return;
+        }
+        e.Handled = true;
+        _surface.ReplaceSelection(newLine);
+    }
+
     private void OnSurfaceTextInput(TextInputEventArgs e)
     {
         if (!Options.ConvertTabsToSpaces || string.IsNullOrEmpty(e.Text) || !e.Text.Contains('\t')) return;
@@ -494,7 +514,6 @@ public class TextEditor : Control
 
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs e)
     {
-        _surface.AcceptTab = true;
         _surface.TabSize = Options.IndentationSize;
         _surface.InvalidateTextView();
     }
