@@ -144,6 +144,25 @@ public sealed class CompatibilitySurfaceTests
         Assert.IsGreaterThan(before, editor.TextArea.TextView.Extensions.Revision);
     }
 
+    /// <summary>
+    /// The guard TextMarkerService and ILSpy's BookmarkMargin open their Draw with, so a renderer
+    /// ported from either compiles and skips the pass while the view has no lines yet.
+    /// </summary>
+    [TestMethod]
+    public void VisualLinesValidReportsWhetherTheViewHasLines()
+    {
+        var editor = new TextEditor { Text = "hello", SkipViewportCull = true };
+        var view = editor.TextArea.TextView;
+
+        Assert.IsFalse(view.VisualLinesValid, "Nothing is laid out before the first measure.");
+
+        editor.Measure(new Size(240, 60));
+        editor.Arrange(new Rect(0, 0, 240, 60));
+
+        Assert.IsTrue(view.VisualLinesValid);
+        Assert.IsNotEmpty(view.VisualLines);
+    }
+
     private static List<TextPaintSpan> ClassifyFirstLine(TextEditor editor)
     {
         var spans = new List<TextPaintSpan>();

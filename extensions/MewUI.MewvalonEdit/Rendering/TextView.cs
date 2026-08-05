@@ -365,6 +365,12 @@ public sealed class TextView : MewObject
     }
 
     /// <summary>
+    /// Whether <see cref="VisualLines"/> can be read. False only before the view has been laid out;
+    /// unlike the original, lines here are rebuilt every frame and so are never stale.
+    /// </summary>
+    public bool VisualLinesValid => Host.VisibleTextLines.Count > 0;
+
+    /// <summary>
     /// Lines currently laid out, in document order. Rebuilt from the engine's materialized lines on
     /// each read, so hold one only within a single pass over the view.
     /// </summary>

@@ -105,11 +105,22 @@ public sealed class TextDocument : ITextSource
     public DocumentLine GetLineByOffset(int offset)
         => new(_document.GetLineByOffset(offset));
 
+    /// <summary>
+    /// Offset of a one-based line and column. A column outside the line clamps to its start or end,
+    /// as in the original; only the line number is validated.
+    /// </summary>
     public int GetOffset(int line, int column)
     {
-        if (line <= 0) throw new ArgumentOutOfRangeException(nameof(line));
-        if (column <= 0) throw new ArgumentOutOfRangeException(nameof(column));
-        return _document.GetOffset(line - 1, column - 1);
+        var documentLine = GetLineByNumber(line);
+        if (column <= 0)
+        {
+            return documentLine.Offset;
+        }
+        if (column > documentLine.Length)
+        {
+            return documentLine.EndOffset;
+        }
+        return documentLine.Offset + column - 1;
     }
 
     public TextLocation GetLocation(int offset)

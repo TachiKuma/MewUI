@@ -190,6 +190,22 @@ public sealed class TextDocumentTests
         Assert.AreEqual(5, document.GetOffset(2, 2));
     }
 
+    /// <summary>
+    /// A column outside the line clamps instead of throwing, which is what the original does and
+    /// what its callers rely on when they hand over a position from another document.
+    /// </summary>
+    [TestMethod]
+    public void GetOffsetClampsAColumnOutsideTheLine()
+    {
+        var document = new TextDocument("one\ntwo");
+
+        Assert.AreEqual(4, document.GetOffset(2, 0), "A column at or before the start lands on it.");
+        Assert.AreEqual(4, document.GetOffset(2, -5));
+        Assert.AreEqual(7, document.GetOffset(2, 99), "A column past the end lands on the line end.");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => document.GetOffset(0, 1),
+            "Only the line number is validated.");
+    }
+
     [TestMethod]
     public void MutationsRaiseDocumentAndTextEvents()
     {
