@@ -37,6 +37,70 @@ public sealed class TextDocumentTests
         Assert.AreEqual(7, editor.CaretOffset, "Three characters replaced five, so the caret moved back two.");
     }
 
+    /// <summary>
+    /// A version is a checkpoint: an offset taken at one carries across the edits that followed,
+    /// which is what lets a caller hold a position through changes it did not make.
+    /// </summary>
+    [TestMethod]
+    public void VersionsCarryOffsetsAcrossLaterEdits()
+    {
+        var document = new TextDocument("hello world");
+        var before = document.Version;
+
+        document.Replace(0, 5, "bye");
+        var after = document.Version;
+
+        Assert.AreEqual(-1, before.CompareAge(after));
+        Assert.IsTrue(before.BelongsToSameDocumentAs(after));
+        Assert.AreEqual(7, before.MoveOffsetTo(after, 9), "Three characters replaced five, so the offset moved back two.");
+        Assert.AreEqual(9, after.MoveOffsetTo(before, 7), "Walking back reverses the shift.");
+    }
+
+    [TestMethod]
+    public void VersionsOfDifferentDocumentsDoNotCompare()
+    {
+        var version = new TextDocument("a").Version;
+        var other = new TextDocument("b").Version;
+
+        Assert.IsFalse(version.BelongsToSameDocumentAs(other));
+        Assert.IsFalse(version.BelongsToSameDocumentAs(null));
+        Assert.ThrowsExactly<ArgumentException>(() => version.CompareAge(other));
+    }
+
+    [TestMethod]
+    public void SnapshotKeepsTheTextItWasTakenFrom()
+    {
+        var document = new TextDocument("hello");
+        var snapshot = document.CreateSnapshot();
+        var ranged = document.CreateSnapshot(1, 3);
+
+        document.Replace(0, 5, "bye");
+
+        Assert.AreEqual("hello", snapshot.ToString());
+        Assert.AreEqual("ell", ranged.ToString(), "A ranged snapshot keeps only what it covered.");
+    }
+
+    /// <summary>An offset inside a removed range collapses to where the removal started.</summary>
+    [TestMethod]
+    public void OffsetInsideARemovalCollapsesToItsStart()
+    {
+        var entry = new OffsetChangeMapEntry(4, removalLength: 6, insertionLength: 0);
+
+        Assert.AreEqual(2, entry.GetNewOffset(2));
+        Assert.AreEqual(4, entry.GetNewOffset(7));
+        Assert.AreEqual(4, entry.GetNewOffset(10));
+        Assert.AreEqual(5, entry.GetNewOffset(11));
+    }
+
+    [TestMethod]
+    public void AnchorMovementDecidesWhereAnInsertionLeavesTheOffset()
+    {
+        var entry = new OffsetChangeMapEntry(4, removalLength: 0, insertionLength: 3);
+
+        Assert.AreEqual(4, entry.GetNewOffset(4, AnchorMovementType.BeforeInsertion));
+        Assert.AreEqual(7, entry.GetNewOffset(4, AnchorMovementType.AfterInsertion));
+    }
+
     [TestMethod]
     public void DocumentUsesAvalonEditOneBasedLocations()
     {

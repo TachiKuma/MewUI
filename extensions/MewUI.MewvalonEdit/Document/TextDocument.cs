@@ -7,6 +7,7 @@ namespace Aprillz.MewUI.MewvalonEdit.Document;
 public sealed class TextDocument : ITextSource
 {
     private readonly EditableTextDocument _document;
+    private TextSourceVersion _version;
 
     public TextDocument()
         : this(string.Empty)
@@ -16,6 +17,7 @@ public sealed class TextDocument : ITextSource
     public TextDocument(string? text)
     {
         _document = new EditableTextDocument(text);
+        _version = new TextSourceVersion(this, 0);
         _document.Changed += OnChanged;
     }
 
@@ -27,6 +29,7 @@ public sealed class TextDocument : ITextSource
     internal TextDocument(EditableTextDocument document)
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
+        _version = new TextSourceVersion(this, 0);
         _document.Changed += OnChanged;
     }
 
@@ -40,7 +43,18 @@ public sealed class TextDocument : ITextSource
 
     public int TextLength => _document.TextLength;
     public int LineCount => _document.LineCount;
-    public long Version => _document.Version;
+
+    /// <summary>
+    /// Checkpoint of the current text. Hold one to carry offsets across later edits; the value the
+    /// engine uses to invalidate caches is <see cref="CoreDocument"/>'s own counter.
+    /// </summary>
+    public ITextSourceVersion Version => _version;
+
+    /// <summary>An unchanging copy of the whole text.</summary>
+    public ITextSource CreateSnapshot() => new StringTextSource(Text);
+
+    /// <summary>An unchanging copy of one range.</summary>
+    public ITextSource CreateSnapshot(int offset, int length) => new StringTextSource(GetText(offset, length));
 
     public event EventHandler<DocumentChangeEventArgs>? Changed;
     public event EventHandler? TextChanged;
@@ -112,6 +126,8 @@ public sealed class TextDocument : ITextSource
 
     private void OnChanged(TextChange change)
     {
+        _version = _version.Append(
+            new OffsetChangeMapEntry(change.Offset, change.RemovedLength, change.InsertedLength));
         Changed?.Invoke(this, new DocumentChangeEventArgs(change.Offset, change.RemovedLength, change.InsertedLength));
         TextChanged?.Invoke(this, EventArgs.Empty);
     }

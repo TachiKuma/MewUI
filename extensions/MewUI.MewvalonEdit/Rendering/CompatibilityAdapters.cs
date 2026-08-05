@@ -94,7 +94,7 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
 
     private void EnsureComputed(in LogicalTextLine logical)
     {
-        long version = editor.Document.Version;
+        long version = editor.Document.CoreDocument.Version;
         if (_cachedVersion == version && _cachedOffset == logical.Offset && _cachedLength == logical.Length)
         {
             return;
@@ -228,14 +228,14 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
 
     /// <summary>Elements of an already scanned line, keyed by its laid-out start offset.</summary>
     public IReadOnlyList<VisualLineElement> GetScannedElements(int lineOffset)
-        => editor.Document.Version == _scanVersion && _scans.TryGetValue(lineOffset, out var scan)
+        => editor.Document.CoreDocument.Version == _scanVersion && _scans.TryGetValue(lineOffset, out var scan)
             ? scan.Elements
             : Array.Empty<VisualLineElement>();
 
     /// <summary>Element covering the document offset on an already scanned line, if any.</summary>
     public VisualLineElement? FindElementAt(int documentOffset)
     {
-        if (editor.Document.Version != _scanVersion)
+        if (editor.Document.CoreDocument.Version != _scanVersion)
         {
             return null;
         }
@@ -261,7 +261,7 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
 
     private CachedScan EnsureScanned(in LogicalTextLine logical)
     {
-        long version = editor.Document.Version;
+        long version = editor.Document.CoreDocument.Version;
         if (version != _scanVersion)
         {
             _scans.Clear();
