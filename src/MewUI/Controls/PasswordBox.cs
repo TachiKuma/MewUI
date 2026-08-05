@@ -20,6 +20,9 @@ public sealed class PasswordBox : SingleLineTextBase
     public PasswordBox()
     {
         _extensions.Projections.Add(new MaskProjection(this));
+        // Undo entries keep the replaced text verbatim, so a history would hold every password the
+        // box has held, surviving even the caller clearing Password.
+        _document.History.SizeLimit = 0;
     }
 
     /// <summary>

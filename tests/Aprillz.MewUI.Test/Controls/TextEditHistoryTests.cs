@@ -6,6 +6,39 @@ namespace MewUI.Test.Controls;
 [TestClass]
 public sealed class TextEditHistoryTests
 {
+    /// <summary>
+    /// An undo entry keeps the replaced text verbatim, so a password box must record none: the
+    /// history would otherwise hold every value the box has held even after the caller clears it.
+    /// </summary>
+    [TestMethod]
+    public void PasswordBoxRetainsNoUndoHistory()
+    {
+        var box = new PasswordBox();
+        box.ReplaceSelection("secret");
+        box.ReplaceSelection("more");
+
+        Assert.IsFalse(box.CanUndo);
+        box.Undo();
+        Assert.AreEqual("secretmore", box.Password, "Undo must not roll the value back.");
+    }
+
+    [TestMethod]
+    public void SizeLimitDropsTheOldestEdits()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        document.History.SizeLimit = 2;
+        session.ReplaceSelection("a");
+        session.ReplaceSelection("b");
+        session.ReplaceSelection("c");
+
+        session.Undo();
+        session.Undo();
+
+        Assert.AreEqual("a", document.ToString(), "Only the two most recent edits stay undoable.");
+        Assert.IsFalse(session.CanUndo);
+    }
+
     [TestMethod]
     public void UnrecordedDocumentEditClearsUndoHistory()
     {
