@@ -11,9 +11,7 @@ namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 internal sealed class SelectionLayer(TextArea textArea) : ITextViewLayer
 {
     public Color? Background { get; set; }
-    public Color? Foreground { get; set; }
     public Color? Border { get; set; }
-    public double CornerRadius { get; set; }
 
     public void Draw(ITextRenderContext context, Rect viewportBounds)
     {
@@ -23,10 +21,8 @@ internal sealed class SelectionLayer(TextArea textArea) : ITextViewLayer
             return;
         }
 
-        var host = textArea.TextView.Host;
         var builder = new BackgroundGeometryBuilder
         {
-            CornerRadius = CornerRadius,
             AlignToWholePixels = true,
             BorderThickness = Border.HasValue ? 1 : 0
         };
@@ -47,40 +43,6 @@ internal sealed class SelectionLayer(TextArea textArea) : ITextViewLayer
         if (Border is Color border)
         {
             graphics.DrawPath(geometry, border, 1);
-        }
-        if (Foreground is Color foreground)
-        {
-            DrawSelectedText(context, host, selection, foreground);
-        }
-    }
-
-    /// <summary>
-    /// Repaints the selected glyphs. Left undone unless a foreground was set: recoloring text
-    /// re-segments the runs on every drag frame, which is why the default keeps the glyph colors.
-    /// </summary>
-    private void DrawSelectedText(
-        ITextRenderContext context,
-        ITextViewHost host,
-        Selection selection,
-        Color foreground)
-    {
-        var viewport = host.TextViewportBounds;
-        var scroll = host.ScrollOffset;
-        int selectionStart = textArea.Editor.SelectionStart;
-        var range = new TextRange(selectionStart, selection.Length);
-        foreach (var line in host.VisibleTextLines)
-        {
-            if (!TextSelectionPresentation.TryCreateSpan(
-                    line.LogicalLine, range, foreground, default, out var span))
-            {
-                continue;
-            }
-            var origin = new Point(
-                viewport.X + line.DocumentX - scroll.X,
-                viewport.Y + line.DocumentY - scroll.Y);
-            var spans = new TextPaintSpan[] { span with { Background = null } };
-            var options = new TextDrawOptions(foreground, spans, Owner: line);
-            line.DrawForeground(context, origin, in options);
         }
     }
 }

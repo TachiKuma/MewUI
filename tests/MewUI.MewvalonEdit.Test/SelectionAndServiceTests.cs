@@ -44,7 +44,6 @@ public sealed class SelectionAndServiceTests
         editor.TextArea.SelectionBrush = null;
         editor.TextArea.SelectionForeground = null;
         editor.TextArea.SelectionBorder = null;
-        editor.TextArea.SelectionCornerRadius = 0;
 
         Assert.IsFalse(editor.TextArea.TextView.Layers.Any(static layer => layer is SelectionLayer));
     }
@@ -90,12 +89,10 @@ public sealed class SelectionAndServiceTests
         editor.TextArea.SelectionBrush = Color.FromRgb(1, 2, 3);
         editor.TextArea.SelectionForeground = Color.FromRgb(4, 5, 6);
         editor.TextArea.SelectionBorder = Color.FromRgb(7, 8, 9);
-        editor.TextArea.SelectionCornerRadius = 3;
 
         Assert.HasCount(builtIn, editor.TextArea.TextView.Layers);
         Assert.AreEqual(Color.FromRgb(4, 5, 6), editor.TextArea.SelectionForeground);
         Assert.AreEqual(Color.FromRgb(7, 8, 9), editor.TextArea.SelectionBorder);
-        Assert.AreEqual(3.0, editor.TextArea.SelectionCornerRadius, 0.01);
     }
 
     [TestMethod]

@@ -74,26 +74,14 @@ public sealed class TextArea : MewObject
         set => SetValue(SelectionBrushProperty, value);
     }
 
-    public static readonly MewProperty<Color?> SelectionForegroundProperty =
-        MewProperty<Color?>.Register<TextArea>(nameof(SelectionForeground), null,
-            MewPropertyOptions.AffectsRender,
-            static (self, _, newValue) =>
-            {
-                var layer = self.ResolveSelectionLayer(newValue.HasValue);
-                if (layer is not null)
-                {
-                    layer.Foreground = newValue;
-                }
-            });
-
     /// <summary>
-    /// Color the selected glyphs are repainted in. Null leaves them as they are, which is the
-    /// default because recoloring re-segments the runs on every drag frame.
+    /// Color the selected glyphs are painted in. Null leaves them as they are, matching the
+    /// original, where a null brush makes the selection colorizer keep the existing foreground.
     /// </summary>
     public Color? SelectionForeground
     {
-        get => GetValue(SelectionForegroundProperty);
-        set => SetValue(SelectionForegroundProperty, value);
+        get => _editor.Surface.SelectionForeground;
+        set => _editor.Surface.SelectionForeground = value;
     }
 
     public static readonly MewProperty<Color?> SelectionBorderProperty =
@@ -113,25 +101,6 @@ public sealed class TextArea : MewObject
     {
         get => GetValue(SelectionBorderProperty);
         set => SetValue(SelectionBorderProperty, value);
-    }
-
-    public static readonly MewProperty<double> SelectionCornerRadiusProperty =
-        MewProperty<double>.Register<TextArea>(nameof(SelectionCornerRadius), 0,
-            MewPropertyOptions.AffectsRender,
-            static (self, _, newValue) =>
-            {
-                var layer = self.ResolveSelectionLayer(newValue != 0);
-                if (layer is not null)
-                {
-                    layer.CornerRadius = newValue;
-                }
-            });
-
-    /// <summary>Corner radius of the selection shape.</summary>
-    public double SelectionCornerRadius
-    {
-        get => GetValue(SelectionCornerRadiusProperty);
-        set => SetValue(SelectionCornerRadiusProperty, value);
     }
 
     protected override void OnMewPropertyChanged(MewProperty property)
