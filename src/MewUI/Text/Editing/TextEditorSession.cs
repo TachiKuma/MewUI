@@ -111,6 +111,38 @@ public sealed class TextEditorSession
         ApplyAndRecord(selection.Start, selection.Length, normalized);
     }
 
+    /// <summary>
+    /// Replaces a document range the way a programmatic edit does: the caret and selection ride
+    /// along with the surrounding text instead of landing on the edit, and the change stays
+    /// undoable. Editable-region policy is not consulted, which is the caller's to enforce.
+    /// </summary>
+    public void ReplaceRange(int start, int length, string? text)
+    {
+        CommitComposition();
+        string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);
+        int anchorAfter = ShiftPosition(AnchorPosition, start, length, normalized.Length);
+        int caretAfter = ShiftPosition(CaretPosition, start, length, normalized.Length);
+        if (!Document.History.RecordReplace(
+            start, length, normalized, AnchorPosition, CaretPosition, anchorAfter, caretAfter))
+        {
+            return;
+        }
+        AnchorPosition = anchorAfter;
+        CaretPosition = caretAfter;
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Where a position lands after a replace. Inside the replaced range it collapses to the start.</summary>
+    private static int ShiftPosition(int position, int start, int removedLength, int insertedLength)
+    {
+        if (position <= start)
+        {
+            return position;
+        }
+        int end = start + removedLength;
+        return position >= end ? position + insertedLength - removedLength : start;
+    }
+
     public void Backspace(bool byWord = false)
     {
         if (Selection.Length > 0)

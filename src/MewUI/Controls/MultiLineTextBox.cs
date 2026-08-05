@@ -903,6 +903,16 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         InvalidateVisual();
     }
 
+    /// <summary>
+    /// Replaces a document range without moving the caret onto it, for edits the program makes
+    /// rather than the user. The change stays undoable, unlike editing the document directly.
+    /// </summary>
+    public void ReplaceRange(int start, int length, string? text)
+        => _editor.ReplaceRange(start, length, text);
+
+    /// <summary>Drops the undo and redo history, leaving the text alone.</summary>
+    public void ClearHistory() => _editor.ClearHistory();
+
     /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>
     public IEditableRegionProvider? EditableRegions
     {
