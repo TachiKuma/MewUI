@@ -406,7 +406,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         try
         {
             _editor.CommitComposition();
-            string normalized = NormalizeExternalText(EditableTextDocument.NormalizeNewLines(value ?? string.Empty));
+            string normalized = NormalizeExternalText(_document.Normalize(value));
             _document.SetText(normalized);
             _textSnapshot = normalized;
             _textSnapshotVersion = _document.Version;
@@ -710,7 +710,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     private protected void InsertText(string? value)
     {
-        string text = EditableTextDocument.NormalizeNewLines(value ?? string.Empty);
+        string text = _document.Normalize(value);
         if (MaxLength > 0)
         {
             int remaining = MaxLength - (_document.TextLength - _editor.Selection.Length);
@@ -731,7 +731,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     private void UpdateCompositionText(string? value)
     {
-        string text = EditableTextDocument.NormalizeNewLines(value ?? string.Empty);
+        string text = _document.Normalize(value);
         if (MaxLength > 0)
         {
             int remaining = MaxLength - (_document.TextLength - _compositionLength);

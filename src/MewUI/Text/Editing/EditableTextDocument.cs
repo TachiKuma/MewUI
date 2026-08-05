@@ -13,10 +13,35 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
     private TextEditHistory? _history;
 
     public EditableTextDocument(string? text = null)
+        : this(text, preserveLineEndings: false)
     {
-        _text.Append(NormalizeNewLines(text ?? string.Empty));
+    }
+
+    /// <param name="preserveLineEndings">
+    /// Keeps each line's own terminator instead of rewriting every one to a line feed. A document
+    /// that round-trips a file needs this; a text box does not, and the default stays normalized so
+    /// its offsets never straddle a two-character terminator.
+    /// </param>
+    internal EditableTextDocument(string? text, bool preserveLineEndings)
+    {
+        PreservesLineEndings = preserveLineEndings;
+        _text.Append(Normalize(text));
         RebuildLines();
     }
+
+    /// <summary>
+    /// A document that keeps each line's own terminator, so a file read into it round-trips
+    /// unchanged. Every other document rewrites terminators to a line feed.
+    /// </summary>
+    public static EditableTextDocument CreatePreservingLineEndings(string? text = null)
+        => new(text, preserveLineEndings: true);
+
+    /// <summary>Whether the document keeps the line terminators it was given.</summary>
+    public bool PreservesLineEndings { get; }
+
+    /// <summary>Applies this document's line-terminator policy to incoming text.</summary>
+    internal string Normalize(string? text)
+        => PreservesLineEndings ? text ?? string.Empty : NormalizeNewLines(text ?? string.Empty);
 
     public int TextLength => _text.Length;
     public long Version { get; private set; }
@@ -55,7 +80,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
             line.LineNumber,
             line.Offset,
             line.Length,
-            line.DelimiterLength);
+            GetDelimiter(line.Offset + line.Length, line.DelimiterLength));
     }
 
     public IReadOnlyDocumentLine GetLineByOffset(int offset)
@@ -70,7 +95,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
             line.LineNumber,
             line.Offset,
             line.Length,
-            line.DelimiterLength);
+            GetDelimiter(line.Offset + line.Length, line.DelimiterLength));
     }
 
     public int GetOffset(int line, int column)
@@ -91,7 +116,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
 
     public void SetText(string? text)
     {
-        string normalized = NormalizeNewLines(text ?? string.Empty);
+        string normalized = Normalize(text);
         if (ContentEquals(normalized))
         {
             return;
@@ -112,7 +137,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
     public void Replace(int offset, int length, string? text)
     {
         ValidateRange(offset, length);
-        string normalized = NormalizeNewLines(text ?? string.Empty);
+        string normalized = Normalize(text);
         if (length == 0 && normalized.Length == 0)
         {
             return;
@@ -124,7 +149,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
 
         var startLine = _lines.GetByOffset(offset, _text.Length);
         var endLine = _lines.GetByOffset(offset + length, _text.Length);
-        bool changesLineStructure = normalized.Contains('\n') ||
+        bool changesLineStructure = normalized.AsSpan().IndexOfAny('\r', '\n') >= 0 ||
             offset + length > startLine.Offset + startLine.Length;
         int affectedStart = startLine.Offset;
         int affectedEnd = endLine.Offset + endLine.Length + endLine.DelimiterLength;
@@ -150,17 +175,28 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
         Changed?.Invoke(new TextChange(offset, length, normalized.Length));
     }
 
+    /// <summary>Terminator text at <paramref name="offset"/>. Length one is either return or feed.</summary>
+    private string GetDelimiter(int offset, int delimiterLength) => delimiterLength switch
+    {
+        0 => string.Empty,
+        2 => "\r\n",
+        _ => _text[offset] == '\r' ? "\r" : "\n"
+    };
+
     private void RebuildLines()
     {
         var lines = new List<EditableLineRecord>();
         int start = 0;
         for (int index = 0; index < _text.Length; index++)
         {
-            if (_text[index] != '\n')
+            char value = _text[index];
+            if (value != '\r' && value != '\n')
             {
                 continue;
             }
-            lines.Add(new EditableLineRecord(index - start, 1));
+            int delimiterLength = value == '\r' && index + 1 < _text.Length && _text[index + 1] == '\n' ? 2 : 1;
+            lines.Add(new EditableLineRecord(index - start, delimiterLength));
+            index += delimiterLength - 1;
             start = index + 1;
         }
         lines.Add(new EditableLineRecord(_text.Length - start, 0));
@@ -173,11 +209,14 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
         int start = 0;
         for (int index = 0; index < text.Length; index++)
         {
-            if (text[index] != '\n')
+            char value = text[index];
+            if (value != '\r' && value != '\n')
             {
                 continue;
             }
-            lines.Add(new EditableLineRecord(index - start, 1));
+            int delimiterLength = value == '\r' && index + 1 < text.Length && text[index + 1] == '\n' ? 2 : 1;
+            lines.Add(new EditableLineRecord(index - start, delimiterLength));
+            index += delimiterLength - 1;
             start = index + 1;
         }
         if (includeFinalLine || start < text.Length)
@@ -234,13 +273,13 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
             ? text
             : text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
 
-    private sealed class EditableDocumentLine(int lineNumber, int offset, int length, int delimiterLength)
+    private sealed class EditableDocumentLine(int lineNumber, int offset, int length, string delimiter)
         : IReadOnlyDocumentLine
     {
         public int LineNumber { get; } = lineNumber;
         public int Offset { get; } = offset;
         public int Length { get; } = length;
-        public int TotalLength => Length + delimiterLength;
-        public string Delimiter => delimiterLength == 0 ? string.Empty : "\n";
+        public int TotalLength => Length + delimiter.Length;
+        public string Delimiter { get; } = delimiter;
     }
 }

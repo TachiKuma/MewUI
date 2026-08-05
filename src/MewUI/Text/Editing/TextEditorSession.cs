@@ -106,7 +106,7 @@ public sealed class TextEditorSession
 
     public void ReplaceSelection(string? text)
     {
-        string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);
+        string normalized = Document.Normalize(text);
         var selection = Selection;
         ApplyAndRecord(selection.Start, selection.Length, normalized);
     }
@@ -119,7 +119,7 @@ public sealed class TextEditorSession
     public void ReplaceRange(int start, int length, string? text)
     {
         CommitComposition();
-        string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);
+        string normalized = Document.Normalize(text);
         int anchorAfter = ShiftPosition(AnchorPosition, start, length, normalized.Length);
         int caretAfter = ShiftPosition(CaretPosition, start, length, normalized.Length);
         if (!Document.History.RecordReplace(
@@ -221,7 +221,7 @@ public sealed class TextEditorSession
     {
         BeginComposition();
         var state = _composition!;
-        string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);
+        string normalized = Document.Normalize(text);
         Document.History.ReplaceTransient(state.Start, state.CurrentLength, normalized);
         state.CurrentLength = normalized.Length;
         AnchorPosition = CaretPosition = state.Start + normalized.Length;
@@ -278,7 +278,7 @@ public sealed class TextEditorSession
     /// <summary>Applies typed text and reports it once it is in the document.</summary>
     public void EnterText(string? text)
     {
-        string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);
+        string normalized = Document.Normalize(text);
         ReplaceSelection(normalized);
         if (normalized.Length > 0)
         {
