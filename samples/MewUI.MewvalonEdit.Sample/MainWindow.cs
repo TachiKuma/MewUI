@@ -145,6 +145,12 @@ public sealed class MainWindow : Window
                 .Content(title)
                 .OnCheckedChanged(value => apply(value == true));
 
+        // The checkbox itself carries the state the theme callback needs, so it is captured rather
+        // than mirrored into a field.
+        var customSelection = Toggle("Custom selection color", false,
+            enabled => ApplySelectionColors(Application.Current.Theme, enabled));
+        _editor.WithTheme((theme, _) => ApplySelectionColors(theme, customSelection.IsChecked == true));
+
         var indentationSize = new NumericUpDown
         {
             Minimum = 1,
@@ -200,7 +206,7 @@ public sealed class MainWindow : Window
                     value => _editor.TextArea.TextView.LinkTextUnderline = value),
                 // Setting any of these replaces the host's selection layer with the editor's own,
                 // which is the one consumer proving layer replacement works.
-                Toggle("Custom selection color", false, ApplyCustomSelection))
+                customSelection)
         }.WithTheme((theme, border) => border
             .Background(theme.Palette.ContainerBackground)
             .BorderBrush(theme.Palette.ControlBorder));
@@ -252,12 +258,18 @@ public sealed class MainWindow : Window
         _foldingState.Text = $"Foldings: {folded}/{total}";
     }
 
-    private void ApplyCustomSelection(bool enabled)
+    /// <summary>
+    /// Selection appearance drawn from the accent, so the custom colors stay legible when the theme
+    /// flips. Recoloring the glyphs flattens the syntax colors inside the selection, so the text
+    /// only leans halfway to the accent instead of taking it whole.
+    /// </summary>
+    private void ApplySelectionColors(Theme theme, bool enabled)
     {
         var area = _editor.TextArea;
-        area.SelectionBrush = enabled ? Color.FromArgb(0x60, 0x4E, 0x9A, 0xE8) : null;
-        area.SelectionBorder = enabled ? Color.FromRgb(0x4E, 0x9A, 0xE8) : null;
-        area.SelectionCornerRadius = enabled ? 3 : 0;
+        var palette = theme.Palette;
+        area.SelectionBrush = enabled ? palette.Accent.WithAlpha(0x60) : null;
+        area.SelectionBorder = enabled ? palette.Accent : null;
+        area.SelectionForeground = enabled ? palette.WindowText.Lerp(palette.Accent, 0.5) : null;
         _editor.InvalidateTextView();
     }
 
