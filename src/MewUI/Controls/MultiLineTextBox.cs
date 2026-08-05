@@ -904,17 +904,17 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     }
 
     /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>
-    public IReadOnlySectionProvider? ReadOnlySections
+    public IEditableRegionProvider? EditableRegions
     {
-        get => _editor.ReadOnlySections;
-        set => _editor.ReadOnlySections = value;
+        get => _editor.EditableRegions;
+        set => _editor.EditableRegions = value;
     }
 
     /// <summary>Raised after typed or composed text reached the document, once per commit.</summary>
-    public event Action<string>? TextEntered
+    public event Action<string>? TextCommitted
     {
-        add => _editor.TextEntered += value;
-        remove => _editor.TextEntered -= value;
+        add => _editor.TextCommitted += value;
+        remove => _editor.TextCommitted -= value;
     }
 
     /// <inheritdoc/>

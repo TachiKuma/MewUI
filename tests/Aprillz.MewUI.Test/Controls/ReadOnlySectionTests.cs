@@ -49,11 +49,11 @@ public sealed class ReadOnlySectionTests
     }
 
     [TestMethod]
-    public void TextEnteredReportsTypedTextOnce()
+    public void TextCommittedReportsTypedTextOnce()
     {
         var (session, _) = CreateSession(protectedRange: null);
         var entered = new List<string>();
-        session.TextEntered += entered.Add;
+        session.TextCommitted += entered.Add;
 
         session.SetSelection(0, 0);
         session.EnterText("hi");
@@ -67,17 +67,17 @@ public sealed class ReadOnlySectionTests
         var session = new TextEditorSession(document);
         if (protectedRange is { } range)
         {
-            session.ReadOnlySections = new BlockedRangeProvider(range);
+            session.EditableRegions = new BlockedRangeProvider(range);
         }
         return (session, document);
     }
 
     /// <summary>Everything outside the blocked range may be edited.</summary>
-    private sealed class BlockedRangeProvider(TextRange blocked) : IReadOnlySectionProvider
+    private sealed class BlockedRangeProvider(TextRange blocked) : IEditableRegionProvider
     {
         public bool CanInsert(int offset) => offset <= blocked.Start || offset >= blocked.Start + blocked.Length;
 
-        public void GetDeletableSegments(TextRange range, IList<TextRange> output)
+        public void GetDeletableRanges(TextRange range, IList<TextRange> output)
         {
             int end = range.Start + range.Length;
             int blockedEnd = blocked.Start + blocked.Length;

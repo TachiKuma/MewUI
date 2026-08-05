@@ -220,7 +220,7 @@ public sealed class TextEditorSession
         {
             // Once per commit: the intermediates are transient replaces, so reporting them would
             // fire on every keystroke of a composition.
-            TextEntered?.Invoke(inserted);
+            TextCommitted?.Invoke(inserted);
         }
     }
 
@@ -238,28 +238,28 @@ public sealed class TextEditorSession
     }
 
     /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>
-    public IReadOnlySectionProvider? ReadOnlySections { get; set; }
+    public IEditableRegionProvider? EditableRegions { get; set; }
 
     /// <summary>Raised after typed or composed text reached the document, once per commit.</summary>
-    public event Action<string>? TextEntered;
+    public event Action<string>? TextCommitted;
 
-    /// <summary>Applies typed text and reports it as entered once it is in the document.</summary>
+    /// <summary>Applies typed text and reports it once it is in the document.</summary>
     public void EnterText(string? text)
     {
         string normalized = EditableTextDocument.NormalizeNewLines(text ?? string.Empty);
         ReplaceSelection(normalized);
         if (normalized.Length > 0)
         {
-            TextEntered?.Invoke(normalized);
+            TextCommitted?.Invoke(normalized);
         }
     }
 
     private void ApplyAndRecord(int start, int removeLength, string inserted)
     {
         CommitComposition();
-        if (ReadOnlySections is { } sections)
+        if (EditableRegions is IEditableRegionProvider regions)
         {
-            (removeLength, inserted) = ResolveAgainstReadOnlySections(sections, start, removeLength, inserted);
+            (removeLength, inserted) = ResolveAgainstEditableRegions(regions, start, removeLength, inserted);
         }
         int caretAfter = start + inserted.Length;
         if (!Document.History.RecordReplace(
@@ -277,13 +277,13 @@ public sealed class TextEditorSession
     /// back into the replacement, which keeps the whole edit one contiguous replace and so one undo
     /// step even when the deletable parts are not adjacent.
     /// </summary>
-    private (int RemoveLength, string Inserted) ResolveAgainstReadOnlySections(
-        IReadOnlySectionProvider sections,
+    private (int RemoveLength, string Inserted) ResolveAgainstEditableRegions(
+        IEditableRegionProvider regions,
         int start,
         int removeLength,
         string inserted)
     {
-        if (inserted.Length > 0 && !sections.CanInsert(start))
+        if (inserted.Length > 0 && !regions.CanInsert(start))
         {
             inserted = string.Empty;
         }
@@ -293,7 +293,7 @@ public sealed class TextEditorSession
         }
 
         var deletable = new List<TextRange>();
-        sections.GetDeletableSegments(new TextRange(start, removeLength), deletable);
+        regions.GetDeletableRanges(new TextRange(start, removeLength), deletable);
 
         var kept = new System.Text.StringBuilder();
         int cursor = start;
