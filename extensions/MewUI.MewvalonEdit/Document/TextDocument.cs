@@ -102,12 +102,15 @@ public sealed class TextDocument : ITextSource
 
     public DocumentLine GetLineByNumber(int lineNumber)
     {
-        if (lineNumber <= 0) throw new ArgumentOutOfRangeException(nameof(lineNumber));
-        return new DocumentLine(_document.GetLineByNumber(lineNumber - 1));
+        if (lineNumber <= 0 || lineNumber > LineCount)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lineNumber));
+        }
+        return new DocumentLine(this, lineNumber);
     }
 
     public DocumentLine GetLineByOffset(int offset)
-        => new(_document.GetLineByOffset(offset));
+        => new(this, _document.GetLineByOffset(offset).LineNumber + 1);
 
     /// <summary>
     /// Offset of a one-based line and column. A column outside the line clamps to its start or end,
@@ -135,8 +138,8 @@ public sealed class TextDocument : ITextSource
 
     /// <summary>The document's lines. Read-only, as in the original; mutation throws.</summary>
     public IList<DocumentLine> Lines
-        => Enumerable.Range(0, _document.LineCount)
-            .Select(index => new DocumentLine(_document.GetLineByNumber(index)))
+        => Enumerable.Range(1, _document.LineCount)
+            .Select(lineNumber => new DocumentLine(this, lineNumber))
             .ToArray();
 
     public override string ToString() => Text;

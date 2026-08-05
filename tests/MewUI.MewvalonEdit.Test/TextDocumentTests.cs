@@ -245,6 +245,62 @@ public sealed class TextDocumentTests
             "Only the line number is validated.");
     }
 
+    /// <summary>
+    /// A line read after an edit reports where it is now. A snapshot keeps handing back the offsets
+    /// it was built with, which reads as a working line while pointing at the wrong text.
+    /// </summary>
+    [TestMethod]
+    public void ALineHeldAcrossAnEditReportsItsCurrentPlace()
+    {
+        var document = new TextDocument("one\ntwo\nthree");
+        var second = document.GetLineByNumber(2);
+        Assert.AreEqual(4, second.Offset);
+
+        document.Insert(0, "XX");
+
+        Assert.AreEqual(6, second.Offset, "The line moved with the text inserted before it.");
+        Assert.AreEqual(3, second.Length);
+        Assert.AreEqual(9, second.EndOffset);
+    }
+
+    [TestMethod]
+    public void ALineWhoseNumberIsGoneReadsAsDeleted()
+    {
+        var document = new TextDocument("one\ntwo\nthree");
+        var third = document.GetLineByNumber(3);
+        Assert.IsFalse(third.IsDeleted);
+
+        document.Remove(3, document.TextLength - 3);
+
+        Assert.IsTrue(third.IsDeleted);
+        Assert.ThrowsExactly<InvalidOperationException>(() => _ = third.Offset);
+    }
+
+    [TestMethod]
+    public void LinesReachTheirNeighbours()
+    {
+        var document = new TextDocument("one\ntwo\nthree");
+        var second = document.GetLineByNumber(2);
+
+        Assert.AreEqual(1, second.PreviousLine?.LineNumber);
+        Assert.AreEqual(3, second.NextLine?.LineNumber);
+        Assert.IsNull(document.GetLineByNumber(1).PreviousLine);
+        Assert.IsNull(document.GetLineByNumber(3).NextLine);
+    }
+
+    /// <summary>A line is a segment, so it can be handed to anything that takes one.</summary>
+    [TestMethod]
+    public void ALineIsASegment()
+    {
+        var document = new TextDocument("one\ntwo");
+
+        ISegment segment = document.GetLineByNumber(2);
+
+        Assert.AreEqual(4, segment.Offset);
+        Assert.AreEqual(3, segment.Length);
+        Assert.AreEqual("two", document.GetText(segment));
+    }
+
     [TestMethod]
     public void MutationsRaiseDocumentAndTextEvents()
     {
