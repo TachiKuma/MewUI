@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Text;
 using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Input;
@@ -548,10 +549,46 @@ public class TextEditor : Control
 
     private void OnSurfaceTextInput(TextInputEventArgs e)
     {
-        if (!Options.ConvertTabsToSpaces || string.IsNullOrEmpty(e.Text) || !e.Text.Contains('\t')) return;
+        if (!Options.ConvertTabsToSpaces || string.IsNullOrEmpty(e.Text) || !e.Text.Contains('\t'))
+        {
+            return;
+        }
         e.Handled = true;
-        string replacement = e.Text.Replace("\t", new string(' ', Options.IndentationSize), StringComparison.Ordinal);
-        _surface.ReplaceSelection(replacement);
+        InsertTextInput(e.Text);
+    }
+
+    /// <summary>
+    /// Inserts text as if typed. Both the keyboard path and the programmatic one come through here,
+    /// so a tab converts the same way whichever put it in.
+    /// </summary>
+    internal void InsertTextInput(string text)
+        => _surface.ReplaceSelection(
+            Options.ConvertTabsToSpaces && text.Contains('\t')
+                ? ExpandTabs(text, Document.GetLocation(SelectionStart).Column)
+                : text);
+
+    /// <summary>
+    /// Replaces every tab with spaces reaching the next indentation stop, starting from the column
+    /// the text is going into. A whole indent per tab would overshoot every stop but the first.
+    /// </summary>
+    private string ExpandTabs(string text, int column)
+    {
+        var expanded = new StringBuilder(text.Length);
+        foreach (char character in text)
+        {
+            if (character == '\t')
+            {
+                string spaces = Options.GetIndentationString(column);
+                expanded.Append(spaces);
+                column += spaces.Length;
+            }
+            else
+            {
+                expanded.Append(character);
+                column = character is '\n' or '\r' ? 1 : column + 1;
+            }
+        }
+        return expanded.ToString();
     }
 
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs e)

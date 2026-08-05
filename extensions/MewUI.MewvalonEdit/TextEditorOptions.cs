@@ -30,6 +30,24 @@ public sealed class TextEditorOptions : INotifyPropertyChanged
         set => Set(ref _convertTabsToSpaces, value);
     }
 
+    /// <summary>Text that indents from column 1 to the next indentation level.</summary>
+    public string IndentationString => GetIndentationString(1);
+
+    /// <summary>
+    /// Text that indents from <paramref name="column"/> to the next indentation level. Converted
+    /// tabs fill only up to the next stop, so a tab pressed mid-column does not overshoot it.
+    /// </summary>
+    public string GetIndentationString(int column)
+    {
+        if (column < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(column), column, "Value must be at least 1.");
+        }
+        return ConvertTabsToSpaces
+            ? new string(' ', IndentationSize - ((column - 1) % IndentationSize))
+            : "\t";
+    }
+
     public bool ShowSpaces
     {
         get => _showSpaces;

@@ -151,7 +151,7 @@ public sealed class TextArea : MewObject
     public void ReplaceSelection(string? text) => _editor.Surface.ReplaceSelection(text);
 
     /// <summary>Inserts text as if typed, replacing the selection.</summary>
-    public void PerformTextInput(string text) => ReplaceSelection(text);
+    public void PerformTextInput(string text) => _editor.InsertTextInput(text ?? string.Empty);
 
     /// <summary>Collapses the selection to the caret.</summary>
     public void ClearSelection() => _editor.Select(_editor.CaretOffset, 0);

@@ -91,6 +91,26 @@ public sealed class EditorExtensionTests
             "The caret ends after the indentation it was given.");
     }
 
+    /// <summary>
+    /// A converted tab fills to the next stop, not a whole indent. Always inserting IndentationSize
+    /// spaces overshoots every stop but the first, so columns stop lining up.
+    /// </summary>
+    [TestMethod]
+    public void ConvertedTabsStopAtTheNextIndentationStop()
+    {
+        var editor = new TextEditor { Text = "ab" };
+        editor.Options.ConvertTabsToSpaces = true;
+        editor.Options.IndentationSize = 4;
+        editor.CaretOffset = 2;
+
+        editor.TextArea.PerformTextInput("\t");
+
+        Assert.AreEqual("ab  ", editor.Text, "Column 3 reaches the stop at 5 with two spaces.");
+
+        editor.TextArea.PerformTextInput("\t");
+        Assert.AreEqual("ab      ", editor.Text, "The next tab takes a full indent from the stop.");
+    }
+
     /// <summary>Ordinary typing must not re-run the strategy over the line.</summary>
     [TestMethod]
     public void TypingTextLeavesTheIndentationAlone()
