@@ -18,6 +18,11 @@ public sealed class TextDocument : ITextSource
         _document.Changed += OnChanged;
     }
 
+    public TextDocument(IEnumerable<char> initialText)
+        : this(initialText is null ? null : string.Concat(initialText))
+    {
+    }
+
     internal TextDocument(EditableTextDocument document)
     {
         _document = document ?? throw new ArgumentNullException(nameof(document));
@@ -48,7 +53,6 @@ public sealed class TextDocument : ITextSource
         return GetText(segment.Offset, segment.Length);
     }
 
-    public void SetText(string? text) => _document.SetText(text);
     public void Insert(int offset, string text) => _document.Insert(offset, text);
     public void Remove(int offset, int length) => _document.Remove(offset, length);
     public void Replace(int offset, int length, string? text) => _document.Replace(offset, length, text);
@@ -80,7 +84,8 @@ public sealed class TextDocument : ITextSource
         return new TextLocation(location.Line + 1, location.Column + 1);
     }
 
-    public IReadOnlyList<DocumentLine> Lines
+    /// <summary>The document's lines. Read-only, as in the original; mutation throws.</summary>
+    public IList<DocumentLine> Lines
         => Enumerable.Range(0, _document.LineCount)
             .Select(index => new DocumentLine(_document.GetLineByNumber(index)))
             .ToArray();

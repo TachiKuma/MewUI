@@ -89,9 +89,6 @@ public class VisualLineElement
     /// </summary>
     protected internal virtual bool ReplacesText => true;
 
-    /// <summary>Pixel density to measure and draw at. Assigned while the line is scanned.</summary>
-    protected internal uint Dpi { get; internal set; } = 96;
-
     /// <summary>
     /// Called before the element is painted, for appearance the view owns rather than the element.
     /// </summary>
@@ -99,11 +96,14 @@ public class VisualLineElement
     {
     }
 
-    /// <summary>Size this element occupies. Generated elements override it; a restyled range keeps the document text.</summary>
-    public virtual InlineMetrics Measure() => default;
+    /// <summary>
+    /// Size this element occupies, measured at the density the view lays out at. Generated elements
+    /// override it; a restyled range keeps the document text.
+    /// </summary>
+    public virtual InlineMetrics Measure(uint dpi) => default;
 
     /// <summary>Paints this element. Generated elements override it.</summary>
-    public virtual void Draw(ITextRenderContext context, Point origin)
+    public virtual void Draw(ITextRenderContext context, Point origin, uint dpi)
     {
     }
 

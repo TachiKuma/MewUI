@@ -8,6 +8,7 @@ using Aprillz.MewUI.Text;
 namespace MewUI.MewvalonEdit.Test;
 
 [TestClass]
+[DoNotParallelize]
 public sealed class WhitespaceAndThemeTests
 {
     [TestMethod]
@@ -73,22 +74,18 @@ public sealed class WhitespaceAndThemeTests
     }
 
     [TestMethod]
-    public void HighlightingDefaultsToDarkWhenNoThemeSourceIsGiven()
+    public void OneColorizerFollowsAThemeSwitchWithoutRebuilding()
     {
         var definition = HighlightingManager.Instance.GetDefinition("C#");
         Assert.IsNotNull(definition);
-        var document = new TextDocument("public");
-        var elements = new List<VisualLineElement>();
+        var colorizer = new HighlightingColorizer(definition);
 
-        new HighlightingColorizer(definition).Transform(new DefaultThemeContext(document), elements);
+        // The same instance across the switch: the colorizer reads the theme per line, so nothing
+        // has to be rebuilt when it changes.
+        var dark = HighlightingTestHost.Colorize(colorizer, "public", isDarkTheme: true);
+        var light = HighlightingTestHost.Colorize(colorizer, "public", isDarkTheme: false);
 
-        Assert.AreEqual(Color.FromRgb(86, 156, 214), elements[0].TextRunProperties.ForegroundBrush);
-    }
-
-    private sealed class DefaultThemeContext(TextDocument document) : ITextRunConstructionContext
-    {
-        public TextDocument Document => document;
-        public DocumentLine CurrentDocumentLine => document.GetLineByNumber(1);
-        public TextRunStyle DefaultStyle => TextRunStyle.Default;
+        Assert.AreEqual(Color.FromRgb(86, 156, 214), dark[0].TextRunProperties.ForegroundBrush);
+        Assert.AreEqual(Color.FromRgb(0, 0, 255), light[0].TextRunProperties.ForegroundBrush);
     }
 }

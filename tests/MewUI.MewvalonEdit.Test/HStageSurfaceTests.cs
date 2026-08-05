@@ -93,7 +93,7 @@ public sealed class HStageSurfaceTests
     {
         var element = new InlineObjectElement(1, new Aprillz.MewUI.Controls.Border { Width = 24, Height = 10 });
 
-        var metrics = element.Measure();
+        var metrics = element.Measure(96);
 
         Assert.AreEqual(24, metrics.Width, 0.01);
         Assert.AreEqual(10, metrics.Height, 0.01);

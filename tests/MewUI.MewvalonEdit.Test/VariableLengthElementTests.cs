@@ -122,6 +122,7 @@ public sealed class VariableLengthElementTests
     private sealed class FakeContext(TextEditor editor) : ITextRunConstructionContext
     {
         public Aprillz.MewUI.MewvalonEdit.Document.TextDocument Document => editor.Document;
+        public Aprillz.MewUI.MewvalonEdit.Rendering.TextView TextView => editor.TextArea.TextView;
         public Aprillz.MewUI.MewvalonEdit.Document.DocumentLine CurrentDocumentLine
             => editor.Document.GetLineByNumber(1);
         public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);

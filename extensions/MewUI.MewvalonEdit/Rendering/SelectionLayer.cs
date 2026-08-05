@@ -61,7 +61,7 @@ internal sealed class SelectionLayer(TextArea textArea) : ITextViewLayer
     private void DrawSelectedText(
         ITextRenderContext context,
         ITextViewHost host,
-        TextSelection selection,
+        Selection selection,
         Color foreground)
     {
         var viewport = host.TextViewportBounds;

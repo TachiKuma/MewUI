@@ -113,6 +113,9 @@ public sealed class TextView : MewObject
 
     internal double DpiScale => textArea.Editor.EditorDpi / 96.0;
 
+    // Read per paint, so a theme switch repaints in the other palette without any rebuild.
+    internal bool IsDarkTheme => textArea.Editor.ThemeIsDark;
+
     internal ColorPen ResolvedColumnRulerPen
         => ColumnRulerPen ?? new ColorPen(textArea.Editor.ControlBorderColor);
 

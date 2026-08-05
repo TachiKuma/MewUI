@@ -1,3 +1,5 @@
+using Aprillz.MewUI;
+using Aprillz.MewUI.MewvalonEdit;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Highlighting;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
@@ -6,6 +8,7 @@ using Aprillz.MewUI.Text;
 namespace MewUI.MewvalonEdit.Test;
 
 [TestClass]
+[DoNotParallelize]
 public sealed class HighlightingTests
 {
     [TestMethod]
@@ -22,25 +25,44 @@ public sealed class HighlightingTests
     }
 }
 
-/// <summary>Runs a colorizer over a single-line document through the transformer contract.</summary>
+/// <summary>
+/// Runs a colorizer over a single-line document through the transformer contract. Dark or light
+/// reaches the colorizer through the view's theme, so the host flips the default variant; there is
+/// no other seam, which is the point: the colorizer takes no theme input of its own.
+/// </summary>
 internal static class HighlightingTestHost
 {
     public static List<VisualLineElement> Colorize(
         IHighlightingDefinition definition,
         string text,
         bool isDarkTheme = true)
+        => Colorize(new HighlightingColorizer(definition), text, isDarkTheme);
+
+    public static List<VisualLineElement> Colorize(
+        HighlightingColorizer colorizer,
+        string text,
+        bool isDarkTheme)
     {
-        var document = new TextDocument(text);
-        var elements = new List<VisualLineElement>();
-        new HighlightingColorizer(definition, () => isDarkTheme)
-            .Transform(new SingleLineContext(document), elements);
-        return elements;
+        var previous = ThemeManager.Default;
+        ThemeManager.Default = isDarkTheme ? ThemeVariant.Dark : ThemeVariant.Light;
+        try
+        {
+            var editor = new TextEditor { Text = text };
+            var elements = new List<VisualLineElement>();
+            colorizer.Transform(new SingleLineContext(editor), elements);
+            return elements;
+        }
+        finally
+        {
+            ThemeManager.Default = previous;
+        }
     }
 
-    private sealed class SingleLineContext(TextDocument document) : ITextRunConstructionContext
+    private sealed class SingleLineContext(TextEditor editor) : ITextRunConstructionContext
     {
-        public TextDocument Document => document;
-        public DocumentLine CurrentDocumentLine => document.GetLineByNumber(1);
+        public TextDocument Document => editor.Document;
+        public Aprillz.MewUI.MewvalonEdit.Rendering.TextView TextView => editor.TextArea.TextView;
+        public DocumentLine CurrentDocumentLine => editor.Document.GetLineByNumber(1);
         public TextRunStyle DefaultStyle => TextRunStyle.Default;
     }
 }

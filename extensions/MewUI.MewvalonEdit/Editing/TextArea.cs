@@ -17,7 +17,7 @@ public sealed class TextArea : MewObject
     {
         _editor = editor;
         Caret = new Caret(this);
-        Selection = new TextSelection(this);
+        Selection = new Selection(this);
         TextView = new TextView(this);
         editor.Surface.EditingStateChanged += OnEditingStateChanged;
         editor.Surface.TextInput += OnTextInput;
@@ -26,7 +26,7 @@ public sealed class TextArea : MewObject
     public TextDocument Document => _editor.Document;
     public TextEditorOptions Options => _editor.Options;
     public Caret Caret { get; }
-    public TextSelection Selection { get; }
+    public Selection Selection { get; }
     public TextView TextView { get; }
 
     /// <summary>
@@ -213,7 +213,7 @@ public sealed class Caret(TextArea textArea)
     internal void RaisePositionChanged() => PositionChanged?.Invoke(this, EventArgs.Empty);
 }
 
-public sealed class TextSelection(TextArea textArea)
+public sealed class Selection(TextArea textArea)
 {
     public bool IsEmpty => textArea.Editor.SelectionLength == 0;
     public int Length => textArea.Editor.SelectionLength;

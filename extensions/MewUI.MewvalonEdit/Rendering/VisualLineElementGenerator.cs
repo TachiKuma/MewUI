@@ -53,20 +53,20 @@ public class TextReplacementElement : VisualLineElement
     /// <summary>The replacement text is what occupies the visual surface.</summary>
     protected internal override string GetVisualText() => Text;
 
-    public override InlineMetrics Measure()
+    public override InlineMetrics Measure(uint dpi)
     {
-        var layout = CreateLayout();
+        var layout = CreateLayout(dpi);
         return new InlineMetrics(layout.MeasuredSize.Width, layout.MeasuredSize.Height, layout.Lines[0].Baseline);
     }
 
-    public override void Draw(ITextRenderContext context, Point origin)
+    public override void Draw(ITextRenderContext context, Point origin, uint dpi)
     {
         ArgumentNullException.ThrowIfNull(context);
         var options = new TextDrawOptions(Foreground ?? TextRunProperties.ForegroundBrush ?? Color.FromRgb(0, 0, 0));
-        context.Draw(CreateLayout(), origin, in options);
+        context.Draw(CreateLayout(dpi), origin, in options);
     }
 
-    private ITextLayout CreateLayout()
+    private ITextLayout CreateLayout(uint dpi)
     {
         var factory = Application.IsRunning ? Application.Current.GraphicsFactory : Application.DefaultGraphicsFactory;
         return factory.TextEngine.GetOrCreateLayout(
@@ -74,7 +74,7 @@ public class TextReplacementElement : VisualLineElement
             {
                 Text = Text.AsMemory(),
                 // Measuring at 96 while the view lays out at the real density clips the tail.
-                Dpi = Dpi,
+                Dpi = dpi,
                 DefaultStyle = _style,
                 Paragraph = new TextParagraphStyle { Wrapping = TextWrapping.NoWrap, MaxWidth = double.PositiveInfinity }
             },

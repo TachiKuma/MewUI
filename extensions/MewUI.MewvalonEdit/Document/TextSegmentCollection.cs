@@ -40,7 +40,7 @@ public sealed class TextSegmentCollection<T> : ICollection<T> where T : TextSegm
     }
 
     public int Count => _segments.Count;
-    public bool IsReadOnly => false;
+    bool ICollection<T>.IsReadOnly => false;
 
     public void Add(T item)
     {
@@ -84,7 +84,13 @@ public sealed class TextSegmentCollection<T> : ICollection<T> where T : TextSegm
             .FirstOrDefault();
 
     /// <summary>Shifts the stored offsets for an edit. Called automatically when built with a document.</summary>
-    public void UpdateOffsets(int offset, int removalLength, int insertionLength)
+    public void UpdateOffsets(DocumentChangeEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        UpdateOffsets(e.Offset, e.RemovalLength, e.InsertionLength);
+    }
+
+    private void UpdateOffsets(int offset, int removalLength, int insertionLength)
     {
         int delta = insertionLength - removalLength;
         int removalEnd = offset + removalLength;

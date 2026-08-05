@@ -117,6 +117,7 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
     private sealed class TransformContext(TextEditor editor) : ITextRunConstructionContext
     {
         public TextDocument Document => editor.Document;
+        public TextView TextView => editor.TextArea.TextView;
         public DocumentLine CurrentDocumentLine { get; set; } = null!;
         public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
     }
@@ -206,7 +207,7 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
             int end = context.OffsetMap.MapFromSource(element.RelativeTextOffset + element.DocumentLength);
             if (end > start)
             {
-                output.Add(new InlineRun(start, end - start, new ElementInline(element)));
+                output.Add(new InlineRun(start, end - start, new ElementInline(editor, element)));
             }
         }
     }
@@ -335,7 +336,6 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
                     continue;
                 }
                 element.RelativeTextOffset = bestOffset - lineStart;
-                element.Dpi = editor.EditorDpi;
                 elements.Add(element);
                 offset = bestOffset + Math.Max(1, element.DocumentLength);
             }
@@ -352,16 +352,20 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
 
     private readonly record struct CachedScan(int Length, List<VisualLineElement> Elements);
 
-    private sealed class ElementInline(VisualLineElement element) : IInlineTextObject
+    // Reads the density on each call rather than storing it on the element, so a DPI change needs
+    // no rescan: the scan cache only invalidates on a document change.
+    private sealed class ElementInline(TextEditor editor, VisualLineElement element) : IInlineTextObject
     {
-        public InlineMetrics Measure() => element.Measure();
+        public InlineMetrics Measure() => element.Measure(editor.EditorDpi);
 
-        public void Draw(ITextRenderContext context, Point origin) => element.Draw(context, origin);
+        public void Draw(ITextRenderContext context, Point origin)
+            => element.Draw(context, origin, editor.EditorDpi);
     }
 
     private sealed class GenerationContext(TextEditor editor) : ITextRunConstructionContext
     {
         public TextDocument Document => editor.Document;
+        public TextView TextView => editor.TextArea.TextView;
         public DocumentLine CurrentDocumentLine { get; set; } = null!;
         public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
     }

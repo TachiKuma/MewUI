@@ -90,8 +90,9 @@ public sealed class FoldingManager
         NotifyChanged();
     }
 
-    public IEnumerable<FoldingSection> GetFoldingsContaining(int offset)
-        => _foldings.Where(item => item.StartOffset <= offset && offset <= item.EndOffset);
+    public System.Collections.ObjectModel.ReadOnlyCollection<FoldingSection> GetFoldingsContaining(int offset)
+        => _foldings.Where(item => item.StartOffset <= offset && offset <= item.EndOffset)
+            .ToList().AsReadOnly();
 
     public FoldingSection? GetNextFolding(int startOffset)
     {

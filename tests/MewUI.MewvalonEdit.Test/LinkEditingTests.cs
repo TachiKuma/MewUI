@@ -58,9 +58,8 @@ public sealed class LinkEditingTests
 
         var element = new TextReplacementElement("placeholder", 3, TextRunStyle.Default);
 
-        double atDefault = element.Measure().Width;
-        element.Dpi = 192;
-        double atDouble = element.Measure().Width;
+        double atDefault = element.Measure(96).Width;
+        double atDouble = element.Measure(192).Width;
 
         // Measuring at 96 while the view lays out higher hands back an advance that is too short,
         // and the tail of the element is clipped.

@@ -8,6 +8,9 @@ public interface ITextRunConstructionContext
 {
     TextDocument Document { get; }
 
+    /// <summary>View the line is being built for.</summary>
+    TextView TextView { get; }
+
     /// <summary>Document line currently being built.</summary>
     DocumentLine CurrentDocumentLine { get; }
 

@@ -6,14 +6,12 @@ using Aprillz.MewUI.Text;
 namespace Aprillz.MewUI.MewvalonEdit.Highlighting;
 
 /// <param name="definition">Rule set whose regex matches become paint spans.</param>
-/// <param name="isDarkTheme">Queried per line so a theme switch repaints without rebuilding the colorizer. Defaults to dark.</param>
-public class HighlightingColorizer(IHighlightingDefinition definition, Func<bool>? isDarkTheme = null)
-    : DocumentColorizingTransformer
+public class HighlightingColorizer(IHighlightingDefinition definition) : DocumentColorizingTransformer
 {
     private DocumentHighlighter? _highlighter;
     private TextDocument? _highlighterDocument;
 
-    public IHighlightingDefinition Definition { get; } = definition ?? throw new ArgumentNullException(nameof(definition));
+    internal IHighlightingDefinition Definition { get; } = definition ?? throw new ArgumentNullException(nameof(definition));
 
     protected override void ColorizeLine(DocumentLine line)
     {
@@ -23,7 +21,8 @@ public class HighlightingColorizer(IHighlightingDefinition definition, Func<bool
             return;
         }
 
-        bool isDark = isDarkTheme?.Invoke() ?? true;
+        // From the view per line, so a theme switch repaints in the other palette without rebuild.
+        bool isDark = context.TextView.IsDarkTheme;
         if (Definition.MainRuleSet.Spans.Count > 0)
         {
             // Spans can cross lines, so the stateful highlighter owns the scan.
@@ -46,10 +45,10 @@ public class HighlightingColorizer(IHighlightingDefinition definition, Func<bool
     }
 
     /// <summary>Raised with the line range that must be repainted after a span crossed lines.</summary>
-    public event Action<int, int>? HighlightingStateChanged;
+    public event HighlightingStateChangedEventHandler? HighlightingStateChanged;
 
     /// <summary>The highlighter for this document, built on first use and reused after.</summary>
-    public DocumentHighlighter GetHighlighter(TextDocument document)
+    internal DocumentHighlighter GetHighlighter(TextDocument document)
     {
         if (_highlighter is null || !ReferenceEquals(_highlighterDocument, document))
         {

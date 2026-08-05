@@ -317,6 +317,8 @@ public class TextEditor : Control
     internal Color AccentColor => Theme.Palette.Accent;
 
     internal Color ControlBorderColor => Theme.Palette.ControlBorder;
+
+    internal bool ThemeIsDark => Theme.IsDark;
     internal Color ThemeSelectionBackground => Theme.Palette.SelectionBackground;
     internal Color FoldingMarkerColor => Theme.Palette.PlaceholderText;
     internal ElementGeneratorAdapter ElementGeneratorAdapter => _elementGenerators;
@@ -394,7 +396,7 @@ public class TextEditor : Control
         {
             // First in the list: syntax colors are the base layer, so whitespace markers and search
             // highlights registered later keep their own colors where the ranges overlap.
-            _colorizer = new HighlightingColorizer(definition, () => Theme.IsDark);
+            _colorizer = new HighlightingColorizer(definition);
             _colorizer.HighlightingStateChanged += (_, _) => RequestHighlightingRefresh();
             LineTransformers.Insert(0, _colorizer);
             // The highlighter is reachable from the view alone, as in AvalonEdit, so ported code

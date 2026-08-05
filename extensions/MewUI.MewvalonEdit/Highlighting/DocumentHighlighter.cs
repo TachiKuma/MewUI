@@ -2,12 +2,18 @@ using Aprillz.MewUI.MewvalonEdit.Document;
 
 namespace Aprillz.MewUI.MewvalonEdit.Highlighting;
 
+/// <summary>Signature of <see cref="IHighlighter.HighlightingStateChanged"/>.</summary>
+public delegate void HighlightingStateChangedEventHandler(int fromLineNumber, int toLineNumber);
+
 /// <summary>Highlights a document line by line, caching the span stack each line ends with.</summary>
 public interface IHighlighter
 {
-    IHighlightingDefinition Definition { get; }
+    TextDocument Document { get; }
 
     HighlightedLine HighlightLine(int lineNumber);
+
+    /// <summary>Raised with the line range whose highlighting changed because a span crossed lines.</summary>
+    event HighlightingStateChangedEventHandler? HighlightingStateChanged;
 }
 
 /// <summary>
@@ -26,16 +32,16 @@ public sealed class DocumentHighlighter : IHighlighter, IDisposable
 
     public DocumentHighlighter(TextDocument document, IHighlightingDefinition definition)
     {
+        ArgumentNullException.ThrowIfNull(definition);
         _document = document ?? throw new ArgumentNullException(nameof(document));
-        Definition = definition ?? throw new ArgumentNullException(nameof(definition));
         _engine = new HighlightingEngine(definition.MainRuleSet);
         _document.Changed += OnDocumentChanged;
     }
 
-    public IHighlightingDefinition Definition { get; }
+    public TextDocument Document => _document;
 
     /// <summary>Raised with the line range whose highlighting changed because a span crossed lines.</summary>
-    public event Action<int, int>? HighlightingStateChanged;
+    public event HighlightingStateChangedEventHandler? HighlightingStateChanged;
 
     public HighlightedLine HighlightLine(int lineNumber)
     {

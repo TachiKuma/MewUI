@@ -17,14 +17,14 @@ public class InlineObjectElement : VisualLineElement
     /// <summary>The hosted element.</summary>
     public UIElement Element { get; }
 
-    public override InlineMetrics Measure()
+    public override InlineMetrics Measure(uint dpi)
     {
         Element.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var size = Element.DesiredSize;
         return new InlineMetrics(size.Width, size.Height, size.Height);
     }
 
-    public override void Draw(ITextRenderContext context, Point origin)
+    public override void Draw(ITextRenderContext context, Point origin, uint dpi)
     {
         ArgumentNullException.ThrowIfNull(context);
         Element.Arrange(new Rect(origin, Element.DesiredSize));
