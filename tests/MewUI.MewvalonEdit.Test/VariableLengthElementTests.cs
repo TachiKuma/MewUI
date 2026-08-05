@@ -77,6 +77,29 @@ public sealed class VariableLengthElementTests
         Assert.AreEqual(2, map.MapToSource(2));
     }
 
+    /// <summary>
+    /// VisualLine is what ported code converts coordinates through, so its two directions have to
+    /// agree with the projection a shrinking element produced.
+    /// </summary>
+    [TestMethod]
+    public void VisualLineConvertsColumnsAcrossAShrunkElement()
+    {
+        const double WIDTH = 400;
+        const double HEIGHT = 200;
+        var editor = new TextEditor { Text = "a TODO b" };
+        editor.TextArea.TextView.ElementGenerators.Add(new TodoGenerator());
+        editor.Measure(new Size(WIDTH, HEIGHT));
+        editor.Arrange(new Rect(0, 0, WIDTH, HEIGHT));
+
+        var line = editor.TextArea.TextView.GetVisualLine(1);
+
+        Assert.IsNotNull(line);
+        Assert.AreEqual(2, line.GetVisualColumn(2), "The element start keeps its column.");
+        Assert.AreEqual(2, line.GetVisualColumn(4), "A column inside the element collapses to its start.");
+        Assert.AreEqual(2, line.GetRelativeOffset(2));
+        Assert.AreEqual(line.VisualLength, line.ValidateVisualColumn(line.VisualLength + 5));
+    }
+
     [TestMethod]
     public void DecoratingElementsKeepTheIdentityProjectionAndStayOutOfTheRuns()
     {

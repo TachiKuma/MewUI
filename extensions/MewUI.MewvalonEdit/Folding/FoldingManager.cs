@@ -1,3 +1,4 @@
+using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 
@@ -262,69 +263,24 @@ public sealed class FoldingManager
                 return new ProjectedText(context.SourceText, IdentityTextOffsetMap.Instance);
             }
 
-            string source = context.SourceText.ToString();
-            var result = new System.Text.StringBuilder(source.Length);
-            var boundaries = new List<int> { 0 };
+            var replacements = new List<ReplacementProjection.Replacement>(overlapping.Length);
             int cursor = 0;
             foreach (var folding in overlapping)
             {
                 int foldStart = Math.Clamp(folding.StartOffset - lineStart, 0, lineLength);
                 int foldEnd = Math.Clamp(folding.EndOffset - lineStart, 0, lineLength);
                 if (foldEnd <= cursor) continue;
-                AppendSource(source, cursor, Math.Max(cursor, foldStart), result, boundaries);
-                if (folding.StartOffset >= lineStart && folding.StartOffset < lineEnd)
-                {
-                    string placeholder = string.IsNullOrEmpty(folding.Title) ? "…" : folding.Title!;
-                    AppendPlaceholder(placeholder, foldStart, foldEnd, result, boundaries);
-                }
-                cursor = Math.Max(cursor, foldEnd);
+                foldStart = Math.Max(cursor, foldStart);
+                // A fold opened on an earlier line has its placeholder there, so the part reaching
+                // into this one is hidden outright.
+                string placeholder = folding.StartOffset >= lineStart && folding.StartOffset < lineEnd
+                    ? (string.IsNullOrEmpty(folding.Title) ? "…" : folding.Title!)
+                    : string.Empty;
+                replacements.Add(new ReplacementProjection.Replacement(
+                    foldStart, foldEnd - foldStart, placeholder));
+                cursor = foldEnd;
             }
-            AppendSource(source, cursor, lineLength, result, boundaries);
-            return new ProjectedText(result.ToString().AsMemory(), new FoldingOffsetMap(boundaries.ToArray()));
-        }
-
-        private static void AppendSource(
-            string source,
-            int start,
-            int end,
-            System.Text.StringBuilder result,
-            List<int> boundaries)
-        {
-            for (int index = start; index < end; index++)
-            {
-                result.Append(source[index]);
-                boundaries.Add(index + 1);
-            }
-        }
-
-        private static void AppendPlaceholder(
-            string placeholder,
-            int sourceStart,
-            int sourceEnd,
-            System.Text.StringBuilder result,
-            List<int> boundaries)
-        {
-            for (int index = 0; index < placeholder.Length; index++)
-            {
-                result.Append(placeholder[index]);
-                boundaries.Add(index == placeholder.Length - 1 ? sourceEnd : sourceStart);
-            }
-        }
-    }
-
-    private sealed class FoldingOffsetMap(int[] boundaries) : ITextOffsetMap
-    {
-        public int MapToSource(int projectedOffset)
-            => boundaries[Math.Clamp(projectedOffset, 0, boundaries.Length - 1)];
-
-        public int MapFromSource(int sourceOffset)
-        {
-            sourceOffset = Math.Max(0, sourceOffset);
-            for (int index = 0; index < boundaries.Length; index++)
-            {
-                if (boundaries[index] >= sourceOffset) return index;
-            }
-            return boundaries.Length - 1;
+            return ReplacementProjection.Build(context.SourceText, replacements);
         }
     }
 }

@@ -40,7 +40,7 @@ internal sealed class ExtensionList<T>(Action onChanged) : IList<T>
 internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifier, ITextLineTransformer
 {
     private readonly List<VisualLineElement> _elements = [];
-    private readonly TransformContext _context = new(editor);
+    private readonly RunConstructionContext _context = new(editor);
     private long _cachedVersion = -1;
     private int _cachedOffset = -1;
     private int _cachedLength = -1;
@@ -115,13 +115,6 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
         }
     }
 
-    private sealed class TransformContext(TextEditor editor) : ITextRunConstructionContext
-    {
-        public TextDocument Document => editor.Document;
-        public TextView TextView => editor.TextArea.TextView;
-        public DocumentLine CurrentDocumentLine { get; set; } = null!;
-        public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
-    }
 }
 
 /// <summary>
@@ -134,7 +127,7 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
 internal sealed class ElementGeneratorAdapter(TextEditor editor)
     : ITextElementGenerator, ITextProjection, ITextClassifier
 {
-    private readonly GenerationContext _context = new(editor);
+    private readonly RunConstructionContext _context = new(editor);
     private readonly Dictionary<int, CachedScan> _scans = [];
     private long _scanVersion = -1;
 
@@ -164,30 +157,16 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
             return identity;
         }
 
-        var source = context.SourceText.Span;
-        var builder = new System.Text.StringBuilder(source.Length);
-        var segments = new List<ReplacementOffsetMap.Segment>();
-        int consumed = 0;
+        var replacements = new List<ReplacementProjection.Replacement>();
         foreach (var element in scan.Elements)
         {
-            if (element.VisualLength == element.DocumentLength)
+            if (element.VisualLength != element.DocumentLength)
             {
-                continue;
+                replacements.Add(new ReplacementProjection.Replacement(
+                    element.RelativeTextOffset, element.DocumentLength, element.GetVisualText()));
             }
-            int start = element.RelativeTextOffset;
-            if (start < consumed || start + element.DocumentLength > source.Length)
-            {
-                continue;
-            }
-            builder.Append(source[consumed..start]);
-            string visual = element.GetVisualText();
-            segments.Add(new ReplacementOffsetMap.Segment(
-                start, element.DocumentLength, builder.Length, visual.Length));
-            builder.Append(visual);
-            consumed = start + element.DocumentLength;
         }
-        builder.Append(source[consumed..]);
-        return new ProjectedText(builder.ToString().AsMemory(), new ReplacementOffsetMap([.. segments]));
+        return ReplacementProjection.Build(context.SourceText, replacements);
     }
 
     public void Generate(in TextElementContext context, IList<InlineRun> output)
@@ -363,59 +342,18 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
             => element.Draw(context, origin, editor.EditorDpi);
     }
 
-    private sealed class GenerationContext(TextEditor editor) : ITextRunConstructionContext
-    {
-        public TextDocument Document => editor.Document;
-        public TextView TextView => editor.TextArea.TextView;
-        public DocumentLine CurrentDocumentLine { get; set; } = null!;
-        public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
-    }
 }
 
 /// <summary>
-/// Line-relative offset map for ranges whose projected text has a different length than the
-/// document text. Offsets inside a replaced range collapse to its start on both axes, which is
-/// what places the caret before a folded region rather than inside it.
+/// What a transformer or generator is told about the line it is running over. Reads through to the
+/// editor on each access so a font or document change needs no rebuild of the context itself.
 /// </summary>
-internal sealed class ReplacementOffsetMap(ReplacementOffsetMap.Segment[] segments) : ITextOffsetMap
+internal sealed class RunConstructionContext(TextEditor editor) : ITextRunConstructionContext
 {
-    internal readonly record struct Segment(int SourceStart, int SourceLength, int ProjectedStart, int ProjectedLength);
-
-    public int MapFromSource(int sourceOffset)
-    {
-        int delta = 0;
-        foreach (var segment in segments)
-        {
-            if (sourceOffset < segment.SourceStart)
-            {
-                break;
-            }
-            if (sourceOffset < segment.SourceStart + segment.SourceLength)
-            {
-                return segment.ProjectedStart;
-            }
-            delta += segment.ProjectedLength - segment.SourceLength;
-        }
-        return sourceOffset + delta;
-    }
-
-    public int MapToSource(int projectedOffset)
-    {
-        int delta = 0;
-        foreach (var segment in segments)
-        {
-            if (projectedOffset < segment.ProjectedStart)
-            {
-                break;
-            }
-            if (projectedOffset < segment.ProjectedStart + segment.ProjectedLength)
-            {
-                return segment.SourceStart;
-            }
-            delta += segment.SourceLength - segment.ProjectedLength;
-        }
-        return projectedOffset + delta;
-    }
+    public TextDocument Document => editor.Document;
+    public TextView TextView => editor.TextArea.TextView;
+    public DocumentLine CurrentDocumentLine { get; set; } = null!;
+    public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
 }
 
 /// <summary>

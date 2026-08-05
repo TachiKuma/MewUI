@@ -40,6 +40,8 @@ public class TextReplacementElement : VisualLineElement
 {
     private readonly TextRunStyle _style;
 
+    /// <param name="text">Text drawn in place of the document range.</param>
+    /// <param name="documentLength">Length of the document range this element stands in for.</param>
     /// <param name="style">Resolved when the element is built; generation context is gone by the time it draws.</param>
     public TextReplacementElement(string text, int documentLength, TextRunStyle style)
         : base(Math.Max(1, text?.Length ?? 0), documentLength)

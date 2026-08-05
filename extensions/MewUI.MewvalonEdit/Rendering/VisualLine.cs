@@ -49,6 +49,4 @@ public sealed class VisualLine
     /// <summary>Clamps a visual column into this line.</summary>
     public int ValidateVisualColumn(int visualColumn)
         => Math.Clamp(visualColumn, 0, VisualLength);
-
-    internal TextLineLayout Layout => _layout;
 }
