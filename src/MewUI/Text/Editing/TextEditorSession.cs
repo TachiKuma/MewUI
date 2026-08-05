@@ -132,15 +132,25 @@ public sealed class TextEditorSession
         StateChanged?.Invoke();
     }
 
-    /// <summary>Where a position lands after a replace. Inside the replaced range it collapses to the start.</summary>
+    /// <summary>
+    /// Where a position lands after a replace: text inserted at the position pushes it along, and a
+    /// position inside the replaced range lands at the end of what replaced it.
+    /// </summary>
     private static int ShiftPosition(int position, int start, int removedLength, int insertedLength)
     {
-        if (position <= start)
+        // An insertion at the position itself satisfies both tests below, so it falls through.
+        if (removedLength != 0 || position != start)
         {
-            return position;
+            if (position <= start)
+            {
+                return position;
+            }
+            if (position >= start + removedLength)
+            {
+                return position + insertedLength - removedLength;
+            }
         }
-        int end = start + removedLength;
-        return position >= end ? position + insertedLength - removedLength : start;
+        return start + insertedLength;
     }
 
     public void Backspace(bool byWord = false)

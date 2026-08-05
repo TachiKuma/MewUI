@@ -92,6 +92,34 @@ public sealed class TextEditHistoryTests
         Assert.AreEqual(string.Empty, document.ToString());
     }
 
+    /// <summary>
+    /// Where the caret lands after a programmatic replace. Text arriving at the caret pushes it
+    /// along, the way typing does, so a caller that inserts indentation leaves the caret behind it.
+    /// </summary>
+    [TestMethod]
+    public void ReplaceRangeCarriesTheCaretAcrossTheEdit()
+    {
+        var document = new EditableTextDocument("hello world");
+        var session = new TextEditorSession(document);
+
+        session.SetCaret(6);
+        session.ReplaceRange(6, 0, ">> ");
+        Assert.AreEqual(9, session.CaretPosition, "An insertion at the caret pushes it along.");
+
+        session.SetCaret(4);
+        session.ReplaceRange(6, 0, "!");
+        Assert.AreEqual(4, session.CaretPosition, "An edit after the caret leaves it alone.");
+
+        session.SetCaret(8);
+        session.ReplaceRange(0, 5, "bye");
+        Assert.AreEqual(6, session.CaretPosition, "An edit before the caret shifts it by the delta.");
+
+        session.SetCaret(2);
+        session.ReplaceRange(0, 6, "abcdefgh");
+        Assert.AreEqual(8, session.CaretPosition,
+            "A caret inside the replaced range lands at the end of what replaced it.");
+    }
+
     [TestMethod]
     public void SharedDocumentMergesHistoryAcrossSessions()
     {
