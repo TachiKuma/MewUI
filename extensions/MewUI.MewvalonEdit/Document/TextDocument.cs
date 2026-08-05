@@ -7,6 +7,7 @@ namespace Aprillz.MewUI.MewvalonEdit.Document;
 public sealed class TextDocument : ITextSource
 {
     private readonly EditableTextDocument _document;
+    private readonly List<WeakReference<TextAnchor>> _anchors = [];
     private TextSourceVersion _version;
 
     public TextDocument()
@@ -125,10 +126,41 @@ public sealed class TextDocument : ITextSource
 
     public override string ToString() => Text;
 
+    /// <summary>
+    /// An anchor at <paramref name="offset"/> that moves with the text around it. Anchors are held
+    /// weakly, so one nobody keeps a reference to costs the document nothing.
+    /// </summary>
+    public TextAnchor CreateAnchor(int offset)
+    {
+        if (offset < 0 || offset > TextLength)
+        {
+            throw new ArgumentOutOfRangeException(nameof(offset));
+        }
+        var anchor = new TextAnchor(this, offset);
+        _anchors.Add(new WeakReference<TextAnchor>(anchor));
+        return anchor;
+    }
+
+    private void UpdateAnchors(in OffsetChangeMapEntry change)
+    {
+        for (int index = _anchors.Count - 1; index >= 0; index--)
+        {
+            if (_anchors[index].TryGetTarget(out var anchor))
+            {
+                anchor.Update(in change);
+            }
+            else
+            {
+                _anchors.RemoveAt(index);
+            }
+        }
+    }
+
     private void OnChanged(TextChange change)
     {
-        _version = _version.Append(
-            new OffsetChangeMapEntry(change.Offset, change.RemovedLength, change.InsertedLength));
+        var entry = new OffsetChangeMapEntry(change.Offset, change.RemovedLength, change.InsertedLength);
+        UpdateAnchors(in entry);
+        _version = _version.Append(entry);
         Changed?.Invoke(this, new DocumentChangeEventArgs(change.Offset, change.RemovedLength, change.InsertedLength));
         TextChanged?.Invoke(this, EventArgs.Empty);
     }

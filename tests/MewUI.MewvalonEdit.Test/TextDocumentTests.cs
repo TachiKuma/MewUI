@@ -132,6 +132,54 @@ public sealed class TextDocumentTests
     }
 
     [TestMethod]
+    public void AnchorsRideAlongWithTheirText()
+    {
+        var document = new TextDocument("hello world");
+        var anchor = document.CreateAnchor(9);
+
+        document.Replace(0, 5, "bye");
+
+        Assert.AreEqual(7, anchor.Offset, "Three characters replaced five, so the anchor moved back two.");
+        Assert.IsFalse(anchor.IsDeleted);
+        Assert.AreEqual(1, anchor.Line);
+        Assert.AreEqual(8, anchor.Column);
+    }
+
+    /// <summary>An anchor dies with the text it sat in unless it was told to survive.</summary>
+    [TestMethod]
+    public void AnchorInsideRemovedTextIsDeletedUnlessItSurvives()
+    {
+        var document = new TextDocument("hello world");
+        var dying = document.CreateAnchor(3);
+        var surviving = document.CreateAnchor(3);
+        surviving.SurviveDeletion = true;
+        int deletedRaised = 0;
+        dying.Deleted += (_, _) => deletedRaised++;
+
+        document.Replace(1, 6, string.Empty);
+
+        Assert.IsTrue(dying.IsDeleted);
+        Assert.AreEqual(1, deletedRaised);
+        Assert.ThrowsExactly<InvalidOperationException>(() => _ = dying.Offset);
+        Assert.IsFalse(surviving.IsDeleted);
+        Assert.AreEqual(1, surviving.Offset, "A survivor collapses to where the removal started.");
+    }
+
+    [TestMethod]
+    public void AnchorMovementDecidesWhichSideOfAnInsertionItStaysOn()
+    {
+        var document = new TextDocument("ab");
+        var before = document.CreateAnchor(1);
+        var after = document.CreateAnchor(1);
+        after.MovementType = AnchorMovementType.AfterInsertion;
+
+        document.Insert(1, "XYZ");
+
+        Assert.AreEqual(1, before.Offset);
+        Assert.AreEqual(4, after.Offset);
+    }
+
+    [TestMethod]
     public void DocumentUsesAvalonEditOneBasedLocations()
     {
         var document = new TextDocument("one\ntwo");
