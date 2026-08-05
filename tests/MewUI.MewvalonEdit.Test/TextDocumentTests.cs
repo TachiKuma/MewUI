@@ -5,6 +5,38 @@ namespace Aprillz.MewUI.MewvalonEdit.Test;
 [TestClass]
 public sealed class TextDocumentTests
 {
+    /// <summary>
+    /// A programmatic document edit is undoable, as in AvalonEdit. Editing the core document
+    /// straight through is unrecorded and drops the whole history, so the document has to route
+    /// its edits through the surface once an editor adopts it.
+    /// </summary>
+    [TestMethod]
+    public void ProgrammaticEditsStayUndoable()
+    {
+        var editor = new TextEditor { Text = "hello world" };
+        editor.CaretOffset = editor.Text.Length;
+        editor.TextArea.PerformTextInput("!");
+
+        editor.Document.Replace(0, 5, "bye");
+
+        Assert.AreEqual("bye world!", editor.Text);
+        Assert.IsTrue(editor.CanUndo, "The programmatic replace must be undoable.");
+        editor.Undo();
+        Assert.AreEqual("hello world!", editor.Text, "Undo rolls back only the programmatic replace.");
+    }
+
+    /// <summary>The caret rides along with the text instead of landing on a programmatic edit.</summary>
+    [TestMethod]
+    public void ProgrammaticEditKeepsTheCaretWithItsText()
+    {
+        var editor = new TextEditor { Text = "hello world" };
+        editor.CaretOffset = 9;
+
+        editor.Document.Replace(0, 5, "bye");
+
+        Assert.AreEqual(7, editor.CaretOffset, "Three characters replaced five, so the caret moved back two.");
+    }
+
     [TestMethod]
     public void DocumentUsesAvalonEditOneBasedLocations()
     {

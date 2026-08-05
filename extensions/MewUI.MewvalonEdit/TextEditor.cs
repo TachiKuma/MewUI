@@ -205,6 +205,7 @@ public class TextEditor : Control
         if (oldValue is not null)
         {
             oldValue.Changed -= OnDocumentTextChanged;
+            oldValue.Surface = null;
         }
         if (newValue is null)
         {
@@ -212,6 +213,7 @@ public class TextEditor : Control
         }
 
         newValue.Changed += OnDocumentTextChanged;
+        newValue.Surface = _surface;
         _surface.Document = newValue.CoreDocument;
         _lineNumberMargin.SyncWidthToLineCount();
         DocumentChanged?.Invoke(this, EventArgs.Empty);

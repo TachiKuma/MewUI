@@ -1,3 +1,4 @@
+using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Text;
 using Aprillz.MewUI.Text.Editing;
 
@@ -53,9 +54,26 @@ public sealed class TextDocument : ITextSource
         return GetText(segment.Offset, segment.Length);
     }
 
-    public void Insert(int offset, string text) => _document.Insert(offset, text);
-    public void Remove(int offset, int length) => _document.Remove(offset, length);
-    public void Replace(int offset, int length, string? text) => _document.Replace(offset, length, text);
+    /// <summary>
+    /// Surface this document is shown in, once an editor adopts it. Edits route through it so they
+    /// join the undo history; editing the core document directly is unrecorded and drops that history.
+    /// </summary>
+    internal MultiLineTextBox? Surface { get; set; }
+
+    public void Insert(int offset, string text) => Replace(offset, 0, text);
+    public void Remove(int offset, int length) => Replace(offset, length, string.Empty);
+
+    public void Replace(int offset, int length, string? text)
+    {
+        if (Surface is MultiLineTextBox surface)
+        {
+            surface.ReplaceRange(offset, length, text);
+        }
+        else
+        {
+            _document.Replace(offset, length, text);
+        }
+    }
     public void Replace(ISegment segment, string? text)
     {
         ArgumentNullException.ThrowIfNull(segment);
