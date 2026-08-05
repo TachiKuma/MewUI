@@ -51,10 +51,19 @@ public sealed class FoldingManager
         manager._editor.InvalidateTextView();
     }
 
+    /// <summary>Replaces the current foldings, keeping the folded state of sections that survive.</summary>
+    /// <param name="newFoldings">Sections the strategy found, sorted by start offset.</param>
+    /// <param name="firstErrorOffset">
+    /// Offset the parser stopped understanding the document at, or a negative value when it parsed
+    /// the whole document. Foldings at or after it are carried over from the current set.
+    /// </param>
     public void UpdateFoldings(IEnumerable<NewFolding> newFoldings, int firstErrorOffset)
     {
         ObjectDisposedException.ThrowIf(_uninstalled, this);
         ArgumentNullException.ThrowIfNull(newFoldings);
+        // Past the error the new list carries no information, so dropping those foldings would
+        // collapse regions the parser simply could not reach.
+        int keepFrom = firstErrorOffset < 0 ? int.MaxValue : firstErrorOffset;
         var ordered = newFoldings.OrderBy(static item => item.StartOffset).ThenBy(static item => item.EndOffset).ToArray();
         var existingByRange = new Dictionary<(int Start, int End), FoldingSection>(_foldings.Count);
         foreach (var existing in _foldings)
@@ -82,8 +91,25 @@ public sealed class FoldingManager
             else
             {
                 existing.Title = folding.Name;
+                existing.IsDefinition = folding.IsDefinition;
             }
             replacement.Add(existing);
+        }
+        if (keepFrom != int.MaxValue)
+        {
+            var claimed = new HashSet<(int Start, int End)>(
+                replacement.Select(static item => (item.StartOffset, item.EndOffset)));
+            foreach (var existing in _foldings)
+            {
+                if (existing.StartOffset >= keepFrom && claimed.Add((existing.StartOffset, existing.EndOffset)))
+                {
+                    replacement.Add(existing);
+                }
+            }
+            // GetNextFolding binary-searches this list, so the carried-over sections must land in order.
+            replacement.Sort(static (left, right) => left.StartOffset != right.StartOffset
+                ? left.StartOffset.CompareTo(right.StartOffset)
+                : left.EndOffset.CompareTo(right.EndOffset));
         }
         _foldings.Clear();
         _foldings.AddRange(replacement);

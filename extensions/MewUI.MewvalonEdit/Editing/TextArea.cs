@@ -51,8 +51,8 @@ public sealed class TextArea : MewObject
     /// </summary>
     public event Action<string>? TextEntered
     {
-        add => _editor.Surface.TextEntered += value;
-        remove => _editor.Surface.TextEntered -= value;
+        add => _editor.Surface.TextCommitted += value;
+        remove => _editor.Surface.TextCommitted -= value;
     }
 
     public static readonly MewProperty<Color?> SelectionBrushProperty =
@@ -161,8 +161,8 @@ public sealed class TextArea : MewObject
     /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>
     public IReadOnlySectionProvider? ReadOnlySectionProvider
     {
-        get => _editor.Surface.ReadOnlySections;
-        set => _editor.Surface.ReadOnlySections = value;
+        get => (_editor.Surface.EditableRegions as ReadOnlySectionAdapter)?.Provider;
+        set => _editor.Surface.EditableRegions = value is null ? null : new ReadOnlySectionAdapter(value);
     }
 
     /// <summary>Raised after the document was replaced.</summary>

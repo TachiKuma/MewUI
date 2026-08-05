@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.Text;
@@ -23,24 +22,12 @@ public class HighlightingColorizer(IHighlightingDefinition definition) : Documen
 
         // From the view per line, so a theme switch repaints in the other palette without rebuild.
         bool isDark = context.TextView.IsDarkTheme;
-        if (Definition.MainRuleSet.Spans.Count > 0)
+        // Every definition goes through the stateful highlighter, spans or not. A second, span-less
+        // path would resolve overlaps the other way round: last rule wins instead of first, which
+        // repaints a JSON key as a plain string.
+        foreach (var section in GetHighlighter(context.Document).HighlightLine(line.LineNumber).Sections)
         {
-            // Spans can cross lines, so the stateful highlighter owns the scan.
-            foreach (var section in GetHighlighter(context.Document).HighlightLine(line.LineNumber).Sections)
-            {
-                ApplyColorToElement(line.Offset + section.Offset, section.Length, section.Color, isDark);
-            }
-            return;
-        }
-
-        string text = context.Document.GetText(line.Offset, line.Length);
-        foreach (var rule in Definition.MainRuleSet.Rules)
-        {
-            foreach (Match match in rule.Regex.Matches(text))
-            {
-                if (!match.Success || match.Length == 0) continue;
-                ApplyColorToElement(line.Offset + match.Index, match.Length, rule.Color, isDark);
-            }
+            ApplyColorToElement(line.Offset + section.Offset, section.Length, section.Color, isDark);
         }
     }
 
@@ -85,6 +72,10 @@ public class HighlightingColorizer(IHighlightingDefinition definition) : Documen
             if (color.FontWeight is FontWeight weight)
             {
                 properties.SetTypeface(new Typeface(color.FontFamily ?? string.Empty, weight));
+            }
+            if (color.FontSize is double fontSize)
+            {
+                properties.SetFontRenderingEmSize(fontSize);
             }
         });
     }

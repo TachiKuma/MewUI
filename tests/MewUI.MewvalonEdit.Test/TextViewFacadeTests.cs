@@ -1,9 +1,9 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.MewvalonEdit;
 using Aprillz.MewUI.MewvalonEdit.Document;
+using Aprillz.MewUI.MewvalonEdit.Editing;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.Text;
-using Aprillz.MewUI.Text.Editing;
 
 namespace MewUI.MewvalonEdit.Test;
 
@@ -112,8 +112,6 @@ public sealed class TextViewFacadeTests
     {
         public bool CanInsert(int offset) => false;
 
-        public void GetDeletableSegments(TextRange range, IList<TextRange> output)
-        {
-        }
+        public IEnumerable<ISegment> GetDeletableSegments(ISegment segment) => [];
     }
 }

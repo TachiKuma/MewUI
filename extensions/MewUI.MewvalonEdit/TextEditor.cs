@@ -26,7 +26,6 @@ public class TextEditor : Control
     private readonly LineTransformerAdapter _lineTransformers;
     private readonly ElementGeneratorAdapter _elementGenerators;
     private readonly BackgroundRendererRegistry _backgroundRenderers;
-    private bool _highlightingRefreshPending;
 
     public TextEditor()
     {
@@ -397,7 +396,7 @@ public class TextEditor : Control
             // First in the list: syntax colors are the base layer, so whitespace markers and search
             // highlights registered later keep their own colors where the ranges overlap.
             _colorizer = new HighlightingColorizer(definition);
-            _colorizer.HighlightingStateChanged += (_, _) => RequestHighlightingRefresh();
+            _colorizer.HighlightingStateChanged += RepaintHighlightedLines;
             LineTransformers.Insert(0, _colorizer);
             // The highlighter is reachable from the view alone, as in AvalonEdit, so ported code
             // that only holds a TextView can still ask for the document's highlighting state.
@@ -411,26 +410,17 @@ public class TextEditor : Control
     }
 
     /// <summary>
-    /// Repaints after a highlighting span changed the state the lines below start from. The signal
-    /// arrives while a line is being laid out, so the rebuild is posted instead of run in place.
+    /// Rebuilds the lines a highlighting span changed the starting state of. The signal arrives
+    /// while a line is being laid out; the surface absorbs that and rebuilds once the pass ends.
     /// </summary>
-    private void RequestHighlightingRefresh()
+    private void RepaintHighlightedLines(int fromLineNumber, int toLineNumber)
     {
-        if (_highlightingRefreshPending)
-        {
-            return;
-        }
-        var dispatcher = Application.IsRunning ? Application.Current.Dispatcher : null;
-        if (dispatcher is null)
-        {
-            return;
-        }
-        _highlightingRefreshPending = true;
-        dispatcher.BeginInvoke(() =>
-        {
-            _highlightingRefreshPending = false;
-            InvalidateTextView();
-        });
+        var document = Document;
+        int first = Math.Clamp(fromLineNumber, 1, document.LineCount);
+        int last = Math.Clamp(toLineNumber, first, document.LineCount);
+        int start = document.GetLineByNumber(first).Offset;
+        var lastLine = document.GetLineByNumber(last);
+        _surface.InvalidateTextRange(start, lastLine.Offset + lastLine.TotalLength - start);
     }
 
     private void OnDocumentTextChanged(object? sender, DocumentChangeEventArgs e)

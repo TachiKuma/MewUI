@@ -54,14 +54,15 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
         foreach (var element in _elements)
         {
             var properties = element.TextRunProperties;
+            var foreground = element.Foreground ?? properties.ForegroundBrush;
             var background = element.BackgroundBrush ?? properties.BackgroundBrush;
-            if (!properties.HasPaint && !background.HasValue)
+            if (!foreground.HasValue && !background.HasValue && properties.TextDecorations == TextDecoration.None)
             {
                 continue;
             }
             output.Add(new TextPaintSpan(
                 new TextRange(element.RelativeTextOffset, element.DocumentLength),
-                properties.ForegroundBrush,
+                foreground,
                 background,
                 properties.TextDecorations));
         }

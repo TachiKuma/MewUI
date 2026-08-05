@@ -14,6 +14,27 @@ public sealed class DocumentHighlighterTests
         return definition;
     }
 
+    /// <summary>
+    /// Rules are tried in registration order and the first one to match a position keeps it, so a
+    /// JSON key stays a key even though the plain string rule registered after it matches the same
+    /// text. Only one scan path may exist, or the two disagree on exactly this.
+    /// </summary>
+    [TestMethod]
+    public void EarlierRulesWinWhereTheyOverlapLaterOnes()
+    {
+        var definition = HighlightingManager.Instance.GetDefinition("JSON");
+        Assert.IsNotNull(definition);
+        Assert.IsEmpty(definition.MainRuleSet.Spans, "This guards the definition shape the case relies on.");
+        var document = new TextDocument("""{ "name": "value" }""");
+        using var highlighter = new DocumentHighlighter(document, definition);
+
+        var line = highlighter.HighlightLine(1);
+
+        var key = line.Sections.Single(section => section.Offset == 2);
+        var value = line.Sections.Single(section => section.Offset == 10);
+        Assert.AreNotEqual(key.Color.Foreground, value.Color.Foreground);
+    }
+
     [TestMethod]
     public void BlockCommentKeepsItsColorAcrossLines()
     {

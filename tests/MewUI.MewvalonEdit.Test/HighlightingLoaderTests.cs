@@ -102,6 +102,48 @@ public sealed class HighlightingLoaderTests
         Assert.AreEqual("Compute".Length, call.Length);
     }
 
+    /// <summary>
+    /// A rule set written inside a Span belongs to that span: it colors what it matches within the
+    /// span and leaves identical text outside it alone.
+    /// </summary>
+    [TestMethod]
+    public void NestedRuleSetsApplyOnlyInsideTheirSpan()
+    {
+        const string SOURCE = """
+            <?xml version="1.0"?>
+            <SyntaxDefinition name="Nested" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+              <Color name="String" foreground="Maroon" />
+              <Color name="Escape" foreground="Teal" />
+              <RuleSet>
+                <Span color="String">
+                  <Begin>"</Begin>
+                  <End>"</End>
+                  <RuleSet>
+                    <Rule color="Escape">\\.</Rule>
+                  </RuleSet>
+                </Span>
+              </RuleSet>
+            </SyntaxDefinition>
+            """;
+
+        var definition = HighlightingLoader.Load(SOURCE);
+        Assert.IsNotNull(definition.MainRuleSet.Spans.Single().RuleSet, "The span must own the nested set.");
+        Assert.IsEmpty(definition.MainRuleSet.Rules, "The nested set must not leak into the enclosing one.");
+
+        var document = new TextDocument("""a\nb "c\nd" """);
+        using var highlighter = new DocumentHighlighter(document, definition);
+
+        var line = highlighter.HighlightLine(1);
+
+        var escapes = line.Sections
+            .Where(section => section.Color.Foreground == Color.FromRgb(0, 128, 128))
+            .ToArray();
+        var escape = escapes.Single();
+        // The text holds the same backslash pair twice; only the one between the quotes is an escape.
+        Assert.AreEqual(document.Text.LastIndexOf('\\'), escape.Offset);
+        Assert.AreEqual(2, escape.Length);
+    }
+
     [TestMethod]
     public void InvalidXmlIsReportedAsADefinitionError()
         => Assert.ThrowsExactly<HighlightingDefinitionInvalidException>(

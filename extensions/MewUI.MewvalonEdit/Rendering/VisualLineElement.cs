@@ -46,8 +46,6 @@ public sealed class VisualLineElementTextRunProperties
         Italic = value.Italic;
     }
 
-    internal bool HasPaint => ForegroundBrush.HasValue || BackgroundBrush.HasValue || TextDecorations != TextDecoration.None;
-
     internal bool HasFont => FontFamily is not null || FontRenderingEmSize.HasValue || FontWeight.HasValue || Italic.HasValue;
 }
 

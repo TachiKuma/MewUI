@@ -99,12 +99,25 @@ public sealed class HighlightingEngine(HighlightingRuleSet mainRuleSet)
 
         if (_spanStack.Count > 0)
         {
-            AddSection(_position, until - _position, _spanStack[^1].SpanColor);
-            _position = until;
+            var span = _spanStack[^1];
+            // The span colors the whole run first; its own rules then paint over what they match,
+            // which is how a nested set (escapes inside a string, say) stays confined to the span.
+            AddSection(_position, until - _position, span.SpanColor);
+            ApplyRules(span.RuleSet?.Rules, until);
+        }
+        else
+        {
+            ApplyRules(CurrentRuleSet.Rules, until);
+        }
+        _position = until;
+    }
+
+    private void ApplyRules(IList<HighlightingRule>? rules, int until)
+    {
+        if (rules is null || rules.Count == 0)
+        {
             return;
         }
-
-        var rules = CurrentRuleSet.Rules;
         int scan = _position;
         while (scan < until)
         {
@@ -130,7 +143,6 @@ public sealed class HighlightingEngine(HighlightingRuleSet mainRuleSet)
             AddSection(best.Index, best.Length, bestRule!.Color);
             scan = best.Index + best.Length;
         }
-        _position = until;
     }
 
     private Match? MatchOrNull(Regex? expression, int start)

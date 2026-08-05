@@ -60,13 +60,13 @@ public static class HighlightingLoader
 
         foreach (var ruleSet in root.Elements(ns + "RuleSet"))
         {
-            LoadRuleSet(definition, ruleSet, ns, colors);
+            LoadRuleSet(definition.MainRuleSet, ruleSet, ns, colors);
         }
         return definition;
     }
 
     private static void LoadRuleSet(
-        HighlightingDefinition definition,
+        HighlightingRuleSet target,
         XElement ruleSet,
         XNamespace ns,
         Dictionary<string, HighlightingColor> colors)
@@ -82,23 +82,35 @@ public static class HighlightingLoader
                     .ToArray();
                 if (words.Length > 0)
                 {
-                    definition.AddRule($@"\b(?:{string.Join('|', words)})\b", color);
+                    target.Rules.Add(CreateRule($@"\b(?:{string.Join('|', words)})\b", color, RegexOptions.None));
                 }
             }
             else if (element.Name == ns + "Rule")
             {
                 // Element bodies are written free-form with comments, as AvalonEdit's loader assumes.
-                definition.AddRule(element.Value.Trim(), ResolveColor(element, colors), RegexOptions.IgnorePatternWhitespace);
+                string pattern = element.Value.Trim();
+                if (pattern.Length > 0)
+                {
+                    target.Rules.Add(CreateRule(
+                        pattern, ResolveColor(element, colors), RegexOptions.IgnorePatternWhitespace));
+                }
             }
             else if (element.Name == ns + "Span")
             {
-                LoadSpan(definition, element, ns, colors);
+                LoadSpan(target, element, ns, colors);
             }
         }
     }
 
+    private static HighlightingRule CreateRule(string pattern, HighlightingColor color, RegexOptions options)
+        => new()
+        {
+            Regex = new Regex(pattern, RegexOptions.CultureInvariant | options),
+            Color = color
+        };
+
     private static void LoadSpan(
-        HighlightingDefinition definition,
+        HighlightingRuleSet target,
         XElement span,
         XNamespace ns,
         Dictionary<string, HighlightingColor> colors)
@@ -120,19 +132,31 @@ public static class HighlightingLoader
 
         if (string.IsNullOrEmpty(end))
         {
-            // A span without an end runs to the end of the line, which a plain rule expresses.
-            definition.AddRule($"(?:{begin}).*$", color, options);
-        }
-        else
-        {
-            definition.AddSpan(begin, end, color, options);
+            // A span without an end runs to the end of the line, which a plain rule expresses. Its
+            // nested sets go with it: one rule paints the whole run, so nothing could apply inside.
+            target.Rules.Add(CreateRule($"(?:{begin}).*$", color, options));
+            return;
         }
 
-        // Nested sets are flattened: their rules stay usable even though the span state is single level.
-        foreach (var nested in span.Elements(ns + "RuleSet"))
+        var created = new HighlightingSpan
         {
-            LoadRuleSet(definition, nested, ns, colors);
+            StartExpression = new Regex(begin, RegexOptions.CultureInvariant | options),
+            EndExpression = new Regex(end, RegexOptions.CultureInvariant | options),
+            SpanColor = color
+        };
+        var nestedSets = span.Elements(ns + "RuleSet").ToArray();
+        if (nestedSets.Length > 0)
+        {
+            // Kept on the span rather than folded into the enclosing set, or its rules would also
+            // colour text outside the span.
+            var nested = new HighlightingRuleSet();
+            foreach (var element in nestedSets)
+            {
+                LoadRuleSet(nested, element, ns, colors);
+            }
+            created.RuleSet = nested;
         }
+        target.Spans.Add(created);
     }
 
     private static HighlightingColor ResolveColor(XElement element, Dictionary<string, HighlightingColor> colors)
