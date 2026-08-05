@@ -37,10 +37,14 @@ public sealed class TextDocument : ITextSource
 
     internal EditableTextDocument CoreDocument => _document;
 
+    /// <summary>
+    /// The whole text. Assigning replaces it through the ordinary edit path, so the replacement is
+    /// undoable as in the original, where the setter is a <c>Replace</c> over the document.
+    /// </summary>
     public string Text
     {
         get => _document.ToString();
-        set => _document.SetText(value);
+        set => Replace(0, TextLength, value ?? string.Empty);
     }
 
     public int TextLength => _document.TextLength;

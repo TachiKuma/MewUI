@@ -25,6 +25,42 @@ public sealed class TextDocumentTests
         Assert.AreEqual("hello world!", editor.Text, "Undo rolls back only the programmatic replace.");
     }
 
+    /// <summary>
+    /// Assigning the editor's text starts over, as in the original: the caret returns to the
+    /// beginning and the history goes with it.
+    /// </summary>
+    [TestMethod]
+    public void AssigningEditorTextResetsTheCaretAndDropsTheHistory()
+    {
+        var editor = new TextEditor { Text = "hello world" };
+        editor.CaretOffset = editor.Text.Length;
+        editor.TextArea.PerformTextInput("!");
+        Assert.IsTrue(editor.CanUndo);
+
+        editor.Text = "replaced";
+
+        Assert.AreEqual("replaced", editor.Text);
+        Assert.AreEqual(0, editor.CaretOffset);
+        Assert.IsFalse(editor.CanUndo, "The text that was replaced cannot be brought back.");
+    }
+
+    /// <summary>
+    /// Assigning the document's text is an ordinary replace, so it stays undoable. Only the editor's
+    /// own Text setter starts over.
+    /// </summary>
+    [TestMethod]
+    public void AssigningDocumentTextStaysUndoable()
+    {
+        var editor = new TextEditor { Text = "hello world" };
+
+        editor.Document.Text = "replaced";
+
+        Assert.AreEqual("replaced", editor.Text);
+        Assert.IsTrue(editor.CanUndo);
+        editor.Undo();
+        Assert.AreEqual("hello world", editor.Text);
+    }
+
     /// <summary>The caret rides along with the text instead of landing on a programmatic edit.</summary>
     [TestMethod]
     public void ProgrammaticEditKeepsTheCaretWithItsText()
@@ -169,7 +205,9 @@ public sealed class TextDocumentTests
     public void AnchorMovementDecidesWhichSideOfAnInsertionItStaysOn()
     {
         var document = new TextDocument("ab");
+        var byDefault = document.CreateAnchor(1);
         var before = document.CreateAnchor(1);
+        before.MovementType = AnchorMovementType.BeforeInsertion;
         var after = document.CreateAnchor(1);
         after.MovementType = AnchorMovementType.AfterInsertion;
 
@@ -177,6 +215,7 @@ public sealed class TextDocumentTests
 
         Assert.AreEqual(1, before.Offset);
         Assert.AreEqual(4, after.Offset);
+        Assert.AreEqual(4, byDefault.Offset, "Default moves behind the insertion, as in the original.");
     }
 
     [TestMethod]

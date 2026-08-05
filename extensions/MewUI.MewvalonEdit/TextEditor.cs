@@ -56,6 +56,7 @@ public class TextEditor : Control
             CornerRadius = 0
         };
         _surface.KeyDown += OnSurfaceKeyDown;
+        _surface.TextCommitted += OnTextCommitted;
         _surface.TextInput += OnSurfaceTextInput;
         _surface.MouseDown += OnSurfaceMouseDown;
         _surface.MouseMove += OnSurfaceMouseMove;
@@ -225,10 +226,20 @@ public class TextEditor : Control
     public TextArea TextArea { get; }
     public IIndentationStrategy? IndentationStrategy { get; set; }
 
+    /// <summary>
+    /// The document text. Assigning it starts over: the caret returns to the beginning and the undo
+    /// history is dropped, so the text that was there cannot be brought back.
+    /// </summary>
     public string Text
     {
         get => Document.Text;
-        set => Document.Text = value ?? string.Empty;
+        set
+        {
+            // Through the surface, whose own setter drops the history the way the original's
+            // UndoStack.ClearAll does; Document.Text alone would leave the replace undoable.
+            _surface.Text = value ?? string.Empty;
+            CaretOffset = 0;
+        }
     }
 
     public static readonly MewProperty<IHighlightingDefinition?> SyntaxHighlightingProperty =
@@ -502,6 +513,37 @@ public class TextEditor : Control
         }
         e.Handled = true;
         _surface.ReplaceSelection(newLine);
+    }
+
+    /// <summary>
+    /// Indents the line the caret landed on after a line break, which is where the original applies
+    /// the strategy. A line that is not fully editable is left alone, as there too.
+    /// </summary>
+    private void OnTextCommitted(string text)
+    {
+        if (IndentationStrategy is null || !TextUtilities.IsNewLine(text))
+        {
+            return;
+        }
+        var line = Document.GetLineByNumber(Document.GetLocation(CaretOffset).Line);
+        if (!IsFullyEditable(line))
+        {
+            return;
+        }
+        IndentationStrategy.IndentLine(Document, line);
+    }
+
+    private bool IsFullyEditable(DocumentLine line)
+    {
+        var provider = TextArea.ReadOnlySectionProvider;
+        if (provider is null)
+        {
+            return true;
+        }
+        var deletable = provider.GetDeletableSegments(new SimpleSegment(line.Offset, line.Length)).ToArray();
+        return deletable.Length == 1
+            && deletable[0].Offset == line.Offset
+            && deletable[0].Length == line.Length;
     }
 
     private void OnSurfaceTextInput(TextInputEventArgs e)

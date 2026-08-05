@@ -39,9 +39,11 @@ public readonly struct OffsetChangeMapEntry(int offset, int removalLength, int i
                 return oldOffset + InsertionLength - RemovalLength;
             }
         }
-        return movementType == AnchorMovementType.AfterInsertion
-            ? Offset + InsertionLength
-            : Offset;
+        // Default follows AfterInsertion here. The original decides it per change through a flag on
+        // the entry, and every change a document raises leaves that flag clear.
+        return movementType == AnchorMovementType.BeforeInsertion
+            ? Offset
+            : Offset + InsertionLength;
     }
 
     public bool Equals(OffsetChangeMapEntry other)

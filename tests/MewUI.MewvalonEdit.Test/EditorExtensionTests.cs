@@ -70,6 +70,43 @@ public sealed class EditorExtensionTests
         Assert.AreEqual("\t  parent\n\t  child", document.Text);
     }
 
+    /// <summary>
+    /// The strategy has to be reached by pressing Enter, not only by calling it. Storing it without
+    /// a caller leaves an editor that quietly refuses to indent.
+    /// </summary>
+    [TestMethod]
+    public void PressingEnterRunsTheIndentationStrategy()
+    {
+        var editor = new TextEditor
+        {
+            Text = "\t  parent",
+            IndentationStrategy = new DefaultIndentationStrategy()
+        };
+        editor.CaretOffset = editor.Document.TextLength;
+
+        editor.TextArea.PerformTextInput("\n");
+
+        Assert.AreEqual("\t  parent\n\t  ", editor.Text);
+        Assert.AreEqual(editor.Document.TextLength, editor.CaretOffset,
+            "The caret ends after the indentation it was given.");
+    }
+
+    /// <summary>Ordinary typing must not re-run the strategy over the line.</summary>
+    [TestMethod]
+    public void TypingTextLeavesTheIndentationAlone()
+    {
+        var editor = new TextEditor
+        {
+            Text = "\t  parent\nchild",
+            IndentationStrategy = new DefaultIndentationStrategy()
+        };
+        editor.CaretOffset = editor.Document.TextLength;
+
+        editor.TextArea.PerformTextInput("!");
+
+        Assert.AreEqual("\t  parent\nchild!", editor.Text);
+    }
+
     [TestMethod]
     public void CompletionSessionFiltersByTypedPrefixAndCompletesSelection()
     {
