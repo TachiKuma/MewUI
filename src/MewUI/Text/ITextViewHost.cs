@@ -30,7 +30,7 @@ public interface ITextViewHost
     /// <summary>Raised after the visible lines were built.</summary>
     event Action<ITextViewHost>? LinesChanged;
 
-    /// <summary>Lines currently laid out, in document order. A margin reads these to place its rows.</summary>
+    /// <summary>Lines currently laid out, in document order, with their document-space positions.</summary>
     IReadOnlyList<TextLineLayout> VisibleTextLines { get; }
 
     /// <summary>Area the text is drawn into, excluding chrome.</summary>
@@ -54,7 +54,7 @@ public interface ITextViewHost
     /// <summary>Scroll offset of the view in document coordinates.</summary>
     Point ScrollOffset { get; }
 
-    /// <summary>Raised after <see cref="ScrollOffset"/> changed, so margins can follow the view.</summary>
+    /// <summary>Raised after <see cref="ScrollOffset"/> changed.</summary>
     event Action<ITextViewHost>? ScrollOffsetChanged;
 
     /// <summary>
@@ -69,6 +69,9 @@ public interface ITextViewHost
     /// <summary>Inserts a layer relative to a built-in anchor.</summary>
     void InsertLayer(ITextViewLayer layer, TextViewLayerAnchor anchor, TextLayerPosition position);
 
-    /// <summary>Repaints the layer stack without rebuilding any line.</summary>
+    /// <summary>
+    /// Discards what the anchor group drew and repaints it, leaving every line layout in place. A
+    /// host that does not cache rendered layers may repaint the whole stack instead.
+    /// </summary>
     void InvalidateLayer(TextViewLayerAnchor anchor);
 }

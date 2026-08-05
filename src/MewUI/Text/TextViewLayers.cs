@@ -6,6 +6,11 @@ namespace Aprillz.MewUI.Text;
 /// </summary>
 public interface ITextViewLayer
 {
+    /// <summary>
+    /// Paints this layer. A host may cache the result, so this is not guaranteed to run once per
+    /// frame; a layer whose appearance changed must call
+    /// <see cref="ITextViewHost.InvalidateLayer"/> rather than wait for the next call.
+    /// </summary>
     void Draw(ITextRenderContext context, Rect viewportBounds);
 }
 
@@ -30,6 +35,7 @@ public enum TextLayerPosition
 public sealed class TextViewLayerStack
 {
     private readonly List<Entry> _entries;
+    private ITextViewLayer[]? _layers;
 
     /// <summary>
     /// Creates the stack with the host's own drawing already in it. The host passes one layer per
@@ -51,7 +57,7 @@ public sealed class TextViewLayerStack
 
     /// <summary>Layers in draw order, the host's built-in ones included.</summary>
     public IReadOnlyList<ITextViewLayer> Layers
-        => _entries.Select(entry => entry.Layer).ToArray();
+        => _layers ??= _entries.Select(entry => entry.Layer).ToArray();
 
     /// <summary>Inserts <paramref name="layer"/> relative to <paramref name="anchor"/>.</summary>
     public void Insert(ITextViewLayer layer, TextViewLayerAnchor anchor, TextLayerPosition position)
@@ -70,6 +76,7 @@ public sealed class TextViewLayerStack
                 _entries.Insert(index + 1, new Entry(anchor, layer, IsAnchor: false));
                 break;
         }
+        _layers = null;
         Changed?.Invoke();
     }
 
