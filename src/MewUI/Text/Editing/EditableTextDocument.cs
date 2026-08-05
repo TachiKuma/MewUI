@@ -17,11 +17,11 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
     {
     }
 
-    /// <param name="preserveLineEndings">
-    /// Keeps each line's own terminator instead of rewriting every one to a line feed. A document
-    /// that round-trips a file needs this; a text box does not, and the default stays normalized so
-    /// its offsets never straddle a two-character terminator.
-    /// </param>
+    /// <summary>
+    /// Preserving keeps each line's own terminator instead of rewriting every one to a line feed. A
+    /// document that round-trips a file needs that; a text box does not, and the normalizing default
+    /// keeps offsets from straddling a two-character terminator.
+    /// </summary>
     internal EditableTextDocument(string? text, bool preserveLineEndings)
     {
         PreservesLineEndings = preserveLineEndings;
@@ -279,7 +279,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
         public int LineNumber { get; } = lineNumber;
         public int Offset { get; } = offset;
         public int Length { get; } = length;
-        public int TotalLength => Length + delimiter.Length;
         public string Delimiter { get; } = delimiter;
+        public int TotalLength => Length + Delimiter.Length;
     }
 }
