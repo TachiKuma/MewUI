@@ -209,6 +209,17 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     public void Select(int start, int length) => _editor.SetSelection(start, length);
 
+    /// <summary>
+    /// Moves the caret, keeping the selection anchor where it is when extending. Extending is what
+    /// a shifted arrow key does, and it is the only way to build a selection whose caret sits at its
+    /// start: <see cref="Select"/> always leaves the caret at the end.
+    /// </summary>
+    public void MoveCaret(int position, bool extendSelection)
+    {
+        _editor.SetCaret(position, extendSelection);
+        EnsureCaretVisible();
+    }
+
     public void SelectAll() => _editor.SelectAll();
 
     /// <summary>Scrolls the view so the caret is visible.</summary>
