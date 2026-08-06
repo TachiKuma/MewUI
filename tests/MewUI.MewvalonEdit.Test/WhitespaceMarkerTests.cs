@@ -65,6 +65,24 @@ public sealed class WhitespaceMarkerTests
         Assert.AreEqual(plain, marked, 0.01, "The line width moved when space markers were turned on.");
     }
 
+    /// <summary>
+    /// Toggling the option shows immediately. The scanned elements cache on the document version,
+    /// so an option the generators read leaves it stale and the marker waits for the next edit.
+    /// </summary>
+    [TestMethod]
+    public void TogglingSpaceMarkersShowsWithoutAnEdit()
+    {
+        RequireWindows();
+        var editor = CreateEditor("a b c", static _ => { });
+        byte[] off = Render(editor);
+
+        editor.Options.ShowSpaces = true;
+        byte[] on = Render(editor);
+
+        Assert.IsGreaterThan(0, DifferingPixels(off, on),
+            "The space markers only appeared after the next edit.");
+    }
+
     private static void RequireWindows()
     {
         if (!OperatingSystem.IsWindows())
@@ -85,9 +103,12 @@ public sealed class WhitespaceMarkerTests
     }
 
     private static int DifferingPixels(string text, Action<TextEditorOptions> configure)
+        => DifferingPixels(
+            Render(CreateEditor(text, static _ => { })),
+            Render(CreateEditor(text, configure)));
+
+    private static int DifferingPixels(byte[] off, byte[] on)
     {
-        byte[] off = Render(CreateEditor(text, static _ => { }));
-        byte[] on = Render(CreateEditor(text, configure));
         int differing = 0;
         for (int index = 0; index < Math.Min(off.Length, on.Length); index += 4)
         {

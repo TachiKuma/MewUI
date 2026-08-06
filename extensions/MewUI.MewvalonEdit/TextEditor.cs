@@ -657,6 +657,9 @@ public class TextEditor : Control
     {
         _surface.TabSize = Options.IndentationSize;
         UpdateBuiltInElementGenerators();
+        // A generator reads the options while it scans, and the scan cache keys on the document
+        // version alone, so without this a toggled option waits for the next edit to show.
+        _elementGenerators.InvalidateScans();
         _surface.InvalidateTextView();
     }
 

@@ -130,9 +130,22 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
     private readonly RunConstructionContext _context = new(editor);
     private readonly Dictionary<int, CachedScan> _scans = [];
     private long _scanVersion = -1;
+    private int _scanGeneration;
+    private int _cachedGeneration;
+    private ExtensionList<VisualLineElementGenerator>? _generators;
 
-    public IList<VisualLineElementGenerator> Generators { get; } =
-        new ExtensionList<VisualLineElementGenerator>(editor.InvalidateTextView);
+    public IList<VisualLineElementGenerator> Generators
+        => _generators ??= new ExtensionList<VisualLineElementGenerator>(() =>
+        {
+            InvalidateScans();
+            editor.InvalidateTextView();
+        });
+
+    /// <summary>
+    /// Drops the scanned elements. The cache keys on the document version, so a change to what the
+    /// generators produce, such as an option turning one on, leaves it stale until the next edit.
+    /// </summary>
+    public void InvalidateScans() => _scanGeneration++;
 
     public ProjectedText Project(in TextProjectionContext context)
     {
@@ -262,10 +275,11 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
     private CachedScan EnsureScanned(in LogicalTextLine logical)
     {
         long version = editor.Document.CoreDocument.Version;
-        if (version != _scanVersion)
+        if (version != _scanVersion || _scanGeneration != _cachedGeneration)
         {
             _scans.Clear();
             _scanVersion = version;
+            _cachedGeneration = _scanGeneration;
         }
         if (_scans.TryGetValue(logical.Offset, out var cached) && cached.Length == logical.Length)
         {
