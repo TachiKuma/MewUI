@@ -154,7 +154,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         }
         var caret = _view.GetCaretBounds(Math.Clamp(charIndex, 0, _document.TextLength));
         return new Rect(
-            _contentBounds.X + caret.X - _horizontalOffset,
+            GetTextOriginX() + caret.X,
             _contentBounds.Y + caret.Y - _verticalOffset,
             caret.Width,
             caret.Height);
@@ -340,9 +340,19 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     {
         double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
         return new Point(
-            _contentBounds.X - _horizontalOffset,
+            GetTextOriginX(),
             _contentBounds.Y + documentY - _verticalOffset);
     }
+
+    /// <summary>
+    /// Left edge the text is drawn from, on a whole device pixel. The engine lays a line out on the
+    /// pixel grid and every backend draws a run at a whole pixel, so an origin between pixels lets
+    /// each run round on its own and the glyphs shift whenever an inline object splits a line. The
+    /// scroll offset itself keeps its exact value: caret tracking over virtualized lines converges
+    /// on it, and quantizing it there strands the caret outside the viewport.
+    /// </summary>
+    private double GetTextOriginX()
+        => LayoutRounding.RoundToPixel(_contentBounds.X - _horizontalOffset, GetDpi() / 96.0);
 
     private TextPaintSpan[] CreateSelectionSpans(TextLineLayout line, TextRange selection)
     {

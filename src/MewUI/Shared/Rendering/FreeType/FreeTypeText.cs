@@ -322,7 +322,7 @@ internal static unsafe class FreeTypeText
                                 double bitmapScale = fallbackFace.BitmapScale;
                                 long clusterTotal = 0;
                                 for (int j = 0; j < reshaped.Length; j++)
-                                    clusterTotal += (long)Math.Round(reshaped[j].XAdvance26_6 * bitmapScale);
+                                    clusterTotal += SnapAdvanceToPixels((long)Math.Round(reshaped[j].XAdvance26_6 * bitmapScale));
                                 total += clusterTotal;
                                 RecordClusterAdvance(clusterAdvances26_6, textStart, clusterTotal);
                                 continue;
@@ -335,7 +335,7 @@ internal static unsafe class FreeTypeText
                 for (int j = runStart; j <= i; j++)
                 {
                     ref readonly var gg = ref glyphs[j];
-                    long advance = gg.XAdvance26_6;
+                    long advance = SnapAdvanceToPixels(gg.XAdvance26_6);
                     uint codepoint = GetCodepointFromCluster(sourceText, gg.Cluster);
                     if (codepoint != 0)
                     {
@@ -352,8 +352,9 @@ internal static unsafe class FreeTypeText
                 continue;
             }
 
-            total += g.XAdvance26_6;
-            RecordClusterAdvance(clusterAdvances26_6, (int)g.Cluster, g.XAdvance26_6);
+            long snapped = SnapAdvanceToPixels(g.XAdvance26_6);
+            total += snapped;
+            RecordClusterAdvance(clusterAdvances26_6, (int)g.Cluster, snapped);
         }
 
         return (int)Math.Round(total / 64.0, MidpointRounding.AwayFromZero);
@@ -504,6 +505,15 @@ internal static unsafe class FreeTypeText
         return prefix;
     }
 
+    /// <summary>
+    /// Snaps one 26.6 glyph advance to a whole pixel, as the GDI and DirectWrite paths already
+    /// report. Reported metrics and rasterization both go through this, so a glyph is drawn where
+    /// the layout says it is. Every advance is snapped rather than the running total: the renderer
+    /// draws a run at a whole pixel, and only whole advances make the sum of a run's advances
+    /// independent of where the run was cut, which is what an inline object does to a line.
+    /// </summary>
+    private static long SnapAdvanceToPixels(long advance26_6) => ((advance26_6 + 32) >> 6) << 6;
+
     private static int GetKerningPx(FreeTypeFaceCache.FaceEntry face, uint leftGlyph, uint rightGlyph)
     {
         if (leftGlyph == 0 || rightGlyph == 0)
@@ -604,7 +614,7 @@ internal static unsafe class FreeTypeText
                             }
                         }
                     }
-                    penX26_6 += gg.XAdvance26_6;
+                    penX26_6 += SnapAdvanceToPixels(gg.XAdvance26_6);
                 }
                 continue;
             }
@@ -647,7 +657,7 @@ internal static unsafe class FreeTypeText
             }
 
             Advance:
-            penX26_6 += g.XAdvance26_6;
+            penX26_6 += SnapAdvanceToPixels(g.XAdvance26_6);
         }
     }
 

@@ -522,7 +522,8 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     {
         double documentY = line.VisualLines.Count == 0 ? 0 : line.VisualLines[0].Bounds.Y;
         return new Point(
-            _contentBounds.X - _horizontalOffset,
+            // On a whole device pixel, for the reason given in MultiLineTextBox.GetTextOriginX.
+            LayoutRounding.RoundToPixel(_contentBounds.X - _horizontalOffset, GetDpi() / 96.0),
             _contentBounds.Y + documentY - _verticalOffset);
     }
 

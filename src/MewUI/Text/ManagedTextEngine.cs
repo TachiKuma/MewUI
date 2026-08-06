@@ -218,7 +218,11 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                     clusterStart,
                     Math.Max(clusterLength, inline.Length),
                     0,
-                    metrics.Width,
+                    // Whole device pixels, as every text advance already is. An object free to
+                    // report a fractional width, such as a box with padding around a glyph, would
+                    // otherwise push the rest of the line off the pixel grid, and each run after it
+                    // would round on its own.
+                    LayoutRounding.RoundToPixel(metrics.Width, snapshot.Dpi / 96.0),
                     metrics.Height,
                     metrics.Baseline,
                     style,
