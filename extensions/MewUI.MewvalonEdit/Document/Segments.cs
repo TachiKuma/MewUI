@@ -31,7 +31,25 @@ public readonly record struct SimpleSegment(int Offset, int Length) : ISegment
     public int EndOffset => Offset + Length;
 }
 
-public readonly record struct TextLocation(int Line, int Column);
+/// <summary>A one-based line and column in a document. Ordered by line, then column.</summary>
+public readonly record struct TextLocation(int Line, int Column) : IComparable<TextLocation>
+{
+    /// <summary>The location no line and column can be, used where a location is missing.</summary>
+    public static readonly TextLocation Empty = new(0, 0);
+
+    public bool IsEmpty => Line <= 0 && Column <= 0;
+
+    public int CompareTo(TextLocation other)
+        => Line != other.Line ? Line.CompareTo(other.Line) : Column.CompareTo(other.Column);
+
+    public static bool operator <(TextLocation left, TextLocation right) => left.CompareTo(right) < 0;
+
+    public static bool operator >(TextLocation left, TextLocation right) => left.CompareTo(right) > 0;
+
+    public static bool operator <=(TextLocation left, TextLocation right) => left.CompareTo(right) <= 0;
+
+    public static bool operator >=(TextLocation left, TextLocation right) => left.CompareTo(right) >= 0;
+}
 
 /// <summary>A replace that happened to a text source, with the text on both sides of it.</summary>
 public class TextChangeEventArgs(int offset, string? removedText, string? insertedText) : EventArgs

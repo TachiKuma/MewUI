@@ -312,22 +312,74 @@ public sealed class TextView : MewObject, ITextEditorComponent
         return null;
     }
 
-    /// <summary>Document offset at a view-relative point, or null when the point misses the text.</summary>
-    public int? GetPosition(Point viewPosition)
+    /// <summary>
+    /// Position at a document-space point, rounded to the nearest character boundary. Null when the
+    /// point is outside the laid-out lines.
+    /// </summary>
+    public TextViewPosition? GetPosition(Point documentPoint)
+        => GetVisualLineFromVisualTop(documentPoint.Y)?.GetTextViewPosition(documentPoint, ALLOW_VIRTUAL_SPACE);
+
+    /// <summary>
+    /// Position at a document-space point, rounded down to the character the point is inside. Null
+    /// when the point is outside the laid-out lines.
+    /// </summary>
+    public TextViewPosition? GetPositionFloor(Point documentPoint)
+        => GetVisualLineFromVisualTop(documentPoint.Y)?.GetTextViewPositionFloor(documentPoint, ALLOW_VIRTUAL_SPACE);
+
+    /// <summary>
+    /// Document-space position of a text view position. Answered from the laid-out row when the line
+    /// is on screen; otherwise from the caret rectangle, where the four text-relative modes assume
+    /// the line's baseline is the view's default.
+    /// </summary>
+    public Point GetVisualPosition(TextViewPosition position, VisualYPosition yPositionMode)
     {
-        var hit = HitTest(viewPosition, out bool insideLine);
-        return insideLine ? hit : null;
+        var documentLine = Document.GetLineByNumber(Math.Clamp(position.Line, 1, Document.LineCount));
+        var visualLine = GetVisualLineFromVisualTop(Host.GetLineY(documentLine.LineNumber - 1));
+        int offset = documentLine.Offset + Math.Clamp(position.Column - 1, 0, documentLine.Length);
+        if (visualLine is null)
+        {
+            return GetOffScreenVisualPosition(offset, yPositionMode);
+        }
+
+        int visualColumn = visualLine.ValidateVisualColumn(offset, position.VisualColumn, ALLOW_VIRTUAL_SPACE);
+        return visualLine.GetVisualPosition(visualColumn, position.IsAtEndOfLine, yPositionMode);
     }
 
-    /// <summary>Document offset at a view-relative point, clamped to the nearest line.</summary>
-    public int GetPositionFloor(Point viewPosition) => HitTest(viewPosition, out _);
-
-    /// <summary>View-relative position of a document offset, in the same space <see cref="GetPosition"/> takes.</summary>
+    /// <summary>Document-space position of a document offset, at the top of its row.</summary>
     public Point GetVisualPosition(int documentOffset)
     {
         var rect = Surface.GetCharRectInWindow(documentOffset);
         var viewport = Host.TextViewportBounds;
-        return new Point(rect.X - viewport.X, rect.Y - viewport.Y);
+        return new Point(
+            rect.X - viewport.X + Host.ScrollOffset.X,
+            rect.Y - viewport.Y + Host.ScrollOffset.Y);
+    }
+
+    // Becomes Options.EnableVirtualSpace once that option lands; until then no position is past
+    // the end of its line.
+    private const bool ALLOW_VIRTUAL_SPACE = false;
+
+    /// <summary>
+    /// The caret rectangle materializes the line without laying it into the viewport, which is what
+    /// makes a position on an off-screen line answerable at all.
+    /// </summary>
+    private Point GetOffScreenVisualPosition(int documentOffset, VisualYPosition yPositionMode)
+    {
+        var rect = Surface.GetCharRectInWindow(documentOffset);
+        var viewport = Host.TextViewportBounds;
+        double x = rect.X - viewport.X + Host.ScrollOffset.X;
+        double top = rect.Y - viewport.Y + Host.ScrollOffset.Y;
+        double y = yPositionMode switch
+        {
+            VisualYPosition.LineTop or VisualYPosition.TextTop => top,
+            VisualYPosition.LineMiddle => top + (rect.Height / 2),
+            VisualYPosition.LineBottom => top + rect.Height,
+            VisualYPosition.TextBottom => top + DefaultLineHeight,
+            VisualYPosition.TextMiddle => top + (DefaultLineHeight / 2),
+            VisualYPosition.Baseline => top + DefaultBaseline,
+            _ => throw new ArgumentOutOfRangeException(nameof(yPositionMode), yPositionMode, null)
+        };
+        return new Point(x, y);
     }
 
     public double HorizontalOffset => Host.ScrollOffset.X;
@@ -345,31 +397,6 @@ public sealed class TextView : MewObject, ITextEditorComponent
 
     /// <summary>Scrolls the smallest amount that brings the document-space rectangle into view.</summary>
     public void MakeVisible(Rect documentRect) => Host.MakeVisible(documentRect);
-
-    private int HitTest(Point viewPosition, out bool insideLine)
-    {
-        var viewport = Host.TextViewportBounds;
-        double documentX = viewPosition.X + Host.ScrollOffset.X;
-        double documentY = viewPosition.Y + Host.ScrollOffset.Y;
-        insideLine = false;
-        var lines = Host.VisibleTextLines;
-        if (lines.Count == 0)
-        {
-            return 0;
-        }
-        foreach (var line in lines)
-        {
-            if (documentY < line.DocumentY || documentY >= line.DocumentY + line.Height)
-            {
-                continue;
-            }
-            var hit = line.HitTest(new Point(documentX - line.DocumentX, documentY - line.DocumentY));
-            insideLine = documentX >= line.DocumentX && documentX <= line.DocumentX + viewport.Width;
-            return line.LogicalLine.Offset + line.MapProjectedOffsetToSource(hit.InsertionIndex);
-        }
-        var nearest = documentY < lines[0].DocumentY ? lines[0] : lines[^1];
-        return nearest.LogicalLine.Offset;
-    }
 
     /// <summary>
     /// Whether <see cref="VisualLines"/> can be read. False only before the view has been laid out;
@@ -411,6 +438,7 @@ public sealed class TextView : MewObject, ITextEditorComponent
 
     private VisualLine Wrap(TextLineLayout line)
         => new(
+            this,
             line,
             Document.GetLineByOffset(line.LogicalLine.Offset),
             textArea.Editor.ElementGeneratorAdapter.GetScannedElements(line.LogicalLine.Offset));

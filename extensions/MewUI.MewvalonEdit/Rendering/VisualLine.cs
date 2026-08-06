@@ -11,15 +11,24 @@ namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 public sealed class VisualLine
 {
     private readonly TextLineLayout _layout;
+    private readonly TextView _textView;
 
-    internal VisualLine(TextLineLayout layout, DocumentLine firstDocumentLine, IReadOnlyList<VisualLineElement> elements)
+    internal VisualLine(
+        TextView textView,
+        TextLineLayout layout,
+        DocumentLine firstDocumentLine,
+        IReadOnlyList<VisualLineElement> elements)
     {
+        _textView = textView;
         _layout = layout;
         FirstDocumentLine = firstDocumentLine;
         Elements = elements;
     }
 
     public DocumentLine FirstDocumentLine { get; }
+
+    /// <summary>Document this line was laid out from.</summary>
+    public TextDocument Document => _textView.Document;
 
     /// <summary>Elements the generators produced on this line, in document order.</summary>
     public IReadOnlyList<VisualLineElement> Elements { get; }
@@ -30,8 +39,11 @@ public sealed class VisualLine
     /// <summary>Length of the laid-out document range.</summary>
     public int DocumentLength => _layout.LogicalLine.Length;
 
-    /// <summary>Length of the line on the visual surface, after projections.</summary>
-    public int VisualLength => _layout.LogicalLine.TotalLength;
+    /// <summary>
+    /// Length of the line on the visual surface. Longer than <see cref="DocumentLength"/> where a
+    /// projection stands more columns in for the document text, shorter where it stands in fewer.
+    /// </summary>
+    public int VisualLength => _layout.MapSourceOffsetToProjected(DocumentLength);
 
     /// <summary>Top of the line in document coordinates.</summary>
     public double VisualTop => _layout.DocumentY;
@@ -49,4 +61,166 @@ public sealed class VisualLine
     /// <summary>Clamps a visual column into this line.</summary>
     public int ValidateVisualColumn(int visualColumn)
         => Math.Clamp(visualColumn, 0, VisualLength);
+
+    /// <summary>
+    /// The visual column of <paramref name="position"/>, worked out from its location when the
+    /// column is unknown or no longer matches the offset it claims.
+    /// </summary>
+    public int ValidateVisualColumn(TextViewPosition position, bool allowVirtualSpace)
+        => ValidateVisualColumn(Document.GetOffset(position.Line, position.Column), position.VisualColumn, allowVirtualSpace);
+
+    public int ValidateVisualColumn(int offset, int visualColumn, bool allowVirtualSpace)
+    {
+        if (visualColumn < 0)
+        {
+            return GetVisualColumn(offset - StartOffset);
+        }
+        if (GetRelativeOffset(visualColumn) + StartOffset != offset)
+        {
+            return GetVisualColumn(offset - StartOffset);
+        }
+        return visualColumn > VisualLength && !allowVirtualSpace ? VisualLength : visualColumn;
+    }
+
+    /// <summary>Document-space position of a visual column.</summary>
+    public Point GetVisualPosition(int visualColumn, VisualYPosition yPositionMode)
+        => GetVisualPosition(visualColumn, false, yPositionMode);
+
+    internal Point GetVisualPosition(int visualColumn, bool isAtEndOfLine, VisualYPosition yPositionMode)
+    {
+        var row = GetRow(visualColumn, isAtEndOfLine);
+        return new Point(GetVisualXPosition(visualColumn), GetRowVisualYPosition(row, yPositionMode));
+    }
+
+    /// <summary>Document-space distance from the left of the text to a visual column.</summary>
+    public double GetVisualXPosition(int visualColumn)
+    {
+        double x = _layout.DocumentX
+            + _layout.GetCaretBounds(new CharacterHit(Math.Min(visualColumn, VisualLength), 0)).X;
+        if (visualColumn > VisualLength)
+        {
+            x += (visualColumn - VisualLength) * _textView.WideSpaceWidth;
+        }
+        return x;
+    }
+
+    /// <summary>Position at a visual column, with its location taken from the document.</summary>
+    public TextViewPosition GetTextViewPosition(int visualColumn)
+        => new(Document.GetLocation(GetRelativeOffset(visualColumn) + StartOffset), visualColumn);
+
+    /// <summary>
+    /// Position at a document-space point, rounded to the nearest character boundary.
+    /// </summary>
+    public TextViewPosition GetTextViewPosition(Point documentPoint, bool allowVirtualSpace)
+        => CreatePosition(GetVisualColumn(documentPoint, allowVirtualSpace, out bool isAtEndOfLine), isAtEndOfLine);
+
+    /// <summary>
+    /// Position at a document-space point, rounded down to the character the point is inside.
+    /// </summary>
+    public TextViewPosition GetTextViewPositionFloor(Point documentPoint, bool allowVirtualSpace)
+        => CreatePosition(
+            GetVisualColumnFloor(documentPoint, allowVirtualSpace, out bool isAtEndOfLine), isAtEndOfLine);
+
+    /// <summary>Visual column at a document-space point, rounded to the nearest boundary.</summary>
+    public int GetVisualColumn(Point documentPoint, bool allowVirtualSpace)
+        => GetVisualColumn(documentPoint, allowVirtualSpace, out _);
+
+    internal int GetVisualColumn(Point documentPoint, bool allowVirtualSpace, out bool isAtEndOfLine)
+    {
+        var row = GetRowByY(documentPoint.Y);
+        int column = TryGetVirtualColumn(documentPoint, row, allowVirtualSpace, out int virtualColumn)
+            ? virtualColumn
+            : HitTest(documentPoint).InsertionIndex;
+        isAtEndOfLine = column >= row.LogicalStart + row.LogicalLength;
+        return column;
+    }
+
+    internal int GetVisualColumnFloor(Point documentPoint, bool allowVirtualSpace, out bool isAtEndOfLine)
+    {
+        var row = GetRowByY(documentPoint.Y);
+        int column = TryGetVirtualColumn(documentPoint, row, allowVirtualSpace, out int virtualColumn)
+            ? virtualColumn
+            : HitTest(documentPoint).FirstCharacterIndex;
+        isAtEndOfLine = column >= row.LogicalStart + row.LogicalLength;
+        return column;
+    }
+
+    private TextViewPosition CreatePosition(int visualColumn, bool isAtEndOfLine)
+    {
+        var position = GetTextViewPosition(visualColumn);
+        position.IsAtEndOfLine = isAtEndOfLine;
+        return position;
+    }
+
+    private CharacterHit HitTest(Point documentPoint)
+        => _layout.HitTest(new Point(documentPoint.X - _layout.DocumentX, documentPoint.Y - _layout.DocumentY));
+
+    /// <summary>
+    /// Columns past the end of the last row, which exist only where virtual space is allowed.
+    /// </summary>
+    private bool TryGetVirtualColumn(
+        Point documentPoint, VisualTextLine row, bool allowVirtualSpace, out int visualColumn)
+    {
+        double x = documentPoint.X - _layout.DocumentX;
+        var rows = _layout.VisualLines;
+        if (!allowVirtualSpace || row != rows[^1] || x <= row.Bounds.Width)
+        {
+            visualColumn = 0;
+            return false;
+        }
+        int virtualColumns = (int)Math.Round(
+            (x - row.Bounds.Width) / _textView.WideSpaceWidth, MidpointRounding.AwayFromZero);
+        visualColumn = VisualLength + virtualColumns;
+        return true;
+    }
+
+    private VisualTextLine GetRow(int visualColumn, bool isAtEndOfLine)
+    {
+        var rows = _layout.VisualLines;
+        for (int index = 0; index < rows.Count; index++)
+        {
+            var row = rows[index];
+            int end = row.LogicalStart + row.LogicalLength;
+            if (visualColumn < end)
+            {
+                return row;
+            }
+            // At the seam of a wrap the column belongs to both rows; the flag picks the earlier one.
+            if (visualColumn == end && isAtEndOfLine)
+            {
+                return row;
+            }
+        }
+        return rows[^1];
+    }
+
+    private VisualTextLine GetRowByY(double documentY)
+    {
+        var rows = _layout.VisualLines;
+        foreach (var row in rows)
+        {
+            if (documentY < row.Bounds.Bottom)
+            {
+                return row;
+            }
+        }
+        return rows[^1];
+    }
+
+    private double GetRowVisualYPosition(VisualTextLine row, VisualYPosition yPositionMode)
+    {
+        double top = row.Bounds.Y;
+        double textTop = top + row.Baseline - _textView.DefaultBaseline;
+        return yPositionMode switch
+        {
+            VisualYPosition.LineTop => top,
+            VisualYPosition.LineMiddle => top + (row.Bounds.Height / 2),
+            VisualYPosition.LineBottom => top + row.Bounds.Height,
+            VisualYPosition.TextTop => textTop,
+            VisualYPosition.TextBottom => textTop + _textView.DefaultLineHeight,
+            VisualYPosition.TextMiddle => textTop + (_textView.DefaultLineHeight / 2),
+            VisualYPosition.Baseline => top + row.Baseline,
+            _ => throw new ArgumentOutOfRangeException(nameof(yPositionMode), yPositionMode, null)
+        };
+    }
 }

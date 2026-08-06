@@ -377,14 +377,35 @@ public class TextEditor : Control, ITextEditorComponent
     public void ScrollTo(int line, int column)
     {
         const double MINIMUM_SCROLL_FRACTION = 0.3;
+        ScrollTo(line, column, VisualYPosition.LineMiddle, ViewportHeight / 2, MINIMUM_SCROLL_FRACTION);
+    }
+
+    /// <summary>
+    /// Scrolls the line and column into view. Requires the editor to have been laid out.
+    /// </summary>
+    /// <param name="line">Line to scroll to.</param>
+    /// <param name="column">Column to scroll to. Zero or less scrolls vertically only.</param>
+    /// <param name="yPositionMode">Which Y of the line is being placed.</param>
+    /// <param name="referencedVerticalViewPortOffset">Where in the viewport that Y should land.</param>
+    /// <param name="minimumScrollFraction">
+    /// Shortest move worth making, as a fraction of the viewport. A smaller one is skipped.
+    /// </param>
+    public void ScrollTo(
+        int line,
+        int column,
+        VisualYPosition yPositionMode,
+        double referencedVerticalViewPortOffset,
+        double minimumScrollFraction)
+    {
         if (Document.LineCount == 0 || ViewportHeight <= 0)
         {
             return;
         }
 
-        var position = GetDocumentPosition(Math.Clamp(line, 1, Document.LineCount), Math.Max(1, column));
-        double vertical = position.Y - (ViewportHeight / 2);
-        if (Math.Abs(vertical - VerticalOffset) > MINIMUM_SCROLL_FRACTION * ViewportHeight)
+        var position = TextArea.TextView.GetVisualPosition(
+            new TextViewPosition(Math.Clamp(line, 1, Document.LineCount), Math.Max(1, column)), yPositionMode);
+        double vertical = position.Y - referencedVerticalViewPortOffset;
+        if (Math.Abs(vertical - VerticalOffset) > minimumScrollFraction * ViewportHeight)
         {
             ScrollToVerticalOffset(Math.Max(0, vertical));
         }
@@ -395,7 +416,7 @@ public class TextEditor : Control, ITextEditorComponent
         if (position.X > ViewportWidth - (Caret.MINIMUM_DISTANCE_TO_VIEW_BORDER * 2))
         {
             double horizontal = Math.Max(0, position.X - (ViewportWidth / 2));
-            if (Math.Abs(horizontal - HorizontalOffset) > MINIMUM_SCROLL_FRACTION * ViewportWidth)
+            if (Math.Abs(horizontal - HorizontalOffset) > minimumScrollFraction * ViewportWidth)
             {
                 ScrollToHorizontalOffset(horizontal);
             }
@@ -407,6 +428,18 @@ public class TextEditor : Control, ITextEditorComponent
     }
 
     /// <summary>
+    /// Position at a point relative to the top left of this editor, or null when the point is not
+    /// over the text.
+    /// </summary>
+    public TextViewPosition? GetPositionFromPoint(Point point)
+    {
+        var viewport = _surface.TextViewportBounds;
+        return TextArea.TextView.GetPosition(new Point(
+            point.X - viewport.X + HorizontalOffset,
+            point.Y - viewport.Y + VerticalOffset));
+    }
+
+    /// <summary>
     /// Scrolls so the offsets become the scroll position. Reached through the smallest-scroll
     /// contract: a viewport-sized rectangle asked for at a position lands exactly there, clamped to
     /// what the document allows.
@@ -414,17 +447,6 @@ public class TextEditor : Control, ITextEditorComponent
     private void ScrollToOffset(double horizontal, double vertical)
         => _surface.MakeVisible(new Rect(horizontal, vertical, ViewportWidth, ViewportHeight));
 
-    /// <summary>Middle of the line at the one-based line and column, in document coordinates.</summary>
-    private Point GetDocumentPosition(int line, int column)
-    {
-        var documentLine = Document.GetLineByNumber(line);
-        var rect = _surface.GetCharRectInWindow(
-            documentLine.Offset + Math.Clamp(column - 1, 0, documentLine.Length));
-        var viewport = _surface.TextViewportBounds;
-        return new Point(
-            rect.X - viewport.X + HorizontalOffset,
-            rect.Y - viewport.Y + VerticalOffset + (rect.Height / 2));
-    }
 
     internal MultiLineTextBox Surface => _surface;
 
