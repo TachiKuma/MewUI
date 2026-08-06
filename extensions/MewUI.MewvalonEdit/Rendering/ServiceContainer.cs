@@ -4,7 +4,7 @@ namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 /// Service lookup keyed by type. Ported code registers what it builds here and finds it again by
 /// service type, which is how a highlighter reaches code that only holds a view.
 /// </summary>
-public sealed class ServiceContainer : IServiceProvider
+public sealed class ServiceContainer
 {
     private readonly Dictionary<Type, object> _services = [];
 
@@ -21,12 +21,4 @@ public sealed class ServiceContainer : IServiceProvider
     /// <summary>The registered instance, or null.</summary>
     public TService? GetService<TService>() where TService : class
         => _services.GetValueOrDefault(typeof(TService)) as TService;
-
-    // Explicit, so the generic lookup stays the only one in reach without a cast. Kept for code
-    // that takes an IServiceProvider.
-    object? IServiceProvider.GetService(Type serviceType)
-    {
-        ArgumentNullException.ThrowIfNull(serviceType);
-        return _services.GetValueOrDefault(serviceType);
-    }
 }

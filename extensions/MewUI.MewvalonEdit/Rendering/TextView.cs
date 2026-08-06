@@ -182,10 +182,6 @@ public sealed class TextView : MewObject, ITextEditorComponent
     public TService? GetService<TService>() where TService : class
         => Services.GetService<TService>() ?? Document.Services.GetService<TService>();
 
-    object? IServiceProvider.GetService(Type serviceType)
-        => ((IServiceProvider)Services).GetService(serviceType)
-            ?? ((IServiceProvider)Document.Services).GetService(serviceType);
-
     /// <summary>Raised after the document was replaced.</summary>
     public event EventHandler? DocumentChanged
     {

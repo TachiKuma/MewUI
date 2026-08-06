@@ -5,7 +5,7 @@ using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.MewvalonEdit.Document;
 
-public sealed class TextDocument : ITextSource, IServiceProvider
+public sealed class TextDocument : ITextSource
 {
     private readonly EditableTextDocument _document;
     private readonly List<WeakReference<TextAnchor>> _anchors = [];
@@ -86,9 +86,6 @@ public sealed class TextDocument : ITextSource, IServiceProvider
             return _services;
         }
     }
-
-    object? IServiceProvider.GetService(Type serviceType)
-        => ((IServiceProvider)Services).GetService(serviceType);
 
     /// <summary>An unchanging copy of the whole text.</summary>
     public ITextSource CreateSnapshot() => new StringTextSource(Text);

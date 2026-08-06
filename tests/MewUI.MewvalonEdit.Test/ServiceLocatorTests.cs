@@ -55,21 +55,6 @@ public sealed class ServiceLocatorTests
         Assert.AreSame(document, document.Services.GetService<TextDocument>());
     }
 
-    /// <summary>
-    /// The same lookup answers code that only takes an IServiceProvider. It is implemented
-    /// explicitly, so reaching it needs the cast and the generic stays the one in plain sight.
-    /// </summary>
-    [TestMethod]
-    public void TheLookupIsAlsoReachableAsAServiceProvider()
-    {
-        var editor = new TextEditor();
-
-        Assert.AreSame(editor, ((IServiceProvider)editor).GetService(typeof(TextEditor)));
-        Assert.AreSame(editor.TextArea, ((IServiceProvider)editor.TextArea).GetService(typeof(TextArea)));
-        Assert.AreSame(editor.Document, ((IServiceProvider)editor.Document).GetService(typeof(TextDocument)));
-        Assert.IsNull(((IServiceProvider)editor).GetService(typeof(FoldingManager)));
-    }
-
     /// <summary>A folding manager registers on install and is gone after uninstall.</summary>
     [TestMethod]
     public void TheFoldingManagerIsRegisteredWhileInstalled()

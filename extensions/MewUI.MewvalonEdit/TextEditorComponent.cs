@@ -6,7 +6,7 @@ namespace Aprillz.MewUI.MewvalonEdit;
 /// What the editor, its text area and its view have in common, so ported code can take any of the
 /// three and still reach the document, the options and the registered services.
 /// </summary>
-public interface ITextEditorComponent : IServiceProvider
+public interface ITextEditorComponent
 {
     /// <summary>The registered service, or null when neither this component nor the document has it.</summary>
     TService? GetService<TService>() where TService : class;
