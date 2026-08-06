@@ -12,7 +12,7 @@ using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit;
 
-public class TextEditor : Control
+public class TextEditor : Control, ITextEditorComponent
 {
     private const string PART_MARGIN_HOST = "PART_MarginHost";
 
@@ -84,6 +84,7 @@ public class TextEditor : Control
         Document = document;
         Template = new DelegateControlTemplate<TextEditor>(BuildTemplate);
         TextArea = new TextArea(this);
+        TextArea.TextView.Services.AddService(this);
         _leftMargins.CollectionChanged += (_, _) => OnLeftMarginsChanged();
         _leftMargins.Add(_lineNumberMargin);
     }
@@ -340,6 +341,15 @@ public class TextEditor : Control
 
     public event EventHandler? TextChanged;
     public event EventHandler? DocumentChanged;
+
+    /// <summary>Raised when an option changed.</summary>
+    public event PropertyChangedEventHandler? OptionChanged;
+
+    /// <summary>
+    /// The requested service, looked up on the text view and then on the document. Reached through
+    /// <see cref="IServiceProvider"/>, as in the original.
+    /// </summary>
+    object? IServiceProvider.GetService(Type serviceType) => TextArea.GetService(serviceType);
 
     public static readonly MewProperty<System.Text.Encoding?> EncodingProperty =
         MewProperty<System.Text.Encoding?>.Register<TextEditor>(nameof(Encoding), null);
@@ -661,6 +671,7 @@ public class TextEditor : Control
         // version alone, so without this a toggled option waits for the next edit to show.
         _elementGenerators.InvalidateScans();
         _surface.InvalidateTextView();
+        OptionChanged?.Invoke(this, e);
     }
 
     /// <summary>

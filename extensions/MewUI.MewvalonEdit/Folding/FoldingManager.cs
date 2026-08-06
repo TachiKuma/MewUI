@@ -23,6 +23,7 @@ public sealed class FoldingManager
         _editor.BackgroundRenderers.Add(new FoldedSectionRenderer(this));
         _margin = new FoldingMargin { FoldingManager = this };
         _editor.TextArea.LeftMargins.Add(_margin);
+        _editor.TextArea.TextView.Services.AddService(this);
     }
 
     public IEnumerable<FoldingSection> AllFoldings => _foldings;
@@ -48,6 +49,7 @@ public sealed class FoldingManager
         manager._editor.Surface.Extensions.Projections.Remove(manager._projection);
         manager._editor.Surface.Extensions.LineCollapsers.Remove(manager._projection);
         manager._editor.TextArea.LeftMargins.Remove(manager._margin);
+        manager._editor.TextArea.TextView.Services.RemoveService(typeof(FoldingManager));
         manager._margin.FoldingManager = null;
         manager._editor.InvalidateTextView();
     }

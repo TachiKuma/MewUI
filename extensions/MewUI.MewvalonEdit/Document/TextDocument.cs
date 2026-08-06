@@ -1,14 +1,16 @@
 using Aprillz.MewUI.Controls;
+using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.Text;
 using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.MewvalonEdit.Document;
 
-public sealed class TextDocument : ITextSource
+public sealed class TextDocument : ITextSource, IServiceProvider
 {
     private readonly EditableTextDocument _document;
     private readonly List<WeakReference<TextAnchor>> _anchors = [];
     private TextSourceVersion _version;
+    private IServiceProvider? _serviceProvider;
 
     public TextDocument()
         : this(string.Empty)
@@ -55,6 +57,32 @@ public sealed class TextDocument : ITextSource
     /// engine uses to invalidate caches is <see cref="CoreDocument"/>'s own counter.
     /// </summary>
     public ITextSourceVersion Version => _version;
+
+    /// <summary>
+    /// Services this document carries. A view that cannot find a service of its own falls through to
+    /// here, so a service registered on the document follows it into every view showing it. The
+    /// default container holds the document itself; assigning replaces the whole container.
+    /// </summary>
+    public IServiceProvider ServiceProvider
+    {
+        get
+        {
+            if (_serviceProvider is null)
+            {
+                var container = new ServiceContainer();
+                container.AddService(this);
+                _serviceProvider = container;
+            }
+            return _serviceProvider;
+        }
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            _serviceProvider = value;
+        }
+    }
+
+    object? IServiceProvider.GetService(Type serviceType) => ServiceProvider.GetService(serviceType);
 
     /// <summary>An unchanging copy of the whole text.</summary>
     public ITextSource CreateSnapshot() => new StringTextSource(Text);

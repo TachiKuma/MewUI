@@ -14,7 +14,7 @@ public enum LayerInsertionPosition
 }
 
 /// <summary>Rendering-side view of the editor, carrying the extension registrations.</summary>
-public sealed class TextView : MewObject
+public sealed class TextView : MewObject, ITextEditorComponent
 {
     private readonly TextArea textArea;
     private Action<int>? _constructionStarting;
@@ -24,6 +24,7 @@ public sealed class TextView : MewObject
     internal TextView(TextArea textArea)
     {
         this.textArea = textArea;
+        Services.AddService(this);
         var host = textArea.Editor.Surface;
         // Forwarded rather than exposed directly: the AvalonEdit signatures carry no host argument,
         // and the subscription must survive a document swap, which replaces neither the host nor it.
@@ -169,11 +170,17 @@ public sealed class TextView : MewObject
 
     /// <summary>
     /// Services registered on this view. A colorizer puts its highlighter here so code holding only
-    /// the view can find it.
+    /// the view can find it. Document services are not in here: call <see cref="GetService"/> rather
+    /// than <c>Services.GetService</c> to reach those as well.
     /// </summary>
     public ServiceContainer Services { get; } = new();
 
-    public object? GetService(Type serviceType) => Services.GetService(serviceType);
+    /// <summary>
+    /// The service registered on this view, or failing that the one the document carries. Null when
+    /// neither has it.
+    /// </summary>
+    public object? GetService(Type serviceType)
+        => Services.GetService(serviceType) ?? Document.ServiceProvider.GetService(serviceType);
 
     /// <summary>Raised after the document was replaced.</summary>
     public event EventHandler? DocumentChanged

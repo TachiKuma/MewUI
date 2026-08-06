@@ -8,7 +8,7 @@ using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.MewvalonEdit.Editing;
 
-public sealed class TextArea : MewObject
+public sealed class TextArea : MewObject, ITextEditorComponent
 {
     private readonly TextEditor _editor;
     private SelectionLayer? _selectionLayer;
@@ -19,6 +19,7 @@ public sealed class TextArea : MewObject
         Caret = new Caret(this);
         Selection = new Selection(this);
         TextView = new TextView(this);
+        TextView.Services.AddService(this);
         editor.Surface.EditingStateChanged += OnEditingStateChanged;
         editor.Surface.TextInput += OnTextInput;
     }
@@ -35,6 +36,9 @@ public sealed class TextArea : MewObject
     /// and removes.
     /// </summary>
     public IList<AbstractMargin> LeftMargins => _editor.LeftMargins;
+
+    /// <summary>The requested service, or null when neither the view nor the document has it.</summary>
+    public object? GetService(Type serviceType) => TextView.GetService(serviceType);
 
     public IIndentationStrategy? IndentationStrategy
     {
