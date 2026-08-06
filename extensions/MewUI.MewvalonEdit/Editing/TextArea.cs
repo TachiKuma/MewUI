@@ -14,6 +14,8 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     private SelectionLayer? _selectionLayer;
     private Selection _selection;
     private bool _applyingSelection;
+    private readonly List<TextAreaStackedInputHandler> _stackedInputHandlers = [];
+    private ITextAreaInputHandler? _activeInputHandler;
 
     internal TextArea(TextEditor editor)
     {
@@ -29,6 +31,8 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         TextView.InsertLayer(new CaretLayer(this), KnownLayer.Caret, LayerInsertionPosition.Replace);
         editor.Surface.EditingStateChanged += OnEditingStateChanged;
         editor.Surface.TextInput += OnTextInput;
+        DefaultInputHandler = new TextAreaInputHandler(this);
+        ActiveInputHandler = DefaultInputHandler;
     }
 
     public TextDocument Document => _editor.Document;
@@ -240,6 +244,98 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     }
 
     private void OnTextInput(TextInputEventArgs args) => TextEntering?.Invoke(args);
+
+    /// <summary>
+    /// Handler the editor starts with. It stays reachable after <see cref="ActiveInputHandler"/> is
+    /// replaced, so a caller can put the ordinary keyboard back.
+    /// </summary>
+    public TextAreaInputHandler DefaultInputHandler { get; }
+
+    /// <summary>
+    /// The one handler whose bindings answer keys. Assigning detaches the previous handler and
+    /// attaches the new one.
+    /// </summary>
+    public ITextAreaInputHandler? ActiveInputHandler
+    {
+        get => _activeInputHandler;
+        set
+        {
+            if (value is not null && value.TextArea != this)
+            {
+                throw new ArgumentException("The handler must belong to this text area.", nameof(value));
+            }
+            if (ReferenceEquals(_activeInputHandler, value))
+            {
+                return;
+            }
+            _activeInputHandler?.Detach();
+            _activeInputHandler = value;
+            _activeInputHandler?.Attach();
+            ActiveInputHandlerChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Raised after <see cref="ActiveInputHandler"/> changed.</summary>
+    public event EventHandler? ActiveInputHandlerChanged;
+
+    /// <summary>Pushed handlers, outermost first. The last one pushed sees a key first.</summary>
+    public IReadOnlyList<TextAreaStackedInputHandler> StackedInputHandlers => _stackedInputHandlers;
+
+    /// <summary>Adds a handler on top of the stack and attaches it.</summary>
+    public void PushStackedInputHandler(TextAreaStackedInputHandler handler)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        if (handler.TextArea != this)
+        {
+            throw new ArgumentException("The handler must belong to this text area.", nameof(handler));
+        }
+        _stackedInputHandlers.Add(handler);
+        handler.Attach();
+    }
+
+    /// <summary>
+    /// Removes the handler and everything pushed after it, detaching in reverse order of pushing.
+    /// Does nothing when the handler is not on the stack, so a panel can close twice.
+    /// </summary>
+    public void PopStackedInputHandler(TextAreaStackedInputHandler handler)
+    {
+        int index = _stackedInputHandlers.IndexOf(handler);
+        if (index < 0)
+        {
+            return;
+        }
+        for (int position = _stackedInputHandlers.Count - 1; position >= index; position--)
+        {
+            var popped = _stackedInputHandlers[position];
+            _stackedInputHandlers.RemoveAt(position);
+            popped.Detach();
+        }
+    }
+
+    /// <summary>
+    /// Offers a key to the stacked handlers, newest first, and then to the active handler. Runs
+    /// before the editing surface acts on the key, which is what lets a handler claim it.
+    /// </summary>
+    internal void HandleKeyDown(KeyEventArgs e)
+    {
+        for (int index = _stackedInputHandlers.Count - 1; index >= 0 && !e.Handled; index--)
+        {
+            _stackedInputHandlers[index].OnPreviewKeyDown(e);
+        }
+        if (!e.Handled && _activeInputHandler is TextAreaInputHandler handler)
+        {
+            handler.TryHandleKey(e);
+        }
+    }
+
+    /// <summary>Offers a key release to the stacked handlers, newest first.</summary>
+    internal void HandleKeyUp(KeyEventArgs e)
+    {
+        for (int index = _stackedInputHandlers.Count - 1; index >= 0 && !e.Handled; index--)
+        {
+            _stackedInputHandlers[index].OnPreviewKeyUp(e);
+        }
+    }
 
     internal TextEditor Editor => _editor;
 }

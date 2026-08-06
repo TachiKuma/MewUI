@@ -55,6 +55,7 @@ public class TextEditor : Control, ITextEditorComponent
             CornerRadius = 0
         };
         _surface.KeyDown += OnSurfaceKeyDown;
+        _surface.KeyUp += e => TextArea.HandleKeyUp(e);
         _surface.TextCommitted += OnTextCommitted;
         _surface.TextInput += OnSurfaceTextInput;
         _surface.MouseDown += OnSurfaceMouseDown;
@@ -702,6 +703,14 @@ public class TextEditor : Control, ITextEditorComponent
     /// </summary>
     private void OnSurfaceKeyDown(KeyEventArgs e)
     {
+        // Ahead of everything the editor does with the key: a stacked handler exists to take the
+        // keyboard away from the editor, which it cannot do after the editor has acted.
+        TextArea.HandleKeyDown(e);
+        if (e.Handled)
+        {
+            return;
+        }
+
         if (!e.Handled && e.PrimaryKey && e.Key is Key.C or Key.X
             && TryCutCopyWholeLine(cut: e.Key == Key.X))
         {
