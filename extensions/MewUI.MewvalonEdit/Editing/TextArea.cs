@@ -12,12 +12,15 @@ public sealed class TextArea : MewObject, ITextEditorComponent
 {
     private readonly TextEditor _editor;
     private SelectionLayer? _selectionLayer;
+    private Selection _selection;
+    private bool _applyingSelection;
 
     internal TextArea(TextEditor editor)
     {
         _editor = editor;
         Caret = new Caret(this);
-        Selection = new Selection(this);
+        EmptySelection = new EmptySelection(this);
+        _selection = EmptySelection;
         TextView = new TextView(this);
         TextView.Services.AddService(this);
         editor.Surface.EditingStateChanged += OnEditingStateChanged;
@@ -27,8 +30,55 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     public TextDocument Document => _editor.Document;
     public TextEditorOptions Options => _editor.Options;
     public Caret Caret { get; }
-    public Selection Selection { get; }
     public TextView TextView { get; }
+
+    /// <summary>The one empty selection of this text area, which is what an empty selection is.</summary>
+    internal Selection EmptySelection { get; }
+
+    /// <summary>
+    /// What is selected. Assigning moves the editing surface, and a selection the surface makes on
+    /// its own replaces this with the matching range.
+    /// </summary>
+    /// <remarks>
+    /// The surface keeps a start and a length, with no direction, so a selection it originates comes
+    /// back reading forwards even if it was dragged backwards. A selection assigned here keeps its
+    /// direction until the surface changes it.
+    /// </remarks>
+    public Selection Selection
+    {
+        get => _selection;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (_selection.Equals(value))
+            {
+                return;
+            }
+            _selection = value;
+            ApplyToSurface(value);
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void ApplyToSurface(Selection selection)
+    {
+        _applyingSelection = true;
+        try
+        {
+            if (selection.SurroundingSegment is ISegment segment)
+            {
+                _editor.Select(segment.Offset, segment.Length);
+            }
+            else
+            {
+                _editor.Select(_editor.CaretOffset, 0);
+            }
+        }
+        finally
+        {
+            _applyingSelection = false;
+        }
+    }
 
     /// <summary>
     /// Margins placed left of the text, outermost first. Adding one attaches it to the view; the
@@ -163,6 +213,11 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     private void OnEditingStateChanged()
     {
         Caret.RaisePositionChanged();
+        if (!_applyingSelection)
+        {
+            int start = _editor.SelectionStart;
+            _selection = Selection.Create(this, start, start + _editor.SelectionLength);
+        }
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -188,12 +243,3 @@ public sealed class Caret(TextArea textArea)
     public event EventHandler? PositionChanged;
     internal void RaisePositionChanged() => PositionChanged?.Invoke(this, EventArgs.Empty);
 }
-
-public sealed class Selection(TextArea textArea)
-{
-    public bool IsEmpty => textArea.Editor.SelectionLength == 0;
-    public int Length => textArea.Editor.SelectionLength;
-    public IReadOnlyList<ISegment> Segments
-        => IsEmpty ? Array.Empty<ISegment>() : [new SimpleSegment(textArea.Editor.SelectionStart, Length)];
-}
-
