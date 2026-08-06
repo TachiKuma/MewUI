@@ -1,5 +1,6 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.MewvalonEdit;
+using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 
@@ -63,6 +64,29 @@ public sealed class WhitespaceMarkerTests
         var marked = Layout("a b", static options => options.ShowSpaces = true);
 
         Assert.AreEqual(plain, marked, 0.01, "The line width moved when space markers were turned on.");
+    }
+
+    /// <summary>
+    /// The marker takes the width of the space it stands in for at every density. Measuring its own
+    /// glyph instead let the two round apart above 100%, which moved the rest of the line whenever
+    /// the markers were turned on.
+    /// </summary>
+    [TestMethod]
+    [DataRow(96u)]
+    [DataRow(120u)]
+    [DataRow(144u)]
+    [DataRow(192u)]
+    public void ASpaceMarkerIsAsWideAsItsSpace(uint dpi)
+    {
+        RequireWindows();
+        var editor = CreateEditor("a b", static options => options.ShowSpaces = true);
+        var style = new TextRunStyle(editor.FontFamily, editor.FontSize, editor.FontWeight);
+        var element = new WhitespaceMarkerElement("·", " ", style);
+
+        Assert.AreEqual(
+            MarkerLayout.For(" ", style, dpi).MeasuredSize.Width,
+            element.Measure(dpi).Width,
+            0.001);
     }
 
     /// <summary>

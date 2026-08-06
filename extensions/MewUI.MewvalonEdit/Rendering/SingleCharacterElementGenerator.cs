@@ -44,7 +44,7 @@ internal sealed class SingleCharacterElementGenerator(TextEditorOptions options,
         var style = new TextRunStyle(editor.FontFamily, editor.FontSize, editor.FontWeight);
         if (character == ' ' && options.ShowSpaces)
         {
-            return new WhitespaceMarkerElement(SPACE_MARKER.ToString(), style)
+            return new WhitespaceMarkerElement(SPACE_MARKER.ToString(), " ", style)
             {
                 Foreground = editor.WhitespaceMarkerColor
             };
@@ -75,25 +75,37 @@ internal sealed class SingleCharacterElementGenerator(TextEditorOptions options,
     };
 }
 
-/// <summary>A character drawn as a marker glyph in its place, as the original's space element does.</summary>
-internal sealed class WhitespaceMarkerElement(string glyph, TextRunStyle style) : VisualLineElement(1, 1)
+/// <summary>
+/// A character drawn as a marker glyph in its place, as the original's space element does. It takes
+/// the width of the character it stands in for rather than its own: a marker that measured itself
+/// would move the rest of the line whenever it was turned on, by however much the two glyphs round
+/// apart at the current density.
+/// </summary>
+internal sealed class WhitespaceMarkerElement(string glyph, string replaced, TextRunStyle style)
+    : VisualLineElement(1, 1)
 {
-    private readonly string _glyph = glyph;
-    private readonly TextRunStyle _style = style;
-
-    protected internal override string GetVisualText() => _glyph;
+    protected internal override string GetVisualText() => glyph;
 
     public override InlineMetrics Measure(uint dpi)
     {
-        var layout = MarkerLayout.For(_glyph, _style, dpi);
-        return new InlineMetrics(layout.MeasuredSize.Width, layout.MeasuredSize.Height, layout.Lines[0].Baseline);
+        var layout = MarkerLayout.For(glyph, style, dpi);
+        return new InlineMetrics(
+            MarkerLayout.For(replaced, style, dpi).MeasuredSize.Width,
+            layout.MeasuredSize.Height,
+            layout.Lines[0].Baseline);
     }
 
     public override void Draw(ITextRenderContext context, Point origin, uint dpi)
     {
         ArgumentNullException.ThrowIfNull(context);
+        var layout = MarkerLayout.For(glyph, style, dpi);
+        double cell = MarkerLayout.For(replaced, style, dpi).MeasuredSize.Width;
         var options = new TextDrawOptions(Foreground ?? Color.FromRgb(0x80, 0x80, 0x80));
-        context.Draw(MarkerLayout.For(_glyph, _style, dpi), origin, in options);
+        // Centred in the cell it stands in for, so a narrower glyph does not sit against its left edge.
+        context.Draw(
+            layout,
+            new Point(origin.X + ((cell - layout.MeasuredSize.Width) / 2), origin.Y),
+            in options);
     }
 }
 

@@ -121,6 +121,7 @@ public sealed class MainWindow : Window
             new Button().Content("XML").OnClick(() => LoadSample(SampleText.Xml, "XML")),
             new Button().Content("JSON").OnClick(() => LoadSample(SampleText.Json, "JSON")),
             new Button().Content("Long").OnClick(() => LoadSample(SampleText.LongDocument(), "C#")),
+            new Button().Content("Control chars").OnClick(() => LoadSample(ControlCharacterSample.Text(), null)),
             new Button().Content("Undo").OnClick(() => _editor.Undo()),
             new Button().Content("Redo").OnClick(() => _editor.Redo()),
             searchBox,
@@ -205,7 +206,13 @@ public sealed class MainWindow : Window
                     value => _editor.TextArea.TextView.LinkTextUnderline = value),
                 // Setting any of these replaces the host's selection layer with the editor's own,
                 // which is the one consumer proving layer replacement works.
-                customSelection)
+                customSelection,
+                // The caret is the editor's own layer, so overstrike widens it over the character it
+                // would overwrite and the colour is settable. Insert does not toggle it yet.
+                Toggle("Overstrike caret", _editor.TextArea.OverstrikeMode,
+                    value => _editor.TextArea.OverstrikeMode = value),
+                Toggle("Custom caret color", false,
+                    value => _editor.TextArea.Caret.CaretBrush = value ? Color.FromRgb(220, 60, 60) : null))
         }.WithTheme((theme, border) => border
             .Background(theme.Palette.ContainerBackground)
             .BorderBrush(theme.Palette.ControlBorder));
@@ -221,11 +228,13 @@ public sealed class MainWindow : Window
                 Spacing = 18
             }.Children(_position, _selection, _documentState, _foldingState, _encoding, _searchState));
 
-    private void LoadSample(string text, string highlightingName)
+    private void LoadSample(string text, string? highlightingName)
     {
         _editor.Text = text;
         _editor.CaretOffset = 0;
-        _editor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition(highlightingName);
+        _editor.SyntaxHighlighting = highlightingName is null
+            ? null
+            : HighlightingManager.Instance.GetDefinition(highlightingName);
         _search.Refresh();
         UpdateFoldings(highlightingName);
         UpdateStatus();
