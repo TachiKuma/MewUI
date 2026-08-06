@@ -179,7 +179,10 @@ public sealed class TextDocument : ITextSource
         var entry = new OffsetChangeMapEntry(change.Offset, change.RemovedLength, change.InsertedLength);
         UpdateAnchors(in entry);
         _version = _version.Append(entry);
-        Changed?.Invoke(this, new DocumentChangeEventArgs(change.Offset, change.RemovedLength, change.InsertedLength));
+        Changed?.Invoke(this, new DocumentChangeEventArgs(
+            change.Offset,
+            change.RemovedText,
+            _document.GetText(change.Offset, change.InsertedLength)));
         TextChanged?.Invoke(this, EventArgs.Empty);
     }
 }

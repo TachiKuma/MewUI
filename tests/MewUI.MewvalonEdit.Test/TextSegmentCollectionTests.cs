@@ -56,7 +56,7 @@ public sealed class TextSegmentCollectionTests
         var segment = new TextSegment { StartOffset = 2, EndOffset = 4 };
         segments.Add(segment);
 
-        segments.UpdateOffsets(new DocumentChangeEventArgs(0, 0, 3));
+        segments.UpdateOffsets(new DocumentChangeEventArgs(0, removedText: null, insertedText: "abc"));
 
         Assert.AreEqual(5, segment.StartOffset);
         Assert.AreEqual(7, segment.EndOffset);

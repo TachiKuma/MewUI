@@ -301,6 +301,58 @@ public sealed class TextDocumentTests
         Assert.AreEqual("two", document.GetText(segment));
     }
 
+    /// <summary>
+    /// A change reports the text on both sides of it, which is what lets a subscriber tell what a
+    /// replace actually did rather than only how long it was.
+    /// </summary>
+    [TestMethod]
+    public void AChangeCarriesTheTextItReplaced()
+    {
+        var document = new TextDocument("hello world");
+        DocumentChangeEventArgs? change = null;
+        document.Changed += (_, args) => change = args;
+
+        document.Replace(6, 5, "there");
+
+        Assert.IsNotNull(change);
+        Assert.AreEqual("world", change.RemovedText.ToString());
+        Assert.AreEqual("there", change.InsertedText.ToString());
+        Assert.AreEqual(5, change.RemovalLength);
+        Assert.AreEqual(5, change.InsertionLength);
+    }
+
+    /// <summary>An insertion removes nothing, and pays nothing to say so.</summary>
+    [TestMethod]
+    public void AnInsertionReportsNoRemovedText()
+    {
+        var document = new TextDocument("hello");
+        DocumentChangeEventArgs? change = null;
+        document.Changed += (_, args) => change = args;
+
+        document.Insert(5, " world");
+
+        Assert.IsNotNull(change);
+        Assert.AreEqual(string.Empty, change.RemovedText.ToString());
+        Assert.AreEqual(" world", change.InsertedText.ToString());
+    }
+
+    /// <summary>The change carries an offset across itself, which is how a held position survives it.</summary>
+    [TestMethod]
+    public void AChangeMovesAnOffsetAcrossItself()
+    {
+        var document = new TextDocument("hello world");
+        DocumentChangeEventArgs? change = null;
+        document.Changed += (_, args) => change = args;
+
+        document.Replace(0, 5, "bye");
+
+        Assert.IsNotNull(change);
+        Assert.AreEqual(7, change.GetNewOffset(9), "Past the change, an offset shifts by the delta.");
+        Assert.AreEqual(0, change.GetNewOffset(0), "At the start of the change, an offset stays.");
+        Assert.AreEqual(3, change.GetNewOffset(2), "Inside the removal, it lands after what replaced it.");
+        Assert.HasCount(1, change.OffsetChangeMap);
+    }
+
     [TestMethod]
     public void MutationsRaiseDocumentAndTextEvents()
     {
