@@ -47,6 +47,12 @@ public interface ITextViewHost
     /// <summary>Height of the whole document in view coordinates.</summary>
     double ExtentHeight { get; }
 
+    /// <summary>
+    /// Width of the widest line laid out so far, in view coordinates. Lines that have not been laid
+    /// out yet count as empty, so the value grows as more of the document is reached.
+    /// </summary>
+    double ExtentWidth { get; }
+
     /// <summary>Height of a line holding one character in the view's own style, independent of content.</summary>
     double DefaultLineHeight { get; }
 

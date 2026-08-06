@@ -84,6 +84,27 @@ public sealed class TextViewHostTests
     }
 
     /// <summary>
+    /// The horizontal extent follows the widest line laid out, which is what a host sizes its
+    /// horizontal scrolling against.
+    /// </summary>
+    [TestMethod]
+    public void MultiLineTextBox_ReportsTheWidthOfTheWidestLaidOutLine()
+    {
+        var box = new MultiLineTextBox { Wrap = false, Text = "short" };
+        box.Measure(new Size(400, 100));
+        box.Arrange(new Rect(0, 0, 400, 100));
+        ITextViewHost host = box;
+        double narrow = host.ExtentWidth;
+
+        box.Text = "short\nthis line is a good deal longer than the first one";
+        box.Measure(new Size(400, 100));
+        box.Arrange(new Rect(0, 0, 400, 100));
+
+        Assert.IsGreaterThan(0, narrow);
+        Assert.IsGreaterThan(narrow, host.ExtentWidth);
+    }
+
+    /// <summary>
     /// The offset decides which line comes back, including one inside the line rather than at its
     /// start, which is what a caller asking about a position passes.
     /// </summary>

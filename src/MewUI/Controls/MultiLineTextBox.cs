@@ -436,6 +436,16 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     }
 
     /// <inheritdoc/>
+    public double ExtentWidth
+    {
+        get
+        {
+            EnsureView();
+            return _view?.ExtentWidth ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
     public TextLineLayout? GetLineLayout(int documentOffset)
     {
         EnsureView();

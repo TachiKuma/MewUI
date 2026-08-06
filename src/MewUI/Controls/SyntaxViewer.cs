@@ -256,6 +256,16 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     public Rect TextViewportBounds => _contentBounds;
 
     /// <inheritdoc/>
+    public double ExtentWidth
+    {
+        get
+        {
+            EnsureView();
+            return _view?.ExtentWidth ?? 0;
+        }
+    }
+
+    /// <inheritdoc/>
     public TextLineLayout? GetLineLayout(int documentOffset)
     {
         EnsureView();
