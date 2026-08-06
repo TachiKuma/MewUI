@@ -1,12 +1,13 @@
+using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
 /// <summary>
-/// Draws tab and end-of-line markers over the laid-out lines. They are drawn rather than substituted
-/// into the text so a tab keeps its tab-stop width instead of collapsing to one glyph; it mirrors
-/// AvalonEdit's zero-width TabGlyphRun, which overlays the arrow and leaves the real tab in the run.
-/// Spaces are substituted by <see cref="SpaceMarkerProjection"/>, as AvalonEdit does.
+/// Draws the tab and end-of-line markers over the laid-out lines. Neither can be an element: the
+/// end-of-line position holds no character to stand in for, and the original's tab is two runs, a
+/// zero-width glyph followed by the tab itself, where an element here contributes one. Substituting
+/// the tab instead would collapse it to the arrow's width and lose its tab stop.
 /// </summary>
 internal sealed class WhitespaceMarkerLayer(TextEditorOptions options, TextEditor editor) : ITextViewLayer
 {
@@ -18,8 +19,6 @@ internal sealed class WhitespaceMarkerLayer(TextEditorOptions options, TextEdito
         Wrapping = TextWrapping.NoWrap,
         MaxWidth = double.PositiveInfinity
     };
-
-    private readonly List<Rect> _bounds = [];
 
     public void Draw(ITextRenderContext context, Rect viewportBounds)
     {
@@ -36,11 +35,11 @@ internal sealed class WhitespaceMarkerLayer(TextEditorOptions options, TextEdito
         }
 
         var factory = Application.IsRunning ? Application.Current.GraphicsFactory : Application.DefaultGraphicsFactory;
-        var engine = factory.TextEngine;
         uint dpi = editor.GetDpi();
         var style = new TextRunStyle(editor.FontFamily, editor.FontSize, editor.FontWeight);
         var drawOptions = new TextDrawOptions(editor.WhitespaceMarkerColor);
         var scroll = surface.ScrollOffset;
+        var bounds = new List<Rect>();
 
         foreach (var line in lines)
         {
@@ -48,68 +47,45 @@ internal sealed class WhitespaceMarkerLayer(TextEditorOptions options, TextEdito
             var origin = new Point(
                 viewportBounds.X - scroll.X,
                 viewportBounds.Y + documentY - scroll.Y);
-            DrawLineMarkers(context, engine, line, origin, dpi, style, in drawOptions);
-        }
-    }
-
-    private void DrawLineMarkers(
-        ITextRenderContext context,
-        ITextEngine engine,
-        TextLineLayout line,
-        Point origin,
-        uint dpi,
-        TextRunStyle style,
-        in TextDrawOptions drawOptions)
-    {
-        int length = line.LogicalLine.Length;
-        if (options.ShowTabs)
-        {
-            var text = editor.Document.GetText(line.LogicalLine.Offset, length);
-            for (int index = 0; index < text.Length; index++)
+            if (options.ShowTabs)
             {
-                if (text[index] == '\t')
+                string text = editor.Document.GetText(line.LogicalLine.Offset, line.LogicalLine.Length);
+                for (int index = 0; index < text.Length; index++)
                 {
-                    DrawMarker(context, engine, line, origin, dpi, style, in drawOptions, index, TAB_MARKER, true);
+                    if (text[index] != '\t')
+                    {
+                        continue;
+                    }
+                    bounds.Clear();
+                    line.GetRangeBounds(new TextRange(index, 1), bounds);
+                    if (bounds.Count > 0)
+                    {
+                        // At the cell edge, where the tab begins, as the original draws it.
+                        Draw(context, factory, TAB_MARKER, style, dpi, in drawOptions,
+                            new Point(origin.X + bounds[0].X, origin.Y + bounds[0].Y));
+                    }
                 }
             }
-        }
-        if (options.ShowEndOfLine)
-        {
-            DrawMarker(context, engine, line, origin, dpi, style, in drawOptions, length, END_OF_LINE_MARKER, false);
+            if (options.ShowEndOfLine)
+            {
+                // Past the last character, so the position comes from the caret rather than a cell.
+                var caret = line.GetCaretBounds(new CharacterHit(line.LogicalLine.Length, 0));
+                Draw(context, factory, END_OF_LINE_MARKER, style, dpi, in drawOptions,
+                    new Point(origin.X + caret.X, origin.Y + caret.Y));
+            }
         }
     }
 
-    private void DrawMarker(
+    private static void Draw(
         ITextRenderContext context,
-        ITextEngine engine,
-        TextLineLayout line,
-        Point origin,
-        uint dpi,
-        TextRunStyle style,
-        in TextDrawOptions drawOptions,
-        int offset,
+        IGraphicsFactory factory,
         char glyph,
-        bool occupiesCell)
+        TextRunStyle style,
+        uint dpi,
+        in TextDrawOptions drawOptions,
+        Point origin)
     {
-        Rect cell;
-        if (occupiesCell)
-        {
-            _bounds.Clear();
-            line.GetRangeBounds(new TextRange(offset, 1), _bounds);
-            if (_bounds.Count == 0)
-            {
-                return;
-            }
-            cell = _bounds[0];
-        }
-        else
-        {
-            // The end-of-line marker sits past the last character, so it has no cell to measure and
-            // its position comes from the caret instead.
-            cell = line.GetCaretBounds(new CharacterHit(offset, 0));
-        }
-
-        var layout = engine.GetOrCreateLayout(
+        var layout = factory.TextEngine.GetOrCreateLayout(
             new TextLayoutRequest
             {
                 Text = glyph.ToString().AsMemory(),
@@ -118,9 +94,6 @@ internal sealed class WhitespaceMarkerLayer(TextEditorOptions options, TextEdito
                 Paragraph = _markerParagraph
             },
             TextLayoutCachePolicy.Content);
-
-        // Both markers start at the cell edge: the tab arrow marks where the tab begins, as
-        // AvalonEdit draws it, and the end-of-line marker follows the last character.
-        context.Draw(layout, new Point(origin.X + cell.X, origin.Y + cell.Y), in drawOptions);
+        context.Draw(layout, origin, in drawOptions);
     }
 }

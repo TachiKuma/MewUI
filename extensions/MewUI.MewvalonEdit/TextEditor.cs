@@ -21,11 +21,10 @@ public class TextEditor : Control
     private readonly System.Collections.ObjectModel.ObservableCollection<AbstractMargin> _leftMargins = [];
     private Grid? _marginHost;
     private HighlightingColorizer? _colorizer;
-    private readonly SpaceMarkerProjection _spaceMarkers;
-    private readonly SpaceMarkerClassifier _spaceMarkerColors;
     private readonly WhitespaceMarkerLayer _whitespaceMarkers;
     private readonly LineTransformerAdapter _lineTransformers;
     private readonly ElementGeneratorAdapter _elementGenerators;
+    private SingleCharacterElementGenerator? _singleCharacterGenerator;
     private LinkElementGenerator? _linkGenerator;
     private MailLinkElementGenerator? _mailLinkGenerator;
     private readonly BackgroundRendererRegistry _backgroundRenderers;
@@ -34,8 +33,6 @@ public class TextEditor : Control
     {
         Options = new TextEditorOptions();
         IndentationStrategy = new DefaultIndentationStrategy();
-        _spaceMarkers = new SpaceMarkerProjection(Options);
-        _spaceMarkerColors = new SpaceMarkerClassifier(Options, this);
         _whitespaceMarkers = new WhitespaceMarkerLayer(Options, this);
         _lineTransformers = new LineTransformerAdapter(this);
         _elementGenerators = new ElementGeneratorAdapter(this);
@@ -66,14 +63,12 @@ public class TextEditor : Control
         // The generator projection runs first so it scans raw document text; the space markers
         // then restyle whatever survives, including projected replacement text.
         _surface.Extensions.Projections.Add(_elementGenerators);
-        _surface.Extensions.Projections.Add(_spaceMarkers);
         // Ported transformers land below the whitespace markers, as AvalonEdit's baked marker
         // glyphs cannot be recolored by a colorizer.
         _surface.Extensions.Classifiers.Add(_lineTransformers);
         // After the transformers so a link underline survives the colorizer's colours.
         _surface.Extensions.Classifiers.Add(_elementGenerators);
         _surface.Extensions.Transformers.Add(_lineTransformers);
-        _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
         UpdateBuiltInElementGenerators();
         _backgroundRenderers.RegisterInto(_surface);
@@ -671,6 +666,10 @@ public class TextEditor : Control
     /// </summary>
     private void UpdateBuiltInElementGenerators()
     {
+        SetBuiltInGenerator(
+            ref _singleCharacterGenerator,
+            Options.ShowSpaces || Options.ShowTabs || Options.ShowBoxForControlCharacters,
+            () => new SingleCharacterElementGenerator(Options, this));
         SetBuiltInGenerator(ref _linkGenerator, Options.EnableHyperlinks, static () => new LinkElementGenerator());
         SetBuiltInGenerator(ref _mailLinkGenerator, Options.EnableEmailHyperlinks, static () => new MailLinkElementGenerator());
         if (_linkGenerator is not null)

@@ -11,50 +11,75 @@ namespace MewUI.MewvalonEdit.Test;
 [DoNotParallelize]
 public sealed class WhitespaceAndThemeTests
 {
+    /// <summary>
+    /// A space is stood in for by a marker glyph in its own colour, so it reads as whitespace rather
+    /// than as content. The original builds it as a single-character element too.
+    /// </summary>
     [TestMethod]
     public void SpaceMarkersArePaintedInTheMarkerColor()
     {
         var editor = new TextEditor { Text = "a b" };
         editor.Options.ShowSpaces = true;
-        var pipeline = editor.TextArea.TextView.Extensions;
-        var logical = new LogicalTextLine(0, 0, 3, 3);
 
-        // Run every projection in registration order, as the engine does; the element generator
-        // projection sits ahead of the space markers and passes text without generators through.
-        var projected = new ProjectedText(editor.Text.AsMemory(), IdentityTextOffsetMap.Instance);
-        foreach (var projection in pipeline.Projections)
-        {
-            projected = projection.Project(new TextProjectionContext(logical, projected.Text));
-        }
-        Assert.AreEqual("a·b", projected.Text.ToString());
+        var element = ConstructSingleCharacterElement(editor, offset: 1);
 
-        var spans = new List<TextPaintSpan>();
-        foreach (var classifier in pipeline.Classifiers)
-        {
-            classifier.Classify(
-                new TextClassificationContext(logical, projected.Text, projected.OffsetMap), spans);
-        }
-
-        Assert.ContainsSingle(spans);
-        Assert.AreEqual(new TextRange(1, 1), spans[0].Range);
-        Assert.AreNotEqual(editor.Foreground, spans[0].Foreground);
+        Assert.IsNotNull(element, "No element stood in for the space.");
+        Assert.AreEqual(editor.WhitespaceMarkerColor, element.Foreground);
+        Assert.AreNotEqual(editor.Foreground, element.Foreground);
     }
 
     [TestMethod]
     public void SpaceMarkersAreNotPaintedWhenHidden()
     {
         var editor = new TextEditor { Text = "a b" };
-        var spans = new List<TextPaintSpan>();
-        var logical = new LogicalTextLine(0, 0, 3, 3);
+        editor.Options.ShowSpaces = false;
 
-        foreach (var classifier in editor.TextArea.TextView.Extensions.Classifiers)
+        Assert.IsNull(ConstructSingleCharacterElement(editor, offset: 1));
+    }
+
+    /// <summary>
+    /// A control character is stood in for by a box naming it. A tab is a control character too, and
+    /// must not be boxed: the original settles it before the box is reached.
+    /// </summary>
+    [TestMethod]
+    public void ControlCharactersAreBoxedButTabsAreNot()
+    {
+        var editor = new TextEditor { Text = "ab\tc" };
+
+        var boxed = ConstructSingleCharacterElement(editor, offset: 1);
+        Assert.IsInstanceOfType<ControlCharacterBoxElement>(boxed, "The bell character was not boxed.");
+        Assert.AreEqual("BEL", TextUtilities.GetControlCharacterName((char)7));
+        Assert.IsNull(ConstructSingleCharacterElement(editor, offset: 3), "The tab was boxed.");
+    }
+
+    private static VisualLineElement? ConstructSingleCharacterElement(TextEditor editor, int offset)
+    {
+        var generator = editor.TextArea.TextView.ElementGenerators
+            .OfType<SingleCharacterElementGenerator>()
+            .SingleOrDefault();
+        if (generator is null)
         {
-            classifier.Classify(
-                new TextClassificationContext(logical, editor.Text.AsMemory(), IdentityTextOffsetMap.Instance),
-                spans);
+            return null;
         }
+        generator.StartGeneration(new GenerationContext(editor));
+        try
+        {
+            return generator.GetFirstInterestedOffset(offset) == offset
+                ? generator.ConstructElement(offset)
+                : null;
+        }
+        finally
+        {
+            generator.FinishGeneration();
+        }
+    }
 
-        Assert.IsEmpty(spans);
+    private sealed class GenerationContext(TextEditor editor) : ITextRunConstructionContext
+    {
+        public TextDocument Document => editor.Document;
+        public TextView TextView => editor.TextArea.TextView;
+        public DocumentLine CurrentDocumentLine => editor.Document.GetLineByNumber(1);
+        public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
     }
 
     [TestMethod]

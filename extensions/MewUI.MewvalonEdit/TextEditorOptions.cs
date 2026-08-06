@@ -13,6 +13,7 @@ public sealed class TextEditorOptions : INotifyPropertyChanged
     private bool _showColumnRuler;
     private int _columnRulerPosition = 80;
     private bool _highlightCurrentLine;
+    private bool _showBoxForControlCharacters = true;
     private bool _enableHyperlinks = true;
     private bool _enableEmailHyperlinks = true;
     private bool _requireControlModifierForHyperlinkClick = true;
@@ -89,6 +90,16 @@ public sealed class TextEditorOptions : INotifyPropertyChanged
     {
         get => _showEndOfLine;
         set => Set(ref _showEndOfLine, value);
+    }
+
+    /// <summary>
+    /// Draws a control character as a box naming it, so an otherwise invisible character shows
+    /// without reading as ordinary text. On by default, as in the original.
+    /// </summary>
+    public bool ShowBoxForControlCharacters
+    {
+        get => _showBoxForControlCharacters;
+        set => Set(ref _showBoxForControlCharacters, value);
     }
 
     /// <summary>Turns web addresses in the text into links. On by default, as in the original.</summary>

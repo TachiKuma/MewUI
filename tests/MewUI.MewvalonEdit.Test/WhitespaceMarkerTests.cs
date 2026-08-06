@@ -1,0 +1,129 @@
+using Aprillz.MewUI;
+using Aprillz.MewUI.MewvalonEdit;
+using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Text;
+
+namespace Aprillz.MewUI.MewvalonEdit.Test;
+
+/// <summary>
+/// Pins what the whitespace options paint before the three of them move onto one element generator.
+/// Substituting a tab would collapse its tab-stop width, which is the regression these guard.
+/// </summary>
+[TestClass]
+[DoNotParallelize]
+public sealed class WhitespaceMarkerTests
+{
+    private const int WIDTH = 320;
+    private const int HEIGHT = 80;
+
+    [TestMethod]
+    public void ShowSpacesPaintsSomething()
+    {
+        RequireWindows();
+        Assert.IsGreaterThan(0, DifferingPixels("a b c", options => options.ShowSpaces = true),
+            "Turning on space markers painted nothing.");
+    }
+
+    [TestMethod]
+    public void ShowTabsPaintsSomething()
+    {
+        RequireWindows();
+        Assert.IsGreaterThan(0, DifferingPixels("a\tb\tc", options => options.ShowTabs = true),
+            "Turning on tab markers painted nothing.");
+    }
+
+    [TestMethod]
+    public void ShowEndOfLinePaintsSomething()
+    {
+        RequireWindows();
+        Assert.IsGreaterThan(0, DifferingPixels("one\ntwo", options => options.ShowEndOfLine = true),
+            "Turning on end-of-line markers painted nothing.");
+    }
+
+    /// <summary>
+    /// A marked tab still reaches its tab stop. Replacing it with a glyph would shrink it to one
+    /// character, which is why the marker is drawn over the tab rather than put in its place.
+    /// </summary>
+    [TestMethod]
+    public void MarkingTabsLeavesTheirWidthAlone()
+    {
+        RequireWindows();
+        var plain = Layout("a\tb", static _ => { });
+        var marked = Layout("a\tb", static options => options.ShowTabs = true);
+
+        Assert.AreEqual(plain, marked, 0.01, "The tab stop moved when the marker was turned on.");
+    }
+
+    /// <summary>Space markers must not change the layout either: one dot replaces one space.</summary>
+    [TestMethod]
+    public void MarkingSpacesLeavesTheirWidthAlone()
+    {
+        RequireWindows();
+        var plain = Layout("a b", static _ => { });
+        var marked = Layout("a b", static options => options.ShowSpaces = true);
+
+        Assert.AreEqual(plain, marked, 0.01, "The line width moved when space markers were turned on.");
+    }
+
+    private static void RequireWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+        }
+    }
+
+    /// <summary>
+    /// Where the caret sits after the whitespace character, which is the tab stop a substitution
+    /// would collapse.
+    /// </summary>
+    private static double Layout(string text, Action<TextEditorOptions> configure)
+    {
+        var editor = CreateEditor(text, configure);
+        Render(editor);
+        return editor.Surface.VisibleTextLines[0].GetCaretBounds(new CharacterHit(2, 0)).X;
+    }
+
+    private static int DifferingPixels(string text, Action<TextEditorOptions> configure)
+    {
+        byte[] off = Render(CreateEditor(text, static _ => { }));
+        byte[] on = Render(CreateEditor(text, configure));
+        int differing = 0;
+        for (int index = 0; index < Math.Min(off.Length, on.Length); index += 4)
+        {
+            if (off[index] != on[index] || off[index + 1] != on[index + 1] || off[index + 2] != on[index + 2])
+            {
+                differing++;
+            }
+        }
+        return differing;
+    }
+
+    private static TextEditor CreateEditor(string text, Action<TextEditorOptions> configure)
+    {
+        var editor = new TextEditor
+        {
+            Text = text,
+            ShowLineNumbers = false,
+            SkipViewportCull = true
+        };
+        configure(editor.Options);
+        return editor;
+    }
+
+    private static byte[] Render(TextEditor editor)
+    {
+        editor.Measure(new Size(WIDTH, HEIGHT));
+        editor.Arrange(new Rect(0, 0, WIDTH, HEIGHT));
+
+        var factory = Application.DefaultGraphicsFactory;
+        using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(WIDTH, HEIGHT, 1));
+        using (var context = factory.CreateContext(surface))
+        {
+            context.BeginFrame(surface);
+            editor.Render(context);
+            context.EndFrame();
+        }
+        return ((ICpuPixelSurface)surface).GetReadOnlyPixelSpan().ToArray();
+    }
+}
