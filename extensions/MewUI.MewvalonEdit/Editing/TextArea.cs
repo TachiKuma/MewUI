@@ -23,6 +23,10 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         _selection = EmptySelection;
         TextView = new TextView(this);
         TextView.Services.AddService(this);
+        // Taken unconditionally: the caret's colour, its visibility and its overstrike width all
+        // live here, and a caret that only sometimes belongs to the editor would answer differently
+        // depending on whether one of them had been touched.
+        TextView.InsertLayer(new CaretLayer(this), KnownLayer.Caret, LayerInsertionPosition.Replace);
         editor.Surface.EditingStateChanged += OnEditingStateChanged;
         editor.Surface.TextInput += OnTextInput;
     }
@@ -157,6 +161,20 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         set => SetValue(SelectionBorderProperty, value);
     }
 
+    public static readonly MewProperty<bool> OverstrikeModeProperty =
+        MewProperty<bool>.Register<TextArea>(nameof(OverstrikeMode), false,
+            MewPropertyOptions.AffectsRender);
+
+    /// <summary>
+    /// Whether typing overwrites the character at the caret rather than inserting before it. The
+    /// caret covers that character while it is on, translucently, so the character stays readable.
+    /// </summary>
+    public bool OverstrikeMode
+    {
+        get => GetValue(OverstrikeModeProperty);
+        set => SetValue(OverstrikeModeProperty, value);
+    }
+
     protected override void OnMewPropertyChanged(MewProperty property)
     {
         // No visual tree here, so AffectsRender invalidates nothing by itself.
@@ -231,6 +249,9 @@ public sealed class Caret(TextArea textArea)
     // Room kept between the caret and the edge of the view while scrolling it into sight.
     internal const double MINIMUM_DISTANCE_TO_VIEW_BORDER = 30;
 
+    private Color? _caretBrush;
+    private bool _isVisible = true;
+
     public int Offset
     {
         get => textArea.Editor.CaretOffset;
@@ -240,6 +261,59 @@ public sealed class Caret(TextArea textArea)
     public int Line => textArea.Document.GetLocation(Offset).Line;
     public int Column => textArea.Document.GetLocation(Offset).Column;
     public TextLocation Location => textArea.Document.GetLocation(Offset);
+
+    /// <summary>
+    /// Where the caret is, including the visual column it lands on. Assigning takes the location
+    /// and leaves the visual column to be worked out from it.
+    /// </summary>
+    public TextViewPosition Position
+    {
+        get => new(Location, VisualColumn);
+        set => Offset = textArea.Document.GetOffset(value.Line, value.Column);
+    }
+
+    /// <summary>Visual column of the caret, which a projection moves away from the column.</summary>
+    public int VisualColumn
+    {
+        get
+        {
+            var line = textArea.TextView.GetOrConstructVisualLine(textArea.Document.GetLineByOffset(Offset));
+            return line is null ? Column - 1 : line.GetVisualColumn(Offset - line.StartOffset);
+        }
+    }
+
+    /// <summary>Colour of the caret. Null follows the editor's foreground.</summary>
+    public Color? CaretBrush
+    {
+        get => _caretBrush;
+        set
+        {
+            if (_caretBrush == value) return;
+            _caretBrush = value;
+            textArea.Editor.Surface.InvalidateLayer(Aprillz.MewUI.Text.TextViewLayerAnchor.Caret);
+        }
+    }
+
+    /// <summary>Whether the caret is drawn at all, apart from the blink it follows while shown.</summary>
+    public bool IsVisible => _isVisible;
+
+    /// <summary>Draws the caret again after a <see cref="Hide"/>.</summary>
+    public void Show() => SetVisible(true);
+
+    /// <summary>Stops drawing the caret until <see cref="Show"/>, as a drag over the text does.</summary>
+    public void Hide() => SetVisible(false);
+
+    /// <summary>Scrolls the smallest amount that brings the caret into view.</summary>
+    public void BringCaretToView() => textArea.Editor.Surface.ScrollToCaret();
+
     public event EventHandler? PositionChanged;
+
     internal void RaisePositionChanged() => PositionChanged?.Invoke(this, EventArgs.Empty);
+
+    private void SetVisible(bool value)
+    {
+        if (_isVisible == value) return;
+        _isVisible = value;
+        textArea.Editor.Surface.InvalidateLayer(Aprillz.MewUI.Text.TextViewLayerAnchor.Caret);
+    }
 }
