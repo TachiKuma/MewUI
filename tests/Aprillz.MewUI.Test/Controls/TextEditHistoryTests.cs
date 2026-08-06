@@ -120,6 +120,135 @@ public sealed class TextEditHistoryTests
             "A caret inside the replaced range lands at the end of what replaced it.");
     }
 
+    /// <summary>
+    /// A routine that edits line by line, such as indenting a block, would otherwise cost one undo
+    /// per line.
+    /// </summary>
+    [TestMethod]
+    public void AGroupUndoesAsOneStep()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        session.ReplaceSelection("start");
+
+        using (document.BeginUndoGroup())
+        {
+            session.ReplaceSelection("-a");
+            session.ReplaceSelection("-b");
+            session.ReplaceSelection("-c");
+        }
+        Assert.AreEqual("start-a-b-c", document.ToString());
+
+        session.Undo();
+
+        Assert.AreEqual("start", document.ToString());
+        Assert.IsTrue(session.CanUndo, "The edit made before the group stayed its own step.");
+    }
+
+    [TestMethod]
+    public void AGroupRedoesAsOneStep()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        using (document.BeginUndoGroup())
+        {
+            session.ReplaceSelection("a");
+            session.ReplaceSelection("b");
+        }
+        session.Undo();
+
+        session.Redo();
+
+        Assert.AreEqual("ab", document.ToString());
+        Assert.IsFalse(session.CanRedo);
+    }
+
+    /// <summary>The caret returns to where it stood when the group opened, not mid-group.</summary>
+    [TestMethod]
+    public void UndoingAGroupRestoresTheCaretFromBeforeIt()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        session.ReplaceSelection("abc");
+        session.SetCaret(1);
+
+        using (document.BeginUndoGroup())
+        {
+            session.ReplaceSelection("X");
+            session.ReplaceSelection("Y");
+        }
+        session.Undo();
+
+        Assert.AreEqual("abc", document.ToString());
+        Assert.AreEqual(1, session.CaretPosition);
+    }
+
+    /// <summary>
+    /// So a routine that groups its own edits stays correct when a caller groups it in turn.
+    /// </summary>
+    [TestMethod]
+    public void NestingExtendsTheOutermostGroup()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        using (document.BeginUndoGroup())
+        {
+            session.ReplaceSelection("a");
+            using (document.BeginUndoGroup())
+            {
+                session.ReplaceSelection("b");
+            }
+            session.ReplaceSelection("c");
+        }
+
+        session.Undo();
+
+        Assert.AreEqual(string.Empty, document.ToString());
+        Assert.IsFalse(session.CanUndo);
+    }
+
+    [TestMethod]
+    public void EditsAfterAGroupAreTheirOwnSteps()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        using (document.BeginUndoGroup())
+        {
+            session.ReplaceSelection("a");
+            session.ReplaceSelection("b");
+        }
+        session.ReplaceSelection("c");
+
+        session.Undo();
+
+        Assert.AreEqual("ab", document.ToString());
+    }
+
+    /// <summary>
+    /// Half a group would undo to a state the document was never in, so the limit drops the rest of
+    /// the group it cut through even though that keeps fewer edits than asked for.
+    /// </summary>
+    [TestMethod]
+    public void TheSizeLimitNeverCutsAGroupInHalf()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        document.History.SizeLimit = 3;
+        using (document.BeginUndoGroup())
+        {
+            session.ReplaceSelection("a");
+            session.ReplaceSelection("b");
+        }
+        session.ReplaceSelection("c");
+        session.ReplaceSelection("d");
+
+        session.Undo();
+        session.Undo();
+
+        Assert.AreEqual("ab", document.ToString());
+        Assert.IsFalse(session.CanUndo, "The group the limit cut through was dropped whole.");
+    }
+
     [TestMethod]
     public void SharedDocumentMergesHistoryAcrossSessions()
     {

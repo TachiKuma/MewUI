@@ -51,6 +51,13 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
 
     internal TextEditHistory History => _history ??= new TextEditHistory(this);
 
+    /// <summary>
+    /// Groups the edits made until the returned object is disposed into one undo step. Every edit
+    /// still raises <see cref="Changed"/> as it happens, so a reader inside the group never sees
+    /// stale text; only what undo treats as one step changes. Nesting extends the outermost group.
+    /// </summary>
+    public IDisposable BeginUndoGroup() => History.BeginGroup();
+
     public char GetCharAt(int offset)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(offset);

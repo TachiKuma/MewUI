@@ -12,6 +12,11 @@ internal sealed class TextEditHistory
     private readonly Stack<EditCommand> _redo = new();
     private int _suppressDepth;
     private int _sizeLimit = -1;
+    // Edits carry the group they were recorded in, and undo walks a whole group. Ungrouped edits
+    // get an id of their own, so one loop covers both and no edit can join a neighbour by accident.
+    private int _nextGroupId = 1;
+    private int _openGroupId;
+    private int _groupDepth;
     // Set while a suppressed replace runs, so the recorder learns both whether the document changed
     // and what it removed without asking for either up front.
     private TextChange? _appliedChange;
@@ -73,6 +78,28 @@ internal sealed class TextEditHistory
         int caretAfter)
         => Record(new EditCommand(start, removed, inserted, anchorBefore, caretBefore, anchorAfter, caretAfter));
 
+    /// <summary>
+    /// Starts a group; the edits recorded until it is disposed undo together. Nesting extends the
+    /// outermost group rather than starting another, so a routine that groups its own edits stays
+    /// correct when a caller groups it in turn.
+    /// </summary>
+    public IDisposable BeginGroup()
+    {
+        if (_groupDepth++ == 0)
+        {
+            _openGroupId = _nextGroupId++;
+        }
+        return new Group(this);
+    }
+
+    private void EndGroup()
+    {
+        if (_groupDepth > 0 && --_groupDepth == 0)
+        {
+            _openGroupId = 0;
+        }
+    }
+
     private void Record(in EditCommand command)
     {
         _redo.Clear();
@@ -80,7 +107,7 @@ internal sealed class TextEditHistory
         {
             return;
         }
-        _undo.Add(command);
+        _undo.Add(command with { GroupId = _openGroupId != 0 ? _openGroupId : _nextGroupId++ });
         Trim();
     }
 
@@ -95,9 +122,19 @@ internal sealed class TextEditHistory
             Clear();
             return;
         }
-        if (_undo.Count > _sizeLimit)
+        if (_undo.Count <= _sizeLimit)
         {
-            _undo.RemoveRange(0, _undo.Count - _sizeLimit);
+            return;
+        }
+
+        int removeCount = _undo.Count - _sizeLimit;
+        int cutGroupId = _undo[removeCount - 1].GroupId;
+        _undo.RemoveRange(0, removeCount);
+        // Half a group would undo to a state the document was never in, so the rest of a group the
+        // limit cut through goes too, even though that keeps fewer edits than asked for.
+        while (_undo.Count > 0 && _undo[0].GroupId == cutGroupId)
+        {
+            _undo.RemoveAt(0);
         }
     }
 
@@ -112,12 +149,19 @@ internal sealed class TextEditHistory
             anchor = caret = 0;
             return false;
         }
-        var command = _undo[^1];
-        _undo.RemoveAt(_undo.Count - 1);
-        ReplaceSuppressed(command.Start, command.Inserted.Length, command.Removed);
-        _redo.Push(command);
-        anchor = command.AnchorBefore;
-        caret = command.CaretBefore;
+        int groupId = _undo[^1].GroupId;
+        anchor = caret = 0;
+        // Newest first, so the last one undone is the oldest of the group and its before-state is
+        // the one the document was in when the group opened.
+        while (_undo.Count > 0 && _undo[^1].GroupId == groupId)
+        {
+            var command = _undo[^1];
+            _undo.RemoveAt(_undo.Count - 1);
+            ReplaceSuppressed(command.Start, command.Inserted.Length, command.Removed);
+            _redo.Push(command);
+            anchor = command.AnchorBefore;
+            caret = command.CaretBefore;
+        }
         return true;
     }
 
@@ -128,11 +172,19 @@ internal sealed class TextEditHistory
             anchor = caret = 0;
             return false;
         }
-        ReplaceSuppressed(command.Start, command.Removed.Length, command.Inserted);
-        _undo.Add(command);
-        anchor = command.AnchorAfter;
-        caret = command.CaretAfter;
-        return true;
+        int groupId = command.GroupId;
+        while (true)
+        {
+            ReplaceSuppressed(command.Start, command.Removed.Length, command.Inserted);
+            _undo.Add(command);
+            anchor = command.AnchorAfter;
+            caret = command.CaretAfter;
+            if (!_redo.TryPeek(out var next) || next.GroupId != groupId)
+            {
+                return true;
+            }
+            command = _redo.Pop();
+        }
     }
 
     public void Clear()
@@ -171,5 +223,24 @@ internal sealed class TextEditHistory
         int AnchorBefore,
         int CaretBefore,
         int AnchorAfter,
-        int CaretAfter);
+        int CaretAfter)
+    {
+        /// <summary>Edits sharing an id undo and redo as one step. Assigned when the edit is recorded.</summary>
+        public int GroupId { get; init; }
+    }
+
+    private sealed class Group(TextEditHistory history) : IDisposable
+    {
+        private bool _ended;
+
+        public void Dispose()
+        {
+            if (_ended)
+            {
+                return;
+            }
+            _ended = true;
+            history.EndGroup();
+        }
+    }
 }
