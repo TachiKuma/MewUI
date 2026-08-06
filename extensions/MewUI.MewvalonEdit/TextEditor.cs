@@ -322,6 +322,12 @@ public class TextEditor : Control, ITextEditorComponent
     /// <summary>Height of the whole document.</summary>
     public double ExtentHeight => _surface.ExtentHeight;
 
+    /// <summary>
+    /// Width of the widest line laid out so far. Lines not reached yet count as empty, so the value
+    /// grows while the document is scrolled through.
+    /// </summary>
+    public double ExtentWidth => _surface.ExtentWidth;
+
     /// <summary>Width of the viewport the text is shown in.</summary>
     public double ViewportWidth => _surface.TextViewportBounds.Width;
 

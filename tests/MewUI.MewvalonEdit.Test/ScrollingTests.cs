@@ -23,6 +23,18 @@ public sealed class ScrollingTests
         Assert.AreEqual(40, editor.VerticalOffset, 0.01);
     }
 
+    /// <summary>The four scroll metrics ported code reads before deciding where to scroll.</summary>
+    [TestMethod]
+    public void TheScrollMetricsDescribeTheDocumentAndTheViewport()
+    {
+        var editor = CreateEditor();
+
+        Assert.AreEqual(HEIGHT, editor.ViewportHeight, HEIGHT * 0.5);
+        Assert.AreEqual(WIDTH, editor.ViewportWidth, WIDTH * 0.5);
+        Assert.IsGreaterThan(editor.ViewportHeight, editor.ExtentHeight);
+        Assert.IsGreaterThan(0, editor.ExtentWidth);
+    }
+
     [TestMethod]
     public void OffsetsClampToTheDocument()
     {
