@@ -1,45 +1,69 @@
-using System.ComponentModel;
-using System.Runtime.CompilerServices;
+using Aprillz.MewUI.Controls;
 
 namespace Aprillz.MewUI.MewvalonEdit;
 
-public class TextEditorOptions : INotifyPropertyChanged
+/// <summary>
+/// Editing and display options of an editor. Every member is virtual so a host can force a value,
+/// and every value is a <see cref="MewProperty"/> so it can be bound to.
+/// </summary>
+public class TextEditorOptions : MewObject
 {
-    private int _indentationSize = 4;
-    private bool _convertTabsToSpaces;
-    private bool _showSpaces;
-    private bool _showTabs;
-    private bool _showEndOfLine;
-    private bool _showColumnRuler;
-    private int _columnRulerPosition = 80;
-    private bool _highlightCurrentLine;
-    private bool _showBoxForControlCharacters = true;
-    private bool _enableHyperlinks = true;
-    private bool _enableEmailHyperlinks = true;
-    private bool _requireControlModifierForHyperlinkClick = true;
-    private bool _cutCopyWholeLine = true;
+    public static readonly MewProperty<int> IndentationSizeProperty =
+        MewProperty<int>.Register<TextEditorOptions>(nameof(IndentationSize), 4);
+
+    public static readonly MewProperty<bool> ConvertTabsToSpacesProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(ConvertTabsToSpaces), false);
+
+    public static readonly MewProperty<bool> ShowSpacesProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowSpaces), false);
+
+    public static readonly MewProperty<bool> ShowTabsProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowTabs), false);
+
+    public static readonly MewProperty<bool> ShowEndOfLineProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowEndOfLine), false);
+
+    public static readonly MewProperty<bool> ShowBoxForControlCharactersProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowBoxForControlCharacters), true);
+
+    public static readonly MewProperty<bool> ShowColumnRulerProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowColumnRuler), false);
+
+    public static readonly MewProperty<int> ColumnRulerPositionProperty =
+        MewProperty<int>.Register<TextEditorOptions>(nameof(ColumnRulerPosition), 80);
+
+    public static readonly MewProperty<bool> HighlightCurrentLineProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(HighlightCurrentLine), false);
+
+    public static readonly MewProperty<bool> EnableHyperlinksProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(EnableHyperlinks), true);
+
+    public static readonly MewProperty<bool> EnableEmailHyperlinksProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(EnableEmailHyperlinks), true);
+
+    public static readonly MewProperty<bool> RequireControlModifierForHyperlinkClickProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(RequireControlModifierForHyperlinkClick), true);
+
+    public static readonly MewProperty<bool> CutCopyWholeLineProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(CutCopyWholeLine), true);
+
+    /// <summary>Raised after an option changed, carrying the option that did.</summary>
+    public event EventHandler<MewProperty>? OptionChanged;
 
     public virtual int IndentationSize
     {
-        get => _indentationSize;
+        get => GetValue(IndentationSizeProperty);
         set
         {
             if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
-            if (_indentationSize == value) return;
-            Set(ref _indentationSize, value);
-            OnPropertyChanged(nameof(IndentationString));
+            SetValue(IndentationSizeProperty, value);
         }
     }
 
     public virtual bool ConvertTabsToSpaces
     {
-        get => _convertTabsToSpaces;
-        set
-        {
-            if (_convertTabsToSpaces == value) return;
-            Set(ref _convertTabsToSpaces, value);
-            OnPropertyChanged(nameof(IndentationString));
-        }
+        get => GetValue(ConvertTabsToSpacesProperty);
+        set => SetValue(ConvertTabsToSpacesProperty, value);
     }
 
     /// <summary>Text that indents from column 1 to the next indentation level.</summary>
@@ -62,41 +86,41 @@ public class TextEditorOptions : INotifyPropertyChanged
 
     public virtual bool ShowSpaces
     {
-        get => _showSpaces;
-        set => Set(ref _showSpaces, value);
+        get => GetValue(ShowSpacesProperty);
+        set => SetValue(ShowSpacesProperty, value);
     }
 
     /// <summary>Draws a vertical rule at <see cref="ColumnRulerPosition"/>.</summary>
     public virtual bool ShowColumnRuler
     {
-        get => _showColumnRuler;
-        set => Set(ref _showColumnRuler, value);
+        get => GetValue(ShowColumnRulerProperty);
+        set => SetValue(ShowColumnRulerProperty, value);
     }
 
     /// <summary>Column the rule sits at, counted in wide spaces.</summary>
     public virtual int ColumnRulerPosition
     {
-        get => _columnRulerPosition;
-        set => Set(ref _columnRulerPosition, value);
+        get => GetValue(ColumnRulerPositionProperty);
+        set => SetValue(ColumnRulerPositionProperty, value);
     }
 
     /// <summary>Paints the line holding the caret in the view's current-line colours.</summary>
     public virtual bool HighlightCurrentLine
     {
-        get => _highlightCurrentLine;
-        set => Set(ref _highlightCurrentLine, value);
+        get => GetValue(HighlightCurrentLineProperty);
+        set => SetValue(HighlightCurrentLineProperty, value);
     }
 
     public virtual bool ShowTabs
     {
-        get => _showTabs;
-        set => Set(ref _showTabs, value);
+        get => GetValue(ShowTabsProperty);
+        set => SetValue(ShowTabsProperty, value);
     }
 
     public virtual bool ShowEndOfLine
     {
-        get => _showEndOfLine;
-        set => Set(ref _showEndOfLine, value);
+        get => GetValue(ShowEndOfLineProperty);
+        set => SetValue(ShowEndOfLineProperty, value);
     }
 
     /// <summary>
@@ -105,51 +129,39 @@ public class TextEditorOptions : INotifyPropertyChanged
     /// </summary>
     public virtual bool ShowBoxForControlCharacters
     {
-        get => _showBoxForControlCharacters;
-        set => Set(ref _showBoxForControlCharacters, value);
+        get => GetValue(ShowBoxForControlCharactersProperty);
+        set => SetValue(ShowBoxForControlCharactersProperty, value);
     }
 
     /// <summary>Turns web addresses in the text into links. On by default, as in the original.</summary>
     public virtual bool EnableHyperlinks
     {
-        get => _enableHyperlinks;
-        set => Set(ref _enableHyperlinks, value);
+        get => GetValue(EnableHyperlinksProperty);
+        set => SetValue(EnableHyperlinksProperty, value);
     }
 
     /// <summary>Turns mail addresses in the text into links. On by default, as in the original.</summary>
     public virtual bool EnableEmailHyperlinks
     {
-        get => _enableEmailHyperlinks;
-        set => Set(ref _enableEmailHyperlinks, value);
+        get => GetValue(EnableEmailHyperlinksProperty);
+        set => SetValue(EnableEmailHyperlinksProperty, value);
     }
 
     /// <summary>Whether a link needs Ctrl held to follow it, rather than a plain click.</summary>
     public virtual bool RequireControlModifierForHyperlinkClick
     {
-        get => _requireControlModifierForHyperlinkClick;
-        set => Set(ref _requireControlModifierForHyperlinkClick, value);
+        get => GetValue(RequireControlModifierForHyperlinkClickProperty);
+        set => SetValue(RequireControlModifierForHyperlinkClickProperty, value);
     }
 
     /// <summary>Copying with nothing selected takes the whole line. On by default, as in the original.</summary>
     public virtual bool CutCopyWholeLine
     {
-        get => _cutCopyWholeLine;
-        set => Set(ref _cutCopyWholeLine, value);
+        get => GetValue(CutCopyWholeLineProperty);
+        set => SetValue(CutCopyWholeLineProperty, value);
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    protected void OnPropertyChanged(string propertyName)
-        => OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
-
-    /// <summary>Raises <see cref="PropertyChanged"/>. Override to see every option change.</summary>
-    protected virtual void OnPropertyChanged(PropertyChangedEventArgs e)
-        => PropertyChanged?.Invoke(this, e);
-
-    private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
-    {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return;
-        field = value;
-        OnPropertyChanged(propertyName!);
-    }
+    /// <summary>Raises <see cref="OptionChanged"/>. Override to see every option change.</summary>
+    protected override void OnMewPropertyChanged(MewProperty property)
+        => OptionChanged?.Invoke(this, property);
 }

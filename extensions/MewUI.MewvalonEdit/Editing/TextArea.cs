@@ -146,10 +146,10 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     }
 
     /// <summary>Raised after an option changed.</summary>
-    public event System.ComponentModel.PropertyChangedEventHandler? OptionChanged
+    public event EventHandler<MewProperty>? OptionChanged
     {
-        add => Options.PropertyChanged += value;
-        remove => Options.PropertyChanged -= value;
+        add => Options.OptionChanged += value;
+        remove => Options.OptionChanged -= value;
     }
 
     public void ReplaceSelection(string? text) => _editor.Surface.ReplaceSelection(text);

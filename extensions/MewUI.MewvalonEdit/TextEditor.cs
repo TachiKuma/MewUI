@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Text;
 using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
@@ -37,7 +36,7 @@ public class TextEditor : Control, ITextEditorComponent
         _lineTransformers = new LineTransformerAdapter(this);
         _elementGenerators = new ElementGeneratorAdapter(this);
         _backgroundRenderers = new BackgroundRendererRegistry(this);
-        Options.PropertyChanged += OnOptionsChanged;
+        Options.OptionChanged += OnOptionsChanged;
         var document = new TextDocument();
         StyleSheet = new StyleSheet();
         StyleSheet.Define<TextEditor>(CreateFrameStyle());
@@ -478,7 +477,7 @@ public class TextEditor : Control, ITextEditorComponent
     public event EventHandler? DocumentChanged;
 
     /// <summary>Raised when an option changed.</summary>
-    public event PropertyChangedEventHandler? OptionChanged;
+    public event EventHandler<MewProperty>? OptionChanged;
 
     /// <summary>
     /// The requested service, looked up on the text view and then on the document. Reached through
@@ -581,7 +580,7 @@ public class TextEditor : Control, ITextEditorComponent
 
     protected override void OnDispose()
     {
-        Options.PropertyChanged -= OnOptionsChanged;
+        Options.OptionChanged -= OnOptionsChanged;
         Document.Changed -= OnDocumentTextChanged;
         base.OnDispose();
     }
@@ -817,7 +816,7 @@ public class TextEditor : Control, ITextEditorComponent
         return expanded.ToString();
     }
 
-    private void OnOptionsChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnOptionsChanged(object? sender, MewProperty option)
     {
         _surface.TabSize = Options.IndentationSize;
         UpdateBuiltInElementGenerators();
@@ -825,7 +824,7 @@ public class TextEditor : Control, ITextEditorComponent
         // version alone, so without this a toggled option waits for the next edit to show.
         _elementGenerators.InvalidateScans();
         _surface.InvalidateTextView();
-        OptionChanged?.Invoke(this, e);
+        OptionChanged?.Invoke(this, option);
     }
 
     /// <summary>

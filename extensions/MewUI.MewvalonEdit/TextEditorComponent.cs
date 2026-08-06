@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using Aprillz.MewUI.MewvalonEdit.Document;
 
 namespace Aprillz.MewUI.MewvalonEdit;
@@ -16,6 +15,6 @@ public interface ITextEditorComponent : IServiceProvider
 
     TextEditorOptions Options { get; }
 
-    /// <summary>Raised when an option changed.</summary>
-    event PropertyChangedEventHandler? OptionChanged;
+    /// <summary>Raised when an option changed, carrying the option that did.</summary>
+    event EventHandler<MewProperty>? OptionChanged;
 }

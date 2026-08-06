@@ -1,4 +1,4 @@
-using System.ComponentModel;
+using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.MewvalonEdit;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Folding;
@@ -116,18 +116,19 @@ public sealed class TextEditorTests
         Assert.AreEqual(1, options.Notifications, "The change did not run through the overridable raise.");
     }
 
-    /// <summary>The derived indentation text is reported alongside what it derives from.</summary>
+    /// <summary>A change names the option that moved, so a listener can tell them apart.</summary>
     [TestMethod]
-    public void ChangingTheIndentationReportsTheIndentationString()
+    public void AnOptionChangeCarriesTheOptionThatChanged()
     {
         var options = new TextEditorOptions();
-        var raised = new List<string?>();
-        options.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        var raised = new List<MewProperty>();
+        options.OptionChanged += (_, option) => raised.Add(option);
 
         options.ConvertTabsToSpaces = true;
+        options.ShowSpaces = true;
 
         CollectionAssert.AreEqual(
-            new[] { nameof(TextEditorOptions.ConvertTabsToSpaces), nameof(TextEditorOptions.IndentationString) },
+            new[] { TextEditorOptions.ConvertTabsToSpacesProperty, TextEditorOptions.ShowSpacesProperty },
             raised);
     }
 
@@ -141,10 +142,10 @@ public sealed class TextEditorTests
             set => base.ShowTabs = value;
         }
 
-        protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+        protected override void OnMewPropertyChanged(MewProperty property)
         {
             Notifications++;
-            base.OnPropertyChanged(e);
+            base.OnMewPropertyChanged(property);
         }
     }
 }

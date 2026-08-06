@@ -121,8 +121,8 @@ public sealed class MainWindow : Window
             new Button().Content("XML").OnClick(() => LoadSample(SampleText.Xml, "XML")),
             new Button().Content("JSON").OnClick(() => LoadSample(SampleText.Json, "JSON")),
             new Button().Content("Long").OnClick(() => LoadSample(SampleText.LongDocument(), "C#")),
-            new Button().Content("Undo").OnClick(_editor.Undo),
-            new Button().Content("Redo").OnClick(_editor.Redo),
+            new Button().Content("Undo").OnClick(() => _editor.Undo()),
+            new Button().Content("Redo").OnClick(() => _editor.Redo()),
             searchBox,
             new Button().Content("Find next").OnClick(() => _search.FindNext()),
             new Button().Content("Replace all").OnClick(() =>

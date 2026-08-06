@@ -190,10 +190,10 @@ public sealed class TextView : MewObject, ITextEditorComponent
     }
 
     /// <summary>Raised after an option changed.</summary>
-    public event System.ComponentModel.PropertyChangedEventHandler? OptionChanged
+    public event EventHandler<MewProperty>? OptionChanged
     {
-        add => Options.PropertyChanged += value;
-        remove => Options.PropertyChanged -= value;
+        add => Options.OptionChanged += value;
+        remove => Options.OptionChanged -= value;
     }
 
     public void Redraw() => textArea.Editor.InvalidateTextView();
