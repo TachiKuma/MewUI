@@ -387,7 +387,7 @@ public abstract class SingleLineTextBase : TextBase
 
         DrawCompositionUnderlines(context, _contentBounds.Right);
 
-        if (IsFocused && _caretVisible)
+        if (IsFocused && CaretVisible)
         {
             var caret = GetCharRectInWindow(_editor.CaretPosition);
             context.FillRectangle(new Rect(caret.X, caret.Y, 1, Math.Max(1, caret.Height)), Theme.Palette.WindowText);

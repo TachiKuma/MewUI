@@ -46,6 +46,15 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     public static readonly MewProperty<int> MaxLengthProperty =
         MewProperty<int>.Register<TextBase>(nameof(MaxLength), 0);
 
+    // The invalidation hangs off the value rather than the blink tick, so no path can change the
+    // phase without repainting the caret. AffectsRender is deliberately absent: it would discard
+    // the whole visual where only the caret changed.
+    private static readonly MewPropertyKey<bool> CaretVisiblePropertyKey =
+        MewProperty<bool>.RegisterReadOnly<TextBase>(nameof(CaretVisible), true,
+            changed: static (self, _, _) => self.InvalidateCaret());
+
+    public static readonly MewProperty<bool> CaretVisibleProperty = CaretVisiblePropertyKey.Property;
+
     // Shared editing state: derived controls access the document/session directly, matching
     // the field names they used before the extraction. Reassigned only by ReplaceDocumentCore.
     private protected EditableTextDocument _document;
@@ -55,13 +64,6 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     private protected int _compositionStart;
     private protected int _compositionLength;
     private protected CompositionAttr[]? _compositionAttributes;
-    private protected bool _caretVisible = true;
-
-    /// <summary>
-    /// Whether the caret is in the visible half of its blink. A layer drawing the caret in place of
-    /// the built-in one reads this instead of keeping a second clock.
-    /// </summary>
-    public bool CaretVisible => _caretVisible;
     private protected bool _syncingText;
     private string _textSnapshot = string.Empty;
     private long _textSnapshotVersion = -1;
@@ -108,6 +110,13 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     public int SelectionStart => GetValue(SelectionStartProperty);
     public int SelectionLength => GetValue(SelectionLengthProperty);
+
+    /// <summary>
+    /// Whether the caret is in the visible half of its blink. A layer drawing the caret in place of
+    /// the built-in one reads this instead of keeping a second clock. Carries no render option: the
+    /// blink invalidates the caret alone, and a whole-visual invalidation would undo that.
+    /// </summary>
+    public bool CaretVisible => GetValue(CaretVisibleProperty);
 
     /// <summary>
     /// Color the selected glyphs are painted in. Null keeps the colors they already have, so a
@@ -535,7 +544,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     protected override void OnLostFocus()
     {
         StopCaretBlink();
-        _caretVisible = true;
+        SetValue(CaretVisiblePropertyKey, true);
         if (_editor.IsComposing) _editor.CommitComposition();
         if (ImeMode != ImeMode.Auto && FindVisualRoot() is Window { Backend: not null } window)
         {
@@ -547,7 +556,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     private protected void StartCaretBlink()
     {
         StopCaretBlink();
-        _caretVisible = true;
+        SetValue(CaretVisiblePropertyKey, true);
         _caretTimer ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500));
         _caretTimer.Tick += OnCaretBlink;
         _caretTimer.Start();
@@ -563,14 +572,10 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     private protected void ResetCaretBlink()
     {
         if (IsFocused) StartCaretBlink();
-        else _caretVisible = true;
+        else SetValue(CaretVisiblePropertyKey, true);
     }
 
-    private void OnCaretBlink()
-    {
-        _caretVisible = !_caretVisible;
-        InvalidateCaret();
-    }
+    private void OnCaretBlink() => SetValue(CaretVisiblePropertyKey, !CaretVisible);
 
     /// <summary>
     /// Discards what the caret drawing produced. Overridden where the caret is a layer entry, so a

@@ -312,7 +312,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
 
     private void DrawCaret(ITextRenderContext text)
     {
-        if (!IsFocused || !_caretVisible)
+        if (!IsFocused || !CaretVisible)
         {
             return;
         }
