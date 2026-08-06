@@ -319,6 +319,113 @@ public class TextEditor : Control, ITextEditorComponent
     public double VerticalOffset => _surface.VerticalOffset;
     public double HorizontalOffset => _surface.HorizontalOffset;
 
+    /// <summary>Height of the whole document.</summary>
+    public double ExtentHeight => _surface.ExtentHeight;
+
+    /// <summary>Width of the viewport the text is shown in.</summary>
+    public double ViewportWidth => _surface.TextViewportBounds.Width;
+
+    /// <summary>Height of the viewport the text is shown in.</summary>
+    public double ViewportHeight => _surface.TextViewportBounds.Height;
+
+    /// <summary>Scrolls to the vertical position, as far as the document allows.</summary>
+    public void ScrollToVerticalOffset(double offset) => ScrollToOffset(HorizontalOffset, offset);
+
+    /// <summary>Scrolls to the horizontal position, as far as the document allows.</summary>
+    public void ScrollToHorizontalOffset(double offset) => ScrollToOffset(offset, VerticalOffset);
+
+    /// <summary>Scrolls to the start of the document, left edge included.</summary>
+    public void ScrollToHome() => ScrollToOffset(0, 0);
+
+    /// <summary>Scrolls to the end of the document, left edge included.</summary>
+    public void ScrollToEnd() => ScrollToOffset(0, ExtentHeight);
+
+    /// <summary>Scrolls one line up.</summary>
+    public void LineUp() => ScrollToVerticalOffset(VerticalOffset - TextArea.TextView.DefaultLineHeight);
+
+    /// <summary>Scrolls one line down.</summary>
+    public void LineDown() => ScrollToVerticalOffset(VerticalOffset + TextArea.TextView.DefaultLineHeight);
+
+    /// <summary>Scrolls one character to the left.</summary>
+    public void LineLeft() => ScrollToHorizontalOffset(HorizontalOffset - TextArea.TextView.WideSpaceWidth);
+
+    /// <summary>Scrolls one character to the right.</summary>
+    public void LineRight() => ScrollToHorizontalOffset(HorizontalOffset + TextArea.TextView.WideSpaceWidth);
+
+    /// <summary>Scrolls one viewport up.</summary>
+    public void PageUp() => ScrollToVerticalOffset(VerticalOffset - ViewportHeight);
+
+    /// <summary>Scrolls one viewport down.</summary>
+    public void PageDown() => ScrollToVerticalOffset(VerticalOffset + ViewportHeight);
+
+    /// <summary>Scrolls one viewport to the left.</summary>
+    public void PageLeft() => ScrollToHorizontalOffset(HorizontalOffset - ViewportWidth);
+
+    /// <summary>Scrolls one viewport to the right.</summary>
+    public void PageRight() => ScrollToHorizontalOffset(HorizontalOffset + ViewportWidth);
+
+    /// <summary>
+    /// Scrolls the line into view, centred vertically. Requires the editor to have been laid out.
+    /// </summary>
+    public void ScrollToLine(int line) => ScrollTo(line, -1);
+
+    /// <summary>
+    /// Scrolls the line and column into view, the line centred vertically. Requires the editor to
+    /// have been laid out. A move shorter than a third of the viewport is skipped, so repeatedly
+    /// asking for a position already near the middle does not shift the view.
+    /// </summary>
+    public void ScrollTo(int line, int column)
+    {
+        const double MINIMUM_SCROLL_FRACTION = 0.3;
+        if (Document.LineCount == 0 || ViewportHeight <= 0)
+        {
+            return;
+        }
+
+        var position = GetDocumentPosition(Math.Clamp(line, 1, Document.LineCount), Math.Max(1, column));
+        double vertical = position.Y - (ViewportHeight / 2);
+        if (Math.Abs(vertical - VerticalOffset) > MINIMUM_SCROLL_FRACTION * ViewportHeight)
+        {
+            ScrollToVerticalOffset(Math.Max(0, vertical));
+        }
+        if (column <= 0)
+        {
+            return;
+        }
+        if (position.X > ViewportWidth - (Caret.MINIMUM_DISTANCE_TO_VIEW_BORDER * 2))
+        {
+            double horizontal = Math.Max(0, position.X - (ViewportWidth / 2));
+            if (Math.Abs(horizontal - HorizontalOffset) > MINIMUM_SCROLL_FRACTION * ViewportWidth)
+            {
+                ScrollToHorizontalOffset(horizontal);
+            }
+        }
+        else
+        {
+            ScrollToHorizontalOffset(0);
+        }
+    }
+
+    /// <summary>
+    /// Scrolls so the offsets become the scroll position. Reached through the smallest-scroll
+    /// contract: a viewport-sized rectangle asked for at a position lands exactly there, clamped to
+    /// what the document allows.
+    /// </summary>
+    private void ScrollToOffset(double horizontal, double vertical)
+        => _surface.MakeVisible(new Rect(horizontal, vertical, ViewportWidth, ViewportHeight));
+
+    /// <summary>Middle of the line at the one-based line and column, in document coordinates.</summary>
+    private Point GetDocumentPosition(int line, int column)
+    {
+        var documentLine = Document.GetLineByNumber(line);
+        var rect = _surface.GetCharRectInWindow(
+            documentLine.Offset + Math.Clamp(column - 1, 0, documentLine.Length));
+        var viewport = _surface.TextViewportBounds;
+        return new Point(
+            rect.X - viewport.X + HorizontalOffset,
+            rect.Y - viewport.Y + VerticalOffset + (rect.Height / 2));
+    }
+
     internal MultiLineTextBox Surface => _surface;
 
     /// <summary>Pixel density the text is laid out at. Generated elements measure at the same one.</summary>

@@ -173,6 +173,9 @@ public sealed class TextArea : MewObject, ITextEditorComponent
 
 public sealed class Caret(TextArea textArea)
 {
+    // Room kept between the caret and the edge of the view while scrolling it into sight.
+    internal const double MINIMUM_DISTANCE_TO_VIEW_BORDER = 30;
+
     public int Offset
     {
         get => textArea.Editor.CaretOffset;
