@@ -40,6 +40,9 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     /// <summary>The requested service, or null when neither the view nor the document has it.</summary>
     public TService? GetService<TService>() where TService : class => TextView.GetService<TService>();
 
+    object? IServiceProvider.GetService(Type serviceType)
+        => ((IServiceProvider)TextView).GetService(serviceType);
+
     public IIndentationStrategy? IndentationStrategy
     {
         get => _editor.IndentationStrategy;

@@ -501,6 +501,9 @@ public class TextEditor : Control, ITextEditorComponent
     /// <summary>The requested service, looked up on the text view and then on the document.</summary>
     public TService? GetService<TService>() where TService : class => TextArea.GetService<TService>();
 
+    object? IServiceProvider.GetService(Type serviceType)
+        => ((IServiceProvider)TextArea).GetService(serviceType);
+
     public static readonly MewProperty<System.Text.Encoding?> EncodingProperty =
         MewProperty<System.Text.Encoding?>.Register<TextEditor>(nameof(Encoding), null);
 
