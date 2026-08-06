@@ -58,6 +58,60 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
     /// </summary>
     public IDisposable BeginUndoGroup() => History.BeginGroup();
 
+    /// <summary>Whether there is an edit to undo.</summary>
+    public bool CanUndo => History.CanUndo;
+
+    /// <summary>Whether there is an undone edit to redo.</summary>
+    public bool CanRedo => History.CanRedo;
+
+    /// <summary>
+    /// Undoes one step. False when there was nothing to undo. The history belongs to the document
+    /// rather than to a view, so a document with no editor undoes through this.
+    /// </summary>
+    public bool Undo()
+    {
+        if (!History.TryUndo(out int anchor, out int caret))
+        {
+            return false;
+        }
+        SelectionRestored?.Invoke(anchor, caret);
+        return true;
+    }
+
+    /// <summary>Redoes one step. False when there was nothing to redo.</summary>
+    public bool Redo()
+    {
+        if (!History.TryRedo(out int anchor, out int caret))
+        {
+            return false;
+        }
+        SelectionRestored?.Invoke(anchor, caret);
+        return true;
+    }
+
+    /// <summary>
+    /// Drops both stacks, so what is in the document becomes the starting point. A control that
+    /// must not retain what was typed clears it; setting the text does so implicitly.
+    /// </summary>
+    public void ClearUndoHistory() => History.Clear();
+
+    /// <summary>
+    /// Most recent edits to keep, oldest dropped past it. Negative keeps every edit; zero records
+    /// none, which is how a control that must not retain what was typed opts out of undo. A group
+    /// counts as the edits it holds, and the limit never leaves half of one behind.
+    /// </summary>
+    public int UndoSizeLimit
+    {
+        get => History.SizeLimit;
+        set => History.SizeLimit = value;
+    }
+
+    /// <summary>
+    /// Anchor and caret an undo or redo restored. Editing sessions follow it, since the positions
+    /// belong to the edit rather than to whichever session replayed it.
+    /// </summary>
+    internal event Action<int, int>? SelectionRestored;
+
     public char GetCharAt(int offset)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(offset);

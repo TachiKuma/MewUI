@@ -249,6 +249,69 @@ public sealed class TextEditHistoryTests
         Assert.IsFalse(session.CanUndo, "The group the limit cut through was dropped whole.");
     }
 
+    /// <summary>The history belongs to the document, so a document with no editor undoes too.</summary>
+    [TestMethod]
+    public void ADocumentUndoesWithoutASession()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        session.ReplaceSelection("abc");
+
+        Assert.IsTrue(document.CanUndo);
+        Assert.IsTrue(document.Undo());
+        Assert.AreEqual(string.Empty, document.ToString());
+        Assert.IsFalse(document.Undo(), "There was nothing left to undo.");
+        Assert.IsTrue(document.CanRedo);
+        Assert.IsTrue(document.Redo());
+        Assert.AreEqual("abc", document.ToString());
+    }
+
+    [TestMethod]
+    public void ClearingTheHistoryLeavesTheTextAlone()
+    {
+        var document = new EditableTextDocument();
+        var session = new TextEditorSession(document);
+        session.ReplaceSelection("abc");
+
+        document.ClearUndoHistory();
+
+        Assert.IsFalse(document.CanUndo);
+        Assert.AreEqual("abc", document.ToString());
+    }
+
+    [TestMethod]
+    public void TheUndoSizeLimitIsReadableFromTheDocument()
+    {
+        var document = new EditableTextDocument();
+        document.UndoSizeLimit = 1;
+        var session = new TextEditorSession(document);
+        session.ReplaceSelection("a");
+        session.ReplaceSelection("b");
+
+        Assert.AreEqual(1, document.UndoSizeLimit);
+        session.Undo();
+        Assert.AreEqual("a", document.ToString());
+        Assert.IsFalse(session.CanUndo);
+    }
+
+    /// <summary>
+    /// The restored positions belong to the edit, not to whichever session replayed it, so a second
+    /// session over the same document must not be left pointing into text the replay moved.
+    /// </summary>
+    [TestMethod]
+    public void EverySessionFollowsARestoredCaret()
+    {
+        var document = new EditableTextDocument();
+        var first = new TextEditorSession(document);
+        var second = new TextEditorSession(document);
+        first.ReplaceSelection("abcdef");
+        second.SetCaret(6);
+
+        first.Undo();
+
+        Assert.AreEqual(0, second.CaretPosition, "The second session kept a caret past the end of the text.");
+    }
+
     [TestMethod]
     public void SharedDocumentMergesHistoryAcrossSessions()
     {

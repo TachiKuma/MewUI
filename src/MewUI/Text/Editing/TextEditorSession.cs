@@ -12,7 +12,10 @@ public sealed class TextEditorSession
     private int[] _textElementStarts = [];
 
     public TextEditorSession(EditableTextDocument document)
-        => Document = document ?? throw new ArgumentNullException(nameof(document));
+    {
+        Document = document ?? throw new ArgumentNullException(nameof(document));
+        Document.SelectionRestored += OnSelectionRestored;
+    }
 
     public EditableTextDocument Document { get; }
     public int CaretPosition { get; private set; }
@@ -184,28 +187,28 @@ public sealed class TextEditorSession
     public void Undo()
     {
         CommitComposition();
-        if (!Document.History.TryUndo(out int anchor, out int caret))
-        {
-            return;
-        }
-        AnchorPosition = anchor;
-        CaretPosition = caret;
-        StateChanged?.Invoke();
+        Document.Undo();
     }
 
     public void Redo()
     {
         CommitComposition();
-        if (!Document.History.TryRedo(out int anchor, out int caret))
-        {
-            return;
-        }
+        Document.Redo();
+    }
+
+    public void ClearHistory() => Document.ClearUndoHistory();
+
+    /// <summary>
+    /// Adopts the anchor and caret an undo or redo restored, whichever session replayed it: the
+    /// positions belong to the edit, and a session left on its old caret would point into text the
+    /// replay has already moved.
+    /// </summary>
+    private void OnSelectionRestored(int anchor, int caret)
+    {
         AnchorPosition = anchor;
         CaretPosition = caret;
         StateChanged?.Invoke();
     }
-
-    public void ClearHistory() => Document.History.Clear();
 
     public void BeginComposition()
     {
