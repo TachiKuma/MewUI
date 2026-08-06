@@ -57,7 +57,11 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     private protected CompositionAttr[]? _compositionAttributes;
     private protected bool _caretVisible = true;
 
-    internal bool CaretVisible => _caretVisible;
+    /// <summary>
+    /// Whether the caret is in the visible half of its blink. A layer drawing the caret in place of
+    /// the built-in one reads this instead of keeping a second clock.
+    /// </summary>
+    public bool CaretVisible => _caretVisible;
     private protected bool _syncingText;
     private string _textSnapshot = string.Empty;
     private long _textSnapshotVersion = -1;
@@ -565,8 +569,14 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     private void OnCaretBlink()
     {
         _caretVisible = !_caretVisible;
-        InvalidateVisual();
+        InvalidateCaret();
     }
+
+    /// <summary>
+    /// Discards what the caret drawing produced. Overridden where the caret is a layer entry, so a
+    /// host that caches its layers repaints that one alone rather than the whole stack.
+    /// </summary>
+    private protected virtual void InvalidateCaret() => InvalidateVisual();
 
     protected override void OnDispose()
     {

@@ -307,6 +307,9 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         return spans;
     }
 
+    /// <inheritdoc/>
+    private protected override void InvalidateCaret() => InvalidateLayer(TextViewLayerAnchor.Caret);
+
     private void DrawCaret(ITextRenderContext text)
     {
         if (!IsFocused || !_caretVisible)
