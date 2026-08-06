@@ -529,7 +529,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     private TextDrawOptions CreateDrawOptions(TextLineLayout line)
     {
         TextPaintSpan[] paint = TextSelectionPresentation.TryCreateSpan(
-            line.LogicalLine,
+            line,
             new TextRange(SelectionStart, SelectionLength),
             Theme.Palette.SelectionText,
             Theme.Palette.SelectionBackground,

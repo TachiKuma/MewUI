@@ -297,7 +297,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         var composition = CreateCompositionSpans(line);
         if (SelectionForeground is not Color foreground ||
             !TextSelectionPresentation.TryCreateSpan(
-                line.LogicalLine, selection, foreground, default, out var span))
+                line, selection, foreground, default, out var span))
         {
             return composition;
         }
@@ -347,7 +347,7 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     private TextPaintSpan[] CreateSelectionSpans(TextLineLayout line, TextRange selection)
     {
         if (!TextSelectionPresentation.TryCreateSpan(
-                line.LogicalLine,
+                line,
                 selection,
                 Theme.Palette.SelectionText,
                 Theme.Palette.SelectionBackground,

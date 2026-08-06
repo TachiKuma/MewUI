@@ -400,7 +400,7 @@ public abstract class SingleLineTextBase : TextBase
         int lineStart = line.LogicalLine.Offset;
         int lineEnd = lineStart + line.LogicalLine.Length;
         if (TextSelectionPresentation.TryCreateSpan(
-                line.LogicalLine,
+                line,
                 selection,
                 Theme.Palette.SelectionText,
                 Theme.Palette.SelectionBackground,
