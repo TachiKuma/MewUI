@@ -197,7 +197,22 @@ public readonly record struct TextViewport(
     public Rect DocumentBounds => new(HorizontalOffset, VerticalOffset, Width, Height);
 }
 
-public readonly record struct TextChange(int Offset, int RemovedLength, int InsertedLength);
+/// <summary>
+/// A replace that happened to a document. <see cref="RemovedText"/> carries what an edit took out;
+/// assigning a control's text property replaces the document wholesale rather than editing it, and
+/// reports no removed text even though <see cref="RemovedLength"/> counts it.
+/// </summary>
+public readonly record struct TextChange(
+    int Offset,
+    int RemovedLength,
+    int InsertedLength,
+    string RemovedText)
+{
+    public TextChange(int offset, int removedLength, int insertedLength)
+        : this(offset, removedLength, insertedLength, string.Empty)
+    {
+    }
+}
 
 public readonly record struct TextViewHit(
     int DocumentOffset,

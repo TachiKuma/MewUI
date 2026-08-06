@@ -127,6 +127,9 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
         _text.Append(normalized);
         Version++;
         RebuildLines();
+        // A wholesale assignment is not an edit: it is unrecorded, drops the history, and so has no
+        // undo to hand the old text to. Materializing the whole document for it would cost the most
+        // and serve nobody.
         Changed?.Invoke(new TextChange(0, previousLength, normalized.Length));
     }
 
@@ -155,6 +158,8 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
         int affectedEnd = endLine.Offset + endLine.Length + endLine.DelimiterLength;
         bool hasFollowingLine = endLine.LineNumber + 1 < _lines.Count;
 
+        // The only point the removed text still exists at. Pure insertions skip it entirely.
+        string removed = length == 0 ? string.Empty : _text.ToString(offset, length);
         _text.Remove(offset, length);
         _text.Insert(offset, normalized);
         if (!changesLineStructure)
@@ -172,7 +177,7 @@ public sealed class EditableTextDocument : IReadOnlyTextDocument
                 replacement);
         }
         Version++;
-        Changed?.Invoke(new TextChange(offset, length, normalized.Length));
+        Changed?.Invoke(new TextChange(offset, length, normalized.Length, removed));
     }
 
     /// <summary>Terminator text at <paramref name="offset"/>. Length one is either return or feed.</summary>

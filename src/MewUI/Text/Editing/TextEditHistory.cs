@@ -12,6 +12,9 @@ internal sealed class TextEditHistory
     private readonly Stack<EditCommand> _redo = new();
     private int _suppressDepth;
     private int _sizeLimit = -1;
+    // Set while a suppressed replace runs, so the recorder learns both whether the document changed
+    // and what it removed without asking for either up front.
+    private TextChange? _appliedChange;
 
     internal TextEditHistory(EditableTextDocument document)
     {
@@ -46,13 +49,16 @@ internal sealed class TextEditHistory
         int anchorAfter,
         int caretAfter)
     {
-        string removed = _document.GetText(start, removeLength);
-        if (removed == inserted)
+        // The document decides whether this changes anything, comparing in place without building a
+        // string, and hands back what it removed. Reading ahead would allocate even for a no-op.
+        _appliedChange = null;
+        ReplaceSuppressed(start, removeLength, inserted);
+        if (_appliedChange is not TextChange applied)
         {
             return false;
         }
-        ReplaceSuppressed(start, removeLength, inserted);
-        Record(new EditCommand(start, removed, inserted, anchorBefore, caretBefore, anchorAfter, caretAfter));
+        Record(new EditCommand(
+            start, applied.RemovedText, inserted, anchorBefore, caretBefore, anchorAfter, caretAfter));
         return true;
     }
 
@@ -153,7 +159,9 @@ internal sealed class TextEditHistory
         if (_suppressDepth == 0)
         {
             Clear();
+            return;
         }
+        _appliedChange = change;
     }
 
     private readonly record struct EditCommand(
