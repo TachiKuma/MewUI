@@ -1,3 +1,4 @@
+using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Text;
 
@@ -53,5 +54,50 @@ public sealed class TextViewHostTests
         Assert.AreEqual(1, raised);
         Assert.AreSame(viewer.Document, observed);
         Assert.AreEqual(2, viewer.Document.LineCount);
+    }
+
+    /// <summary>
+    /// A line outside the viewport is laid out on demand. Without this the only line measurements
+    /// available are the ones already on screen.
+    /// </summary>
+    [TestMethod]
+    public void MultiLineTextBox_LaysOutALineOutsideTheViewport()
+    {
+        var box = new MultiLineTextBox
+        {
+            Text = string.Join('\n', Enumerable.Range(1, 200).Select(number => $"line {number}"))
+        };
+        box.Measure(new Size(200, 60));
+        box.Arrange(new Rect(0, 0, 200, 60));
+        ITextViewHost host = box;
+        var target = box.Document.GetLineByNumber(150);
+
+        Assert.IsFalse(
+            host.VisibleTextLines.Any(line => line.LogicalLine.LineNumber == target.LineNumber),
+            "The line was already on screen, so the test proves nothing.");
+
+        var layout = host.GetLineLayout(target.Offset);
+
+        Assert.IsNotNull(layout);
+        Assert.AreEqual(target.LineNumber, layout.LogicalLine.LineNumber);
+        Assert.IsGreaterThan(0, layout.Height);
+    }
+
+    /// <summary>
+    /// The offset decides which line comes back, including one inside the line rather than at its
+    /// start, which is what a caller asking about a position passes.
+    /// </summary>
+    [TestMethod]
+    public void GetLineLayout_TakesTheLineTheOffsetFallsIn()
+    {
+        var box = new MultiLineTextBox { Text = "one\ntwo\nthree" };
+        box.Measure(new Size(200, 60));
+        box.Arrange(new Rect(0, 0, 200, 60));
+        ITextViewHost host = box;
+
+        var layout = host.GetLineLayout(box.Document.GetLineByNumber(2).Offset + 2);
+
+        Assert.IsNotNull(layout);
+        Assert.AreEqual(2, layout.LogicalLine.LineNumber);
     }
 }

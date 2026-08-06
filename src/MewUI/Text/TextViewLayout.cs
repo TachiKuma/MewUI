@@ -264,6 +264,34 @@ public sealed class TextViewLayout : ITextViewLayout
         return new Rect(local.X, layout.DocumentY + local.Y, local.Width, local.Height);
     }
 
+    /// <summary>
+    /// The laid-out line holding the offset, laying it out when it is outside the viewport. A line
+    /// long enough to be cut into slices answers with the slice the offset falls in; an offset
+    /// inside a collapsed range answers with the line that stands in for it. Null when the document
+    /// has no lines.
+    /// </summary>
+    public TextLineLayout? GetLineLayout(int documentOffset)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_document.LineCount == 0)
+        {
+            return null;
+        }
+
+        documentOffset = Math.Clamp(documentOffset, 0, _document.TextLength);
+        var source = _document.GetLineByOffset(documentOffset);
+        int visibleLineNumber = FindVisibleCaretLine(source.LineNumber);
+        if (visibleLineNumber != source.LineNumber)
+        {
+            source = _document.GetLineByNumber(visibleLineNumber);
+            documentOffset = source.Offset + source.Length;
+        }
+        return GetOrCreateLine(
+            source.LineNumber,
+            GetLineY(source.LineNumber),
+            sourceOffset: documentOffset - source.Offset);
+    }
+
     private void MaterializeViewport()
     {
         _materialized.Clear();

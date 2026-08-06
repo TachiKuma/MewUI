@@ -436,6 +436,13 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     }
 
     /// <inheritdoc/>
+    public TextLineLayout? GetLineLayout(int documentOffset)
+    {
+        EnsureView();
+        return _view?.GetLineLayout(documentOffset);
+    }
+
+    /// <inheritdoc/>
     public double DefaultLineHeight
     {
         get

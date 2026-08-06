@@ -230,4 +230,5 @@ public interface ITextViewLayout : IDisposable
     void Invalidate(TextChange change);
     TextViewHit HitTest(Point viewportPoint);
     Rect GetCaretBounds(int documentOffset);
+    TextLineLayout? GetLineLayout(int documentOffset);
 }

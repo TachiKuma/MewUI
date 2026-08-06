@@ -33,6 +33,14 @@ public interface ITextViewHost
     /// <summary>Lines currently laid out, in document order, with their document-space positions.</summary>
     IReadOnlyList<TextLineLayout> VisibleTextLines { get; }
 
+    /// <summary>
+    /// The laid-out line holding the offset, laying it out when it is outside the viewport. Null
+    /// when there is no line to lay out. A line long enough to be cut into slices answers with the
+    /// slice the offset falls in. The layout follows the current viewport, so a wrapping view
+    /// answers meaningfully only once it has been given a width.
+    /// </summary>
+    TextLineLayout? GetLineLayout(int documentOffset);
+
     /// <summary>Area the text is drawn into, excluding chrome.</summary>
     Rect TextViewportBounds { get; }
 
