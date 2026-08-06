@@ -24,6 +24,9 @@ public class DefaultIndentationStrategy : IIndentationStrategy
         if (beginLine <= 0 || endLine < beginLine || endLine > document.LineCount)
             throw new ArgumentOutOfRangeException(nameof(beginLine));
 
+        // One step, not one per line: indenting a block edits every line in it, and undoing it a
+        // line at a time is not what the caller asked for.
+        using var group = document.UndoStack.OpenUndoGroup();
         for (int lineNumber = beginLine; lineNumber <= endLine; lineNumber++)
             IndentLine(document, document.GetLineByNumber(lineNumber));
     }

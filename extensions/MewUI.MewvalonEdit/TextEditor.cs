@@ -580,6 +580,22 @@ public class TextEditor : Control, ITextEditorComponent
     }
 
     public void Paste() => _surface.Paste();
+
+    /// <summary>
+    /// Opens an undo group; every edit until the matching <see cref="EndChange"/> undoes as one
+    /// step. Nesting extends the outermost group.
+    /// </summary>
+    public void BeginChange() => Document.UndoStack.StartUndoGroup();
+
+    /// <summary>Closes the group opened by <see cref="BeginChange"/>.</summary>
+    public void EndChange() => Document.UndoStack.EndUndoGroup();
+
+    /// <summary>
+    /// An undo group that closes when the returned object is disposed, which is the shape a caller
+    /// wants when the edits are made inside one scope.
+    /// </summary>
+    public IDisposable DeclareChangeBlock() => Document.UndoStack.OpenUndoGroup();
+
     /// <summary>Undoes the most recent command. False when there was nothing to undo.</summary>
     public bool Undo()
     {

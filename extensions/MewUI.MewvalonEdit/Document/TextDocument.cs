@@ -11,6 +11,7 @@ public sealed class TextDocument : ITextSource
     private readonly List<WeakReference<TextAnchor>> _anchors = [];
     private TextSourceVersion _version;
     private ServiceContainer? _services;
+    private UndoStack? _undoStack;
     private string? _fileName;
     private int _lastTextLength;
     private int _lastLineCount;
@@ -74,6 +75,29 @@ public sealed class TextDocument : ITextSource
     /// here, so a service registered on the document follows it into every view showing it. The
     /// document registers itself.
     /// </summary>
+    /// <summary>
+    /// The undo and redo history. It belongs to the document rather than to an editor, so several
+    /// editors over one document share it.
+    /// </summary>
+    public UndoStack UndoStack => _undoStack ??= new UndoStack(this);
+
+    /// <summary>Runs the action with its edits grouped into one undo step.</summary>
+    public void RunUpdate(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        using var group = UndoStack.OpenUndoGroup();
+        action();
+    }
+
+    /// <summary>Opens an undo group. Pairs with <see cref="EndUpdate"/>.</summary>
+    public void BeginUpdate() => UndoStack.StartUndoGroup();
+
+    /// <summary>Closes the group opened by <see cref="BeginUpdate"/>.</summary>
+    public void EndUpdate() => UndoStack.EndUndoGroup();
+
+    /// <summary>Whether an update is open, which is when an edit joins the one before it.</summary>
+    public bool IsInUpdate => UndoStack.IsInUndoGroup;
+
     public ServiceContainer Services
     {
         get
