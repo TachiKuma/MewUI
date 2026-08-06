@@ -100,21 +100,13 @@ public sealed class SelectionAndServiceTests
     {
         var editor = new TextEditor { Text = "class A { }" };
 
-        Assert.IsNull(editor.TextArea.TextView.GetService(typeof(IHighlighter)));
+        Assert.IsNull(editor.TextArea.TextView.GetService<IHighlighter>());
 
         editor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("C#");
         Assert.IsNotNull(editor.TextArea.TextView.Services.GetService<IHighlighter>());
 
         editor.SyntaxHighlighting = null;
         Assert.IsNull(editor.TextArea.TextView.Services.GetService<IHighlighter>());
-    }
-
-    [TestMethod]
-    public void ServiceContainerRejectsAnInstanceOfTheWrongType()
-    {
-        var container = new ServiceContainer();
-
-        Assert.ThrowsExactly<ArgumentException>(() => container.AddService(typeof(IHighlighter), "not one"));
     }
 
     [TestMethod]

@@ -146,11 +146,7 @@ public sealed class VisualLine
     }
 
     private TextViewPosition CreatePosition(int visualColumn, bool isAtEndOfLine)
-    {
-        var position = GetTextViewPosition(visualColumn);
-        position.IsAtEndOfLine = isAtEndOfLine;
-        return position;
-    }
+        => GetTextViewPosition(visualColumn) with { IsAtEndOfLine = isAtEndOfLine };
 
     private CharacterHit HitTest(Point documentPoint)
         => _layout.HitTest(new Point(documentPoint.X - _layout.DocumentX, documentPoint.Y - _layout.DocumentY));

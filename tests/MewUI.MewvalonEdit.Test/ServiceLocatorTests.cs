@@ -18,9 +18,9 @@ public sealed class ServiceLocatorTests
     {
         var editor = new TextEditor();
 
-        Assert.AreSame(editor, ((IServiceProvider)editor).GetService(typeof(TextEditor)));
-        Assert.AreSame(editor.TextArea, editor.TextArea.GetService(typeof(TextArea)));
-        Assert.AreSame(editor.TextArea.TextView, editor.TextArea.TextView.GetService(typeof(TextView)));
+        Assert.AreSame(editor, editor.GetService<TextEditor>());
+        Assert.AreSame(editor.TextArea, editor.TextArea.GetService<TextArea>());
+        Assert.AreSame(editor.TextArea.TextView, editor.TextArea.TextView.GetService<TextView>());
     }
 
     [TestMethod]
@@ -28,7 +28,7 @@ public sealed class ServiceLocatorTests
     {
         var editor = new TextEditor();
 
-        Assert.IsNull(((IServiceProvider)editor).GetService(typeof(FoldingManager)));
+        Assert.IsNull(editor.GetService<FoldingManager>());
     }
 
     /// <summary>
@@ -39,12 +39,12 @@ public sealed class ServiceLocatorTests
     public void DocumentServicesAreReachedThroughTheView()
     {
         var editor = new TextEditor();
-        var probe = new object();
-        ((ServiceContainer)editor.Document.ServiceProvider).AddService(typeof(object), probe);
+        var probe = new StringWriter();
+        editor.Document.Services.AddService(probe);
 
-        Assert.IsNull(editor.TextArea.TextView.Services.GetService(typeof(object)));
-        Assert.AreSame(probe, editor.TextArea.TextView.GetService(typeof(object)));
-        Assert.AreSame(probe, ((IServiceProvider)editor).GetService(typeof(object)));
+        Assert.IsNull(editor.TextArea.TextView.Services.GetService<StringWriter>());
+        Assert.AreSame(probe, editor.TextArea.TextView.GetService<StringWriter>());
+        Assert.AreSame(probe, editor.GetService<StringWriter>());
     }
 
     [TestMethod]
@@ -52,19 +52,7 @@ public sealed class ServiceLocatorTests
     {
         var document = new TextDocument("text");
 
-        Assert.AreSame(document, ((IServiceProvider)document).GetService(typeof(TextDocument)));
-    }
-
-    [TestMethod]
-    public void ReplacingTheServiceProviderReplacesTheWholeContainer()
-    {
-        var document = new TextDocument("text");
-        var container = new ServiceContainer();
-
-        document.ServiceProvider = container;
-
-        Assert.IsNull(((IServiceProvider)document).GetService(typeof(TextDocument)));
-        Assert.ThrowsExactly<ArgumentNullException>(() => document.ServiceProvider = null!);
+        Assert.AreSame(document, document.Services.GetService<TextDocument>());
     }
 
     /// <summary>A folding manager registers on install and is gone after uninstall.</summary>
@@ -74,9 +62,9 @@ public sealed class ServiceLocatorTests
         var editor = new TextEditor();
 
         var manager = FoldingManager.Install(editor);
-        Assert.AreSame(manager, editor.TextArea.GetService(typeof(FoldingManager)));
+        Assert.AreSame(manager, editor.TextArea.GetService<FoldingManager>());
 
         FoldingManager.Uninstall(manager);
-        Assert.IsNull(editor.TextArea.GetService(typeof(FoldingManager)));
+        Assert.IsNull(editor.TextArea.GetService<FoldingManager>());
     }
 }

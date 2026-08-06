@@ -206,6 +206,7 @@ public class TextEditor : Control, ITextEditorComponent
         if (oldValue is not null)
         {
             oldValue.Changed -= OnDocumentTextChanged;
+            oldValue.LineCountChanged -= OnDocumentLineCountChanged;
             oldValue.Surface = null;
         }
         if (newValue is null)
@@ -214,11 +215,30 @@ public class TextEditor : Control, ITextEditorComponent
         }
 
         newValue.Changed += OnDocumentTextChanged;
+        newValue.LineCountChanged += OnDocumentLineCountChanged;
         newValue.Surface = _surface;
         _surface.Document = newValue.CoreDocument;
-        _lineNumberMargin.SyncWidthToLineCount();
+        OnDocumentLineCountChanged(newValue, EventArgs.Empty);
         DocumentChanged?.Invoke(this, EventArgs.Empty);
         TextChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static readonly MewPropertyKey<int> LineCountPropertyKey =
+        MewProperty<int>.RegisterReadOnly<TextEditor>(nameof(LineCount), 1);
+
+    public static readonly MewProperty<int> LineCountProperty = LineCountPropertyKey.Property;
+
+    /// <summary>Number of lines in the document.</summary>
+    public int LineCount => GetValue(LineCountProperty);
+
+    /// <summary>
+    /// Runs only when the count moved, which is also the condition the line number margin re-measures
+    /// on: its width follows the number of digits, not the text.
+    /// </summary>
+    private void OnDocumentLineCountChanged(object? sender, EventArgs e)
+    {
+        SetValue(LineCountPropertyKey, Document.LineCount);
+        _lineNumberMargin?.SyncWidthToLineCount();
     }
 
     public TextEditorOptions Options { get; }
@@ -312,7 +332,6 @@ public class TextEditor : Control, ITextEditorComponent
     public int SelectionStart => _surface.SelectionStart;
     public int SelectionLength => _surface.SelectionLength;
     public string SelectedText => _surface.SelectedText;
-    public int LineCount => Document.LineCount;
     public bool CanUndo => _surface.CanUndo;
     public bool CanRedo => _surface.CanRedo;
     public double VerticalOffset => _surface.VerticalOffset;
@@ -479,11 +498,8 @@ public class TextEditor : Control, ITextEditorComponent
     /// <summary>Raised when an option changed.</summary>
     public event EventHandler<MewProperty>? OptionChanged;
 
-    /// <summary>
-    /// The requested service, looked up on the text view and then on the document. Reached through
-    /// <see cref="IServiceProvider"/>, as in the original.
-    /// </summary>
-    object? IServiceProvider.GetService(Type serviceType) => TextArea.GetService(serviceType);
+    /// <summary>The requested service, looked up on the text view and then on the document.</summary>
+    public TService? GetService<TService>() where TService : class => TextArea.GetService<TService>();
 
     public static readonly MewProperty<System.Text.Encoding?> EncodingProperty =
         MewProperty<System.Text.Encoding?>.Register<TextEditor>(nameof(Encoding), null);
@@ -605,7 +621,7 @@ public class TextEditor : Control, ITextEditorComponent
         }
         else
         {
-            TextArea.TextView.Services.RemoveService(typeof(IHighlighter));
+            TextArea.TextView.Services.RemoveService<IHighlighter>();
         }
         _surface.InvalidateTextView();
     }
@@ -625,10 +641,7 @@ public class TextEditor : Control, ITextEditorComponent
     }
 
     private void OnDocumentTextChanged(object? sender, DocumentChangeEventArgs e)
-    {
-        _lineNumberMargin?.SyncWidthToLineCount();
-        TextChanged?.Invoke(this, EventArgs.Empty);
-    }
+        => TextChanged?.Invoke(this, EventArgs.Empty);
 
     private void OnSurfaceMouseDown(MouseEventArgs e)
     {

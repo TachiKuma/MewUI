@@ -5,12 +5,12 @@ using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.MewvalonEdit.Document;
 
-public sealed class TextDocument : ITextSource, IServiceProvider
+public sealed class TextDocument : ITextSource
 {
     private readonly EditableTextDocument _document;
     private readonly List<WeakReference<TextAnchor>> _anchors = [];
     private TextSourceVersion _version;
-    private IServiceProvider? _serviceProvider;
+    private ServiceContainer? _services;
     private string? _fileName;
     private int _lastTextLength;
     private int _lastLineCount;
@@ -72,28 +72,20 @@ public sealed class TextDocument : ITextSource, IServiceProvider
     /// <summary>
     /// Services this document carries. A view that cannot find a service of its own falls through to
     /// here, so a service registered on the document follows it into every view showing it. The
-    /// default container holds the document itself; assigning replaces the whole container.
+    /// document registers itself.
     /// </summary>
-    public IServiceProvider ServiceProvider
+    public ServiceContainer Services
     {
         get
         {
-            if (_serviceProvider is null)
+            if (_services is null)
             {
-                var container = new ServiceContainer();
-                container.AddService(this);
-                _serviceProvider = container;
+                _services = new ServiceContainer();
+                _services.AddService(this);
             }
-            return _serviceProvider;
-        }
-        set
-        {
-            ArgumentNullException.ThrowIfNull(value);
-            _serviceProvider = value;
+            return _services;
         }
     }
-
-    object? IServiceProvider.GetService(Type serviceType) => ServiceProvider.GetService(serviceType);
 
     /// <summary>An unchanging copy of the whole text.</summary>
     public ITextSource CreateSnapshot() => new StringTextSource(Text);

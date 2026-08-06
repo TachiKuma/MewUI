@@ -179,8 +179,8 @@ public sealed class TextView : MewObject, ITextEditorComponent
     /// The service registered on this view, or failing that the one the document carries. Null when
     /// neither has it.
     /// </summary>
-    public object? GetService(Type serviceType)
-        => Services.GetService(serviceType) ?? Document.ServiceProvider.GetService(serviceType);
+    public TService? GetService<TService>() where TService : class
+        => Services.GetService<TService>() ?? Document.Services.GetService<TService>();
 
     /// <summary>Raised after the document was replaced.</summary>
     public event EventHandler? DocumentChanged

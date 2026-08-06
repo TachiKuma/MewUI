@@ -49,7 +49,7 @@ public sealed class FoldingManager
         manager._editor.Surface.Extensions.Projections.Remove(manager._projection);
         manager._editor.Surface.Extensions.LineCollapsers.Remove(manager._projection);
         manager._editor.TextArea.LeftMargins.Remove(manager._margin);
-        manager._editor.TextArea.TextView.Services.RemoveService(typeof(FoldingManager));
+        manager._editor.TextArea.TextView.Services.RemoveService<FoldingManager>();
         manager._margin.FoldingManager = null;
         manager._editor.InvalidateTextView();
     }

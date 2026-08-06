@@ -1,42 +1,24 @@
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
 /// <summary>
-/// Service lookup of a text view, keyed by type. Ported code registers what it builds here and
-/// finds it again by service type, which is how AvalonEdit hands a highlighter to code that only
-/// holds a view.
+/// Service lookup keyed by type. Ported code registers what it builds here and finds it again by
+/// service type, which is how a highlighter reaches code that only holds a view.
 /// </summary>
-public sealed class ServiceContainer : IServiceProvider
+public sealed class ServiceContainer
 {
     private readonly Dictionary<Type, object> _services = [];
 
-    /// <summary>Registers <paramref name="instance"/> under <paramref name="serviceType"/>.</summary>
-    public void AddService(Type serviceType, object instance)
-    {
-        ArgumentNullException.ThrowIfNull(serviceType);
-        ArgumentNullException.ThrowIfNull(instance);
-        if (!serviceType.IsInstanceOfType(instance))
-        {
-            throw new ArgumentException($"{instance.GetType()} is not a {serviceType}.", nameof(instance));
-        }
-        _services[serviceType] = instance;
-    }
-
+    /// <summary>Registers the instance under <typeparamref name="TService"/>.</summary>
     public void AddService<TService>(TService instance) where TService : class
-        => AddService(typeof(TService), instance);
+    {
+        ArgumentNullException.ThrowIfNull(instance);
+        _services[typeof(TService)] = instance;
+    }
 
     /// <summary>Removes the registration, if any.</summary>
-    public void RemoveService(Type serviceType)
-    {
-        ArgumentNullException.ThrowIfNull(serviceType);
-        _services.Remove(serviceType);
-    }
+    public bool RemoveService<TService>() where TService : class => _services.Remove(typeof(TService));
 
-    public object? GetService(Type serviceType)
-    {
-        ArgumentNullException.ThrowIfNull(serviceType);
-        return _services.GetValueOrDefault(serviceType);
-    }
-
+    /// <summary>The registered instance, or null.</summary>
     public TService? GetService<TService>() where TService : class
-        => GetService(typeof(TService)) as TService;
+        => _services.GetValueOrDefault(typeof(TService)) as TService;
 }

@@ -38,7 +38,7 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     public IList<AbstractMargin> LeftMargins => _editor.LeftMargins;
 
     /// <summary>The requested service, or null when neither the view nor the document has it.</summary>
-    public object? GetService(Type serviceType) => TextView.GetService(serviceType);
+    public TService? GetService<TService>() where TService : class => TextView.GetService<TService>();
 
     public IIndentationStrategy? IndentationStrategy
     {
