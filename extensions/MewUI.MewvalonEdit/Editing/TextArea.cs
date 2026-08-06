@@ -48,9 +48,9 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     /// its own replaces this with the matching range.
     /// </summary>
     /// <remarks>
-    /// The surface keeps a start and a length, with no direction, so a selection it originates comes
-    /// back reading forwards even if it was dragged backwards. A selection assigned here keeps its
-    /// direction until the surface changes it.
+    /// A selection keeps the direction it was made in: which of its two positions the caret sits at
+    /// decides where a replacement leaves the caret, and it is what a rectangular selection grows
+    /// along.
     /// </remarks>
     public Selection Selection
     {
@@ -75,7 +75,20 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         {
             if (selection.SurroundingSegment is ISegment segment)
             {
-                _editor.Select(segment.Offset, segment.Length);
+                // Anchored at the start position and extended to the end, rather than selected as a
+                // range: a range leaves the caret at the higher offset, which would drop the
+                // direction of a selection made backwards on the way to the surface.
+                int anchor = Document.GetOffset(selection.StartPosition.Line, selection.StartPosition.Column);
+                int caret = Document.GetOffset(selection.EndPosition.Line, selection.EndPosition.Column);
+                if (anchor == segment.Offset || anchor == segment.EndOffset)
+                {
+                    _editor.MoveCaret(anchor, extendSelection: false);
+                    _editor.MoveCaret(caret, extendSelection: true);
+                }
+                else
+                {
+                    _editor.Select(segment.Offset, segment.Length);
+                }
             }
             else
             {
@@ -238,7 +251,14 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         if (!_applyingSelection)
         {
             int start = _editor.SelectionStart;
-            _selection = Selection.Create(this, start, start + _editor.SelectionLength);
+            int end = start + _editor.SelectionLength;
+            // Which end the caret sits at is which way the selection was made. The surface reports
+            // the range with the smaller offset first, so reading it straight would turn every
+            // backwards drag into a forwards selection, and replacing one would leave the caret at
+            // the wrong end of the new text.
+            _selection = end > start && _editor.CaretOffset == start
+                ? Selection.Create(this, end, start)
+                : Selection.Create(this, start, end);
         }
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }

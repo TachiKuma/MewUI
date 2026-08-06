@@ -548,6 +548,14 @@ public class TextEditor : Control, ITextEditorComponent
     }
 
     public void Select(int start, int length) => _surface.Select(start, length);
+
+    /// <summary>
+    /// Moves the caret, keeping the selection anchor where it is when extending. Extending is how a
+    /// selection whose caret sits at its start is made; <see cref="Select"/> leaves it at the end.
+    /// </summary>
+    public void MoveCaret(int position, bool extendSelection)
+        => _surface.MoveCaret(position, extendSelection);
+
     public void SelectAll() => _surface.SelectAll();
     public void AppendText(string? text) => _surface.AppendText(text, scrollToCaret: true);
     /// <summary>
