@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.Text;
@@ -5,12 +6,15 @@ using Aprillz.MewUI.Text.Editing;
 
 namespace Aprillz.MewUI.MewvalonEdit.Document;
 
-public sealed class TextDocument : ITextSource, IServiceProvider
+public sealed class TextDocument : ITextSource, IServiceProvider, INotifyPropertyChanged
 {
     private readonly EditableTextDocument _document;
     private readonly List<WeakReference<TextAnchor>> _anchors = [];
     private TextSourceVersion _version;
     private IServiceProvider? _serviceProvider;
+    private string? _fileName;
+    private int _lastTextLength;
+    private int _lastLineCount;
 
     public TextDocument()
         : this(string.Empty)
@@ -23,6 +27,7 @@ public sealed class TextDocument : ITextSource, IServiceProvider
         _document = EditableTextDocument.CreatePreservingLineEndings(text);
         _version = new TextSourceVersion(this, 0);
         _document.Changed += OnChanged;
+        CaptureCounts();
     }
 
     public TextDocument(IEnumerable<char> initialText)
@@ -35,6 +40,13 @@ public sealed class TextDocument : ITextSource, IServiceProvider
         _document = document ?? throw new ArgumentNullException(nameof(document));
         _version = new TextSourceVersion(this, 0);
         _document.Changed += OnChanged;
+        CaptureCounts();
+    }
+
+    private void CaptureCounts()
+    {
+        _lastTextLength = _document.TextLength;
+        _lastLineCount = _document.LineCount;
     }
 
     internal EditableTextDocument CoreDocument => _document;
@@ -93,8 +105,46 @@ public sealed class TextDocument : ITextSource, IServiceProvider
     public event EventHandler<DocumentChangeEventArgs>? Changed;
     public event EventHandler? TextChanged;
 
+    /// <summary>
+    /// Raised after a change for Text, and then for TextLength and LineCount when those moved.
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>Raised after <see cref="FileName"/> was assigned a different value.</summary>
+    public event EventHandler? FileNameChanged;
+
+    /// <summary>Name of the file this document holds. The document itself never reads it.</summary>
+    public string? FileName
+    {
+        get => _fileName;
+        set
+        {
+            if (_fileName == value)
+            {
+                return;
+            }
+            _fileName = value;
+            FileNameChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     public char GetCharAt(int offset) => _document.GetCharAt(offset);
     public string GetText(int offset, int length) => _document.GetText(offset, length);
+
+    public int IndexOf(char value, int startIndex, int count)
+        => TextSourceSearch.IndexOf(this, value, startIndex, count);
+
+    public int LastIndexOf(char value, int startIndex, int count)
+        => TextSourceSearch.LastIndexOf(this, value, startIndex, count);
+
+    public int IndexOfAny(char[] anyOf, int startIndex, int count)
+        => TextSourceSearch.IndexOfAny(this, anyOf, startIndex, count);
+
+    public int IndexOf(string searchText, int startIndex, int count, StringComparison comparisonType)
+        => TextSourceSearch.IndexOf(this, searchText, startIndex, count, comparisonType);
+
+    public int LastIndexOf(string searchText, int startIndex, int count, StringComparison comparisonType)
+        => TextSourceSearch.LastIndexOf(this, searchText, startIndex, count, comparisonType);
 
     public string GetText(ISegment segment)
     {
@@ -212,5 +262,22 @@ public sealed class TextDocument : ITextSource, IServiceProvider
             change.RemovedText,
             _document.GetText(change.Offset, change.InsertedLength)));
         TextChanged?.Invoke(this, EventArgs.Empty);
+        RaisePropertyChanged();
+    }
+
+    /// <summary>Text first, then the two derived counts, and only when they moved.</summary>
+    private void RaisePropertyChanged()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Text)));
+        if (_lastTextLength != TextLength)
+        {
+            _lastTextLength = TextLength;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TextLength)));
+        }
+        if (_lastLineCount != LineCount)
+        {
+            _lastLineCount = LineCount;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(LineCount)));
+        }
     }
 }

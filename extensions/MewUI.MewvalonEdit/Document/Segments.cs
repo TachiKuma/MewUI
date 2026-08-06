@@ -5,6 +5,18 @@ public interface ITextSource
     int TextLength { get; }
     char GetCharAt(int offset);
     string GetText(int offset, int length);
+
+    /// <summary>Offset of the character in the range, or -1. Both searches take a range, not an end.</summary>
+    int IndexOf(char value, int startIndex, int count);
+
+    int LastIndexOf(char value, int startIndex, int count);
+
+    /// <summary>Offset of the first of any of the characters in the range, or -1.</summary>
+    int IndexOfAny(char[] anyOf, int startIndex, int count);
+
+    int IndexOf(string searchText, int startIndex, int count, StringComparison comparisonType);
+
+    int LastIndexOf(string searchText, int startIndex, int count, StringComparison comparisonType);
 }
 
 public interface ISegment

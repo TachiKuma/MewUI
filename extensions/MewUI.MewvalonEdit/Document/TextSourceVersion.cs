@@ -87,5 +87,20 @@ public sealed class StringTextSource(string text) : ITextSource
 
     public string GetText(int offset, int length) => _text.Substring(offset, length);
 
+    public int IndexOf(char value, int startIndex, int count)
+        => TextSourceSearch.IndexOf(this, value, startIndex, count);
+
+    public int LastIndexOf(char value, int startIndex, int count)
+        => TextSourceSearch.LastIndexOf(this, value, startIndex, count);
+
+    public int IndexOfAny(char[] anyOf, int startIndex, int count)
+        => TextSourceSearch.IndexOfAny(this, anyOf, startIndex, count);
+
+    public int IndexOf(string searchText, int startIndex, int count, StringComparison comparisonType)
+        => TextSourceSearch.IndexOf(this, searchText, startIndex, count, comparisonType);
+
+    public int LastIndexOf(string searchText, int startIndex, int count, StringComparison comparisonType)
+        => TextSourceSearch.LastIndexOf(this, searchText, startIndex, count, comparisonType);
+
     public override string ToString() => _text;
 }
