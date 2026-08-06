@@ -362,12 +362,18 @@ public class TextEditor : Control
         Load(stream);
     }
 
+    /// <summary>
+    /// Reads the whole stream as the document text. A byte order mark decides the encoding; without
+    /// one the current <see cref="Encoding"/> is used, so a caller that knows the file's encoding
+    /// sets it first. <see cref="Encoding"/> ends up at whatever was actually read.
+    /// </summary>
     public void Load(Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        using var reader = new StreamReader(stream, System.Text.Encoding.UTF8,
+        using var reader = new StreamReader(stream, Encoding ?? System.Text.Encoding.UTF8,
             detectEncodingFromByteOrderMarks: true, leaveOpen: true);
         Text = reader.ReadToEnd();
+        // After reading, so the reader has had its chance to detect one from the bytes.
         Encoding = reader.CurrentEncoding;
     }
 

@@ -30,4 +30,45 @@ public sealed class TextEditorTests
         Assert.EndsWith("// end", document.Text);
         FoldingManager.Uninstall(folding);
     }
+
+    /// <summary>
+    /// Without a byte order mark the reader has nothing to detect, so the encoding the caller set is
+    /// what decodes the bytes. Hardcoding UTF-8 there turns every other encoding into question marks.
+    /// </summary>
+    [TestMethod]
+    public void LoadDecodesWithTheEncodingItWasGiven()
+    {
+        byte[] latin1 = System.Text.Encoding.Latin1.GetBytes("café");
+        var editor = new TextEditor { Encoding = System.Text.Encoding.Latin1 };
+
+        editor.Load(new MemoryStream(latin1));
+
+        Assert.AreEqual("café", editor.Text);
+    }
+
+    [TestMethod]
+    public void LoadPrefersAByteOrderMarkOverTheEncodingItWasGiven()
+    {
+        var utf8WithMark = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+        byte[] bytes = [.. utf8WithMark.GetPreamble(), .. System.Text.Encoding.UTF8.GetBytes("café")];
+        var editor = new TextEditor { Encoding = System.Text.Encoding.Latin1 };
+
+        editor.Load(new MemoryStream(bytes));
+
+        Assert.AreEqual("café", editor.Text);
+        Assert.AreEqual(System.Text.Encoding.UTF8.CodePage, editor.Encoding?.CodePage,
+            "The encoding ends up at what was actually read.");
+    }
+
+    /// <summary>A document saved with no encoding set carries no byte order mark, as in the original.</summary>
+    [TestMethod]
+    public void SaveWithoutAnEncodingWritesNoByteOrderMark()
+    {
+        var editor = new TextEditor { Text = "café" };
+        var stream = new MemoryStream();
+
+        editor.Save(stream);
+
+        Assert.HasCount(System.Text.Encoding.UTF8.GetBytes("café").Length, stream.ToArray());
+    }
 }
