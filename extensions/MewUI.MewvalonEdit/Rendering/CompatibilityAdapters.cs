@@ -198,9 +198,12 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
             }
             int start = context.OffsetMap.MapFromSource(element.RelativeTextOffset);
             int end = context.OffsetMap.MapFromSource(element.RelativeTextOffset + element.DocumentLength);
-            if (end > start)
+            // Only the columns the element paints become the object; the rest of its visual text is
+            // laid out normally. The original reaches the same split by handing out one run per column.
+            int length = Math.Min(end - start, element.PaintedVisualLength);
+            if (length > 0)
             {
-                output.Add(new InlineRun(start, end - start, new ElementInline(editor, element)));
+                output.Add(new InlineRun(start, length, new ElementInline(editor, element)));
             }
         }
     }

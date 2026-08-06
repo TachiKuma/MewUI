@@ -21,7 +21,7 @@ public class TextEditor : Control
     private readonly System.Collections.ObjectModel.ObservableCollection<AbstractMargin> _leftMargins = [];
     private Grid? _marginHost;
     private HighlightingColorizer? _colorizer;
-    private readonly WhitespaceMarkerLayer _whitespaceMarkers;
+    private readonly EndOfLineMarkerLayer _endOfLineMarkers;
     private readonly LineTransformerAdapter _lineTransformers;
     private readonly ElementGeneratorAdapter _elementGenerators;
     private SingleCharacterElementGenerator? _singleCharacterGenerator;
@@ -33,7 +33,7 @@ public class TextEditor : Control
     {
         Options = new TextEditorOptions();
         IndentationStrategy = new DefaultIndentationStrategy();
-        _whitespaceMarkers = new WhitespaceMarkerLayer(Options, this);
+        _endOfLineMarkers = new EndOfLineMarkerLayer(Options, this);
         _lineTransformers = new LineTransformerAdapter(this);
         _elementGenerators = new ElementGeneratorAdapter(this);
         _backgroundRenderers = new BackgroundRendererRegistry(this);
@@ -72,7 +72,7 @@ public class TextEditor : Control
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
         UpdateBuiltInElementGenerators();
         _backgroundRenderers.RegisterInto(_surface);
-        _surface.InsertLayer(_whitespaceMarkers, TextViewLayerAnchor.Text, TextLayerPosition.Below);
+        _surface.InsertLayer(_endOfLineMarkers, TextViewLayerAnchor.Text, TextLayerPosition.Below);
         _surface.InsertLayer(
             new CurrentLineLayer(Options, this), TextViewLayerAnchor.Background, TextLayerPosition.Above);
         _surface.InsertLayer(

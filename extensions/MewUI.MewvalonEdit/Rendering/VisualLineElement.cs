@@ -88,6 +88,13 @@ public class VisualLineElement
     protected internal virtual bool ReplacesText => true;
 
     /// <summary>
+    /// Visual columns this element paints itself, counted from its start. The columns beyond it are
+    /// laid out from <see cref="GetVisualText"/> as ordinary text, which is how the tab marker paints
+    /// a glyph and still lets a real tab reach its tab stop. Ignored unless <see cref="ReplacesText"/>.
+    /// </summary>
+    protected internal virtual int PaintedVisualLength => VisualLength;
+
+    /// <summary>
     /// Called before the element is painted, for appearance the view owns rather than the element.
     /// </summary>
     protected internal virtual void PrepareForPaint(TextView textView)

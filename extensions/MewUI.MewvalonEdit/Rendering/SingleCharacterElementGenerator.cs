@@ -4,15 +4,15 @@ using Aprillz.MewUI.Text;
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
 /// <summary>
-/// Builds the elements that stand in for single characters: a dot for a space, an arrow over a tab,
-/// and a box naming a control character. One generator decides all three because a tab is itself a
-/// control character, so which marker wins has to be settled in one place.
+/// Builds the elements that stand in for single characters: a dot for a space, a guillemet over a
+/// tab, and a box naming a control character. One generator decides all three because a tab is
+/// itself a control character, so which marker wins has to be settled in one place.
 /// </summary>
 internal sealed class SingleCharacterElementGenerator(TextEditorOptions options, TextEditor editor)
     : VisualLineElementGenerator
 {
     private const char SPACE_MARKER = '·';
-    private const char TAB_MARKER = '→';
+    private const char TAB_MARKER = '»';
 
     public override int GetFirstInterestedOffset(int startOffset)
     {
@@ -49,6 +49,13 @@ internal sealed class SingleCharacterElementGenerator(TextEditorOptions options,
                 Foreground = editor.WhitespaceMarkerColor
             };
         }
+        if (character == '\t' && options.ShowTabs)
+        {
+            return new TabMarkerElement(TAB_MARKER.ToString(), style)
+            {
+                Foreground = editor.WhitespaceMarkerColor
+            };
+        }
         if (options.ShowBoxForControlCharacters && char.IsControl(character))
         {
             return new ControlCharacterBoxElement(TextUtilities.GetControlCharacterName(character), style);
@@ -57,14 +64,13 @@ internal sealed class SingleCharacterElementGenerator(TextEditorOptions options,
     }
 
     /// <summary>
-    /// A tab is a control character, but the original settles it before the box ever sees it, so a
-    /// tab is never boxed. Its marker is an overlay drawn by the marker layer instead, because an
-    /// element here is one run and the original's tab is two: a zero-width glyph and the tab itself.
+    /// A tab is a control character, but the original settles the tab case before the box is
+    /// reached, so a tab is never boxed and turning tab markers off leaves it unmarked.
     /// </summary>
     private bool WantsCharacter(char character) => character switch
     {
         ' ' => options.ShowSpaces,
-        '\t' => false,
+        '\t' => options.ShowTabs,
         _ => options.ShowBoxForControlCharacters && char.IsControl(character)
     };
 }
@@ -88,6 +94,32 @@ internal sealed class WhitespaceMarkerElement(string glyph, TextRunStyle style) 
         ArgumentNullException.ThrowIfNull(context);
         var options = new TextDrawOptions(Foreground ?? Color.FromRgb(0x80, 0x80, 0x80));
         context.Draw(MarkerLayout.For(_glyph, _style, dpi), origin, in options);
+    }
+}
+
+/// <summary>
+/// A tab shown as a marker glyph that keeps the tab. Two visual columns stand for the one document
+/// character: the first is this element, reporting no width so the tab that follows it starts where
+/// the tab did and still reaches its tab stop; the second is the tab itself. The original arranges
+/// it the same way, as a zero-width glyph run followed by the tab character.
+/// </summary>
+internal sealed class TabMarkerElement(string glyph, TextRunStyle style) : VisualLineElement(2, 1)
+{
+    protected internal override string GetVisualText() => "￼\t";
+
+    protected internal override int PaintedVisualLength => 1;
+
+    public override InlineMetrics Measure(uint dpi)
+    {
+        var layout = MarkerLayout.For(glyph, style, dpi);
+        return new InlineMetrics(0, layout.MeasuredSize.Height, layout.Lines[0].Baseline);
+    }
+
+    public override void Draw(ITextRenderContext context, Point origin, uint dpi)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var options = new TextDrawOptions(Foreground ?? Color.FromRgb(0x80, 0x80, 0x80));
+        context.Draw(MarkerLayout.For(glyph, style, dpi), origin, in options);
     }
 }
 

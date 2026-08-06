@@ -6,8 +6,8 @@ using Aprillz.MewUI.Text;
 namespace Aprillz.MewUI.MewvalonEdit.Test;
 
 /// <summary>
-/// Pins what the whitespace options paint before the three of them move onto one element generator.
-/// Substituting a tab would collapse its tab-stop width, which is the regression these guard.
+/// Pins what the whitespace options paint. Space and tab are stood in for by elements, so a marker
+/// that reported its own width would collapse the tab stop; that is the regression these guard.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
@@ -41,8 +41,8 @@ public sealed class WhitespaceMarkerTests
     }
 
     /// <summary>
-    /// A marked tab still reaches its tab stop. Replacing it with a glyph would shrink it to one
-    /// character, which is why the marker is drawn over the tab rather than put in its place.
+    /// A marked tab still reaches its tab stop. The marker element reports no width and the tab
+    /// itself follows it, so substituting a glyph for the tab would be the shrink this catches.
     /// </summary>
     [TestMethod]
     public void MarkingTabsLeavesTheirWidthAlone()
@@ -93,13 +93,14 @@ public sealed class WhitespaceMarkerTests
 
     /// <summary>
     /// Where the caret sits after the whitespace character, which is the tab stop a substitution
-    /// would collapse.
+    /// would collapse. The offset is mapped because a marker element lengthens the laid-out line.
     /// </summary>
     private static double Layout(string text, Action<TextEditorOptions> configure)
     {
         var editor = CreateEditor(text, configure);
         Render(editor);
-        return editor.Surface.VisibleTextLines[0].GetCaretBounds(new CharacterHit(2, 0)).X;
+        var line = editor.Surface.VisibleTextLines[0];
+        return line.GetCaretBounds(new CharacterHit(line.MapSourceOffsetToProjected(2), 0)).X;
     }
 
     private static int DifferingPixels(string text, Action<TextEditorOptions> configure)

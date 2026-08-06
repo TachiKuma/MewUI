@@ -52,6 +52,26 @@ public sealed class WhitespaceAndThemeTests
         Assert.IsNull(ConstructSingleCharacterElement(editor, offset: 3), "The tab was boxed.");
     }
 
+    /// <summary>
+    /// A marked tab occupies two visual columns for its one document character: the marker, which
+    /// paints and reports no width, and the tab itself, which is laid out as text and finds the stop.
+    /// </summary>
+    [TestMethod]
+    public void MarkedTabsKeepTheTabBesideTheMarker()
+    {
+        var editor = new TextEditor { Text = "a\tb" };
+        editor.Options.ShowTabs = true;
+
+        var element = ConstructSingleCharacterElement(editor, offset: 1) as TabMarkerElement;
+
+        Assert.IsNotNull(element, "The tab was not marked.");
+        Assert.AreEqual(2, element.VisualLength);
+        Assert.AreEqual(1, element.DocumentLength);
+        Assert.AreEqual(1, element.PaintedVisualLength);
+        Assert.AreEqual("￼\t", element.GetVisualText());
+        Assert.AreEqual(0, element.Measure(96).Width, "The marker must report no width of its own.");
+    }
+
     private static VisualLineElement? ConstructSingleCharacterElement(TextEditor editor, int offset)
     {
         var generator = editor.TextArea.TextView.ElementGenerators
