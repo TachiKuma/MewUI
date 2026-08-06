@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Aprillz.MewUI.MewvalonEdit;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Folding;
@@ -70,5 +71,80 @@ public sealed class TextEditorTests
         editor.Save(stream);
 
         Assert.HasCount(System.Text.Encoding.UTF8.GetBytes("café").Length, stream.ToArray());
+    }
+
+    /// <summary>Undo and redo report whether there was anything to do, as the original's do.</summary>
+    [TestMethod]
+    public void UndoAndRedoReportWhetherTheyHappened()
+    {
+        var editor = new TextEditor();
+
+        Assert.IsFalse(editor.Undo(), "There was nothing to undo yet.");
+        Assert.IsFalse(editor.Redo(), "There was nothing to redo yet.");
+
+        editor.Document.Insert(0, "text");
+        Assert.IsTrue(editor.Undo());
+        Assert.AreEqual(string.Empty, editor.Text);
+        Assert.IsTrue(editor.Redo());
+        Assert.AreEqual("text", editor.Text);
+    }
+
+    [TestMethod]
+    public void AReadOnlyEditorUndoesNothing()
+    {
+        var editor = new TextEditor();
+        editor.Document.Insert(0, "text");
+        editor.IsReadOnly = true;
+
+        Assert.IsFalse(editor.Undo());
+        Assert.AreEqual("text", editor.Text);
+    }
+
+    /// <summary>
+    /// The options are subclassable, which is how the original lets a host force a value: every
+    /// member is virtual and the change notification runs through one overridable method.
+    /// </summary>
+    [TestMethod]
+    public void OptionsCanBeSubclassed()
+    {
+        var options = new PinnedTabOptions();
+
+        options.ShowTabs = false;
+        Assert.IsTrue(options.ShowTabs, "The override did not win.");
+
+        options.ShowSpaces = true;
+        Assert.AreEqual(1, options.Notifications, "The change did not run through the overridable raise.");
+    }
+
+    /// <summary>The derived indentation text is reported alongside what it derives from.</summary>
+    [TestMethod]
+    public void ChangingTheIndentationReportsTheIndentationString()
+    {
+        var options = new TextEditorOptions();
+        var raised = new List<string?>();
+        options.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        options.ConvertTabsToSpaces = true;
+
+        CollectionAssert.AreEqual(
+            new[] { nameof(TextEditorOptions.ConvertTabsToSpaces), nameof(TextEditorOptions.IndentationString) },
+            raised);
+    }
+
+    private sealed class PinnedTabOptions : TextEditorOptions
+    {
+        public int Notifications { get; private set; }
+
+        public override bool ShowTabs
+        {
+            get => true;
+            set => base.ShowTabs = value;
+        }
+
+        protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+        {
+            Notifications++;
+            base.OnPropertyChanged(e);
+        }
     }
 }

@@ -528,8 +528,27 @@ public class TextEditor : Control, ITextEditorComponent
     }
 
     public void Paste() => _surface.Paste();
-    public void Undo() => _surface.Undo();
-    public void Redo() => _surface.Redo();
+    /// <summary>Undoes the most recent command. False when there was nothing to undo.</summary>
+    public bool Undo()
+    {
+        if (!CanUndo || IsReadOnly)
+        {
+            return false;
+        }
+        _surface.Undo();
+        return true;
+    }
+
+    /// <summary>Redoes the most recently undone command. False when there was nothing to redo.</summary>
+    public bool Redo()
+    {
+        if (!CanRedo || IsReadOnly)
+        {
+            return false;
+        }
+        _surface.Redo();
+        return true;
+    }
     public void InvalidateTextView() => _surface.InvalidateTextView();
 
     protected override void OnDispose()
