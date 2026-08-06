@@ -104,6 +104,33 @@ public sealed class TextViewPositionTests
         Assert.IsGreaterThan(baseline, bottom);
     }
 
+    /// <summary>
+    /// A line outside the viewport answers the same as it does once scrolled into it. Every mode
+    /// has to match, including the four that need the row's own baseline.
+    /// </summary>
+    [TestMethod]
+    public void AnOffScreenLineAnswersTheSameAsAnOnScreenOne()
+    {
+        var editor = CreateEditor(string.Join('\n', Enumerable.Range(1, 80).Select(number => $"line {number}")));
+        var view = editor.TextArea.TextView;
+        var position = new TextViewPosition(70, 3);
+        Assert.IsNull(view.GetVisualLineFromVisualTop(view.GetVisualPosition(position, VisualYPosition.LineTop).Y),
+            "Line 70 was already on screen, so the test proves nothing.");
+
+        var offScreen = Measure(view, position);
+        editor.ScrollToLine(70);
+        Render(editor);
+        var onScreen = Measure(view, position);
+
+        CollectionAssert.AreEqual(offScreen, onScreen);
+    }
+
+    private static double[] Measure(TextView view, TextViewPosition position)
+        => Enum.GetValues<VisualYPosition>()
+            .Select(mode => view.GetVisualPosition(position, mode))
+            .SelectMany(point => new[] { point.X, point.Y })
+            .ToArray();
+
     [TestMethod]
     public void APointBelowTheTextHasNoPosition()
     {

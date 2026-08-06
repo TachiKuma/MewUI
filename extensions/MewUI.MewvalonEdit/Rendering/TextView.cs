@@ -327,18 +327,34 @@ public sealed class TextView : MewObject, ITextEditorComponent
         => GetVisualLineFromVisualTop(documentPoint.Y)?.GetTextViewPositionFloor(documentPoint, ALLOW_VIRTUAL_SPACE);
 
     /// <summary>
-    /// Document-space position of a text view position. Answered from the laid-out row when the line
-    /// is on screen; otherwise from the caret rectangle, where the four text-relative modes assume
-    /// the line's baseline is the view's default.
+    /// The laid-out line of a document line, laying it out when it is off screen. Null only before
+    /// the view has been laid out at all.
     /// </summary>
+    public VisualLine? GetOrConstructVisualLine(DocumentLine documentLine)
+    {
+        ArgumentNullException.ThrowIfNull(documentLine);
+        return GetOrConstructVisualLine(documentLine.Offset);
+    }
+
+    /// <summary>
+    /// A line long enough to be laid out in slices has more than one, so the offset being asked
+    /// about decides which one comes back.
+    /// </summary>
+    private VisualLine? GetOrConstructVisualLine(int documentOffset)
+    {
+        var layout = Host.GetLineLayout(documentOffset);
+        return layout is null ? null : Wrap(layout);
+    }
+
+    /// <summary>Document-space position of a text view position.</summary>
     public Point GetVisualPosition(TextViewPosition position, VisualYPosition yPositionMode)
     {
         var documentLine = Document.GetLineByNumber(Math.Clamp(position.Line, 1, Document.LineCount));
-        var visualLine = GetVisualLineFromVisualTop(Host.GetLineY(documentLine.LineNumber - 1));
         int offset = documentLine.Offset + Math.Clamp(position.Column - 1, 0, documentLine.Length);
+        var visualLine = GetOrConstructVisualLine(offset);
         if (visualLine is null)
         {
-            return GetOffScreenVisualPosition(offset, yPositionMode);
+            return default;
         }
 
         int visualColumn = visualLine.ValidateVisualColumn(offset, position.VisualColumn, ALLOW_VIRTUAL_SPACE);
@@ -358,29 +374,6 @@ public sealed class TextView : MewObject, ITextEditorComponent
     // Becomes Options.EnableVirtualSpace once that option lands; until then no position is past
     // the end of its line.
     private const bool ALLOW_VIRTUAL_SPACE = false;
-
-    /// <summary>
-    /// The caret rectangle materializes the line without laying it into the viewport, which is what
-    /// makes a position on an off-screen line answerable at all.
-    /// </summary>
-    private Point GetOffScreenVisualPosition(int documentOffset, VisualYPosition yPositionMode)
-    {
-        var rect = Surface.GetCharRectInWindow(documentOffset);
-        var viewport = Host.TextViewportBounds;
-        double x = rect.X - viewport.X + Host.ScrollOffset.X;
-        double top = rect.Y - viewport.Y + Host.ScrollOffset.Y;
-        double y = yPositionMode switch
-        {
-            VisualYPosition.LineTop or VisualYPosition.TextTop => top,
-            VisualYPosition.LineMiddle => top + (rect.Height / 2),
-            VisualYPosition.LineBottom => top + rect.Height,
-            VisualYPosition.TextBottom => top + DefaultLineHeight,
-            VisualYPosition.TextMiddle => top + (DefaultLineHeight / 2),
-            VisualYPosition.Baseline => top + DefaultBaseline,
-            _ => throw new ArgumentOutOfRangeException(nameof(yPositionMode), yPositionMode, null)
-        };
-        return new Point(x, y);
-    }
 
     public double HorizontalOffset => Host.ScrollOffset.X;
 
