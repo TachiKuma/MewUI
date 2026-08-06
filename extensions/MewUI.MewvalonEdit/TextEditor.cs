@@ -26,6 +26,8 @@ public class TextEditor : Control
     private readonly WhitespaceMarkerLayer _whitespaceMarkers;
     private readonly LineTransformerAdapter _lineTransformers;
     private readonly ElementGeneratorAdapter _elementGenerators;
+    private LinkElementGenerator? _linkGenerator;
+    private MailLinkElementGenerator? _mailLinkGenerator;
     private readonly BackgroundRendererRegistry _backgroundRenderers;
 
     public TextEditor()
@@ -73,6 +75,7 @@ public class TextEditor : Control
         _surface.Extensions.Transformers.Add(_lineTransformers);
         _surface.Extensions.Classifiers.Add(_spaceMarkerColors);
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
+        UpdateBuiltInElementGenerators();
         _backgroundRenderers.RegisterInto(_surface);
         _surface.InsertLayer(_whitespaceMarkers, TextViewLayerAnchor.Text, TextLayerPosition.Below);
         _surface.InsertLayer(
@@ -385,8 +388,27 @@ public class TextEditor : Control
     public void Select(int start, int length) => _surface.Select(start, length);
     public void SelectAll() => _surface.SelectAll();
     public void AppendText(string? text) => _surface.AppendText(text, scrollToCaret: true);
-    public void Copy() => _surface.Copy();
-    public void Cut() => _surface.Cut();
+    /// <summary>
+    /// Copies the selection, or the caret's whole line when nothing is selected and
+    /// <see cref="TextEditorOptions.CutCopyWholeLine"/> allows it.
+    /// </summary>
+    public void Copy()
+    {
+        if (!TryCutCopyWholeLine(cut: false))
+        {
+            _surface.Copy();
+        }
+    }
+
+    /// <inheritdoc cref="Copy"/>
+    public void Cut()
+    {
+        if (!TryCutCopyWholeLine(cut: true))
+        {
+            _surface.Cut();
+        }
+    }
+
     public void Paste() => _surface.Paste();
     public void Undo() => _surface.Undo();
     public void Redo() => _surface.Redo();
@@ -503,6 +525,13 @@ public class TextEditor : Control
     /// </summary>
     private void OnSurfaceKeyDown(KeyEventArgs e)
     {
+        if (!e.Handled && e.PrimaryKey && e.Key is Key.C or Key.X
+            && TryCutCopyWholeLine(cut: e.Key == Key.X))
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Handled || e.Key != Key.Enter || IsReadOnly || !Document.CoreDocument.PreservesLineEndings)
         {
             return;
@@ -514,6 +543,38 @@ public class TextEditor : Control
         }
         e.Handled = true;
         _surface.ReplaceSelection(newLine);
+    }
+
+    /// <summary>
+    /// Copies the caret's whole line when nothing is selected, terminator included, and cuts it out
+    /// for a cut. Returns false when the option is off or something is selected, leaving the plain
+    /// selection copy to the surface.
+    /// </summary>
+    private bool TryCutCopyWholeLine(bool cut)
+    {
+        if (!Options.CutCopyWholeLine || SelectionLength > 0 || (cut && IsReadOnly))
+        {
+            return false;
+        }
+        var line = Document.GetLineByNumber(Document.GetLocation(CaretOffset).Line);
+        if (line.TotalLength == 0)
+        {
+            return false;
+        }
+        // Through the surface's own clipboard path, which is the only one open to an extension.
+        // Selecting the line first is what makes it copy the line rather than nothing.
+        int caret = CaretOffset;
+        _surface.Select(line.Offset, line.TotalLength);
+        if (cut)
+        {
+            _surface.Cut();
+        }
+        else
+        {
+            _surface.Copy();
+            _surface.Select(caret, 0);
+        }
+        return true;
     }
 
     /// <summary>
@@ -594,6 +655,47 @@ public class TextEditor : Control
     private void OnOptionsChanged(object? sender, PropertyChangedEventArgs e)
     {
         _surface.TabSize = Options.IndentationSize;
+        UpdateBuiltInElementGenerators();
         _surface.InvalidateTextView();
+    }
+
+    /// <summary>
+    /// Attaches and detaches the link generators the options ask for, so an editor gets them without
+    /// registering anything. The original builds them the same way, from the same two options.
+    /// </summary>
+    private void UpdateBuiltInElementGenerators()
+    {
+        SetBuiltInGenerator(ref _linkGenerator, Options.EnableHyperlinks, static () => new LinkElementGenerator());
+        SetBuiltInGenerator(ref _mailLinkGenerator, Options.EnableEmailHyperlinks, static () => new MailLinkElementGenerator());
+        if (_linkGenerator is not null)
+        {
+            _linkGenerator.RequireControlModifierForClick = Options.RequireControlModifierForHyperlinkClick;
+        }
+        if (_mailLinkGenerator is not null)
+        {
+            _mailLinkGenerator.RequireControlModifierForClick = Options.RequireControlModifierForHyperlinkClick;
+        }
+    }
+
+    private void SetBuiltInGenerator<TGenerator>(
+        ref TGenerator? generator,
+        bool wanted,
+        Func<TGenerator> create)
+        where TGenerator : VisualLineElementGenerator
+    {
+        if (wanted == (generator is not null))
+        {
+            return;
+        }
+        if (wanted)
+        {
+            generator = create();
+            ElementGenerators.Add(generator);
+        }
+        else
+        {
+            ElementGenerators.Remove(generator!);
+            generator = null;
+        }
     }
 }

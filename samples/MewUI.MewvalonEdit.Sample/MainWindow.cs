@@ -42,10 +42,9 @@ public sealed class MainWindow : Window
         // toggle a section on click.
         _foldingManager = FoldingManager.Install(_editor.TextArea);
         _foldingManager.FoldingsChanged += (_, _) => UpdateFoldingState();
-        // Underlines URLs and mail addresses in the text and opens them on Ctrl+Click.
-        _editor.TextArea.TextView.ElementGenerators.Add(new LinkElementGenerator());
-        // Neither generator carries a colour: appearance comes from the view, so both follow it.
-        _editor.TextArea.TextView.ElementGenerators.Add(new MailLinkElementGenerator());
+        // URLs and mail addresses underline and open on Ctrl+Click without registering anything:
+        // the editor builds both generators from EnableHyperlinks and EnableEmailHyperlinks.
+        // Neither carries a colour, so appearance comes from the view.
         _optionsPanel = CreateOptionsPanel();
         _optionsPanel.IsVisible = false;
 

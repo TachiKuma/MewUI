@@ -4,6 +4,8 @@ using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Indentation;
 using Aprillz.MewUI.MewvalonEdit.Search;
 using Aprillz.MewUI.MewvalonEdit.Folding;
+using Aprillz.MewUI.MewvalonEdit.Rendering;
+using Aprillz.MewUI.Platform;
 using System.Diagnostics;
 
 namespace Aprillz.MewUI.MewvalonEdit.Test;
@@ -109,6 +111,96 @@ public sealed class EditorExtensionTests
 
         editor.TextArea.PerformTextInput("\t");
         Assert.AreEqual("ab      ", editor.Text, "The next tab takes a full indent from the stop.");
+    }
+
+    /// <summary>
+    /// With nothing selected, copy takes the whole line including its terminator, which is what the
+    /// original does and why the option defaults on.
+    /// </summary>
+    [TestMethod]
+    public void CopyWithoutASelectionTakesTheWholeLine()
+    {
+        var clipboard = new RecordingClipboard();
+        var editor = new TextEditor { Text = "first\nsecond\nthird" };
+        editor.Surface.ClipboardService = clipboard;
+        editor.CaretOffset = 8;
+
+        editor.Copy();
+
+        Assert.AreEqual("second\n", clipboard.Text);
+        Assert.AreEqual(8, editor.CaretOffset, "Copying leaves the caret where it was.");
+        Assert.AreEqual(0, editor.SelectionLength);
+    }
+
+    [TestMethod]
+    public void CutWithoutASelectionRemovesTheWholeLine()
+    {
+        var clipboard = new RecordingClipboard();
+        var editor = new TextEditor { Text = "first\nsecond\nthird" };
+        editor.Surface.ClipboardService = clipboard;
+        editor.CaretOffset = 8;
+
+        editor.Cut();
+
+        Assert.AreEqual("second\n", clipboard.Text);
+        Assert.AreEqual("first\nthird", editor.Text);
+    }
+
+    [TestMethod]
+    public void TurningTheWholeLineOptionOffLeavesCopyAlone()
+    {
+        var clipboard = new RecordingClipboard();
+        var editor = new TextEditor { Text = "first\nsecond\nthird" };
+        editor.Surface.ClipboardService = clipboard;
+        editor.Options.CutCopyWholeLine = false;
+        editor.CaretOffset = 8;
+
+        editor.Copy();
+
+        Assert.AreEqual(string.Empty, clipboard.Text, "Nothing is selected, so nothing is copied.");
+    }
+
+    /// <summary>
+    /// Links come with the editor rather than having to be registered, which is what the two options
+    /// defaulting on mean. ILSpy sets RequireControlModifierForHyperlinkClick, so it has to arrive
+    /// at the generator.
+    /// </summary>
+    [TestMethod]
+    public void LinkGeneratorsFollowTheirOptions()
+    {
+        var editor = new TextEditor { Text = "see www.example.com and a@b.com" };
+        var view = editor.TextArea.TextView;
+
+        Assert.AreEqual(1, view.ElementGenerators.OfType<LinkElementGenerator>().Count(
+            static generator => generator is not MailLinkElementGenerator));
+        Assert.AreEqual(1, view.ElementGenerators.OfType<MailLinkElementGenerator>().Count());
+        Assert.IsTrue(view.ElementGenerators.OfType<LinkElementGenerator>()
+            .All(static generator => generator.RequireControlModifierForClick));
+
+        editor.Options.RequireControlModifierForHyperlinkClick = false;
+        Assert.IsTrue(view.ElementGenerators.OfType<LinkElementGenerator>()
+            .All(static generator => !generator.RequireControlModifierForClick));
+
+        editor.Options.EnableHyperlinks = false;
+        editor.Options.EnableEmailHyperlinks = false;
+        Assert.IsEmpty(view.ElementGenerators.OfType<LinkElementGenerator>());
+    }
+
+    private sealed class RecordingClipboard : IClipboardService
+    {
+        public string Text { get; private set; } = string.Empty;
+
+        public bool TrySetText(string text)
+        {
+            Text = text;
+            return true;
+        }
+
+        public bool TryGetText(out string text)
+        {
+            text = Text;
+            return true;
+        }
     }
 
     /// <summary>Ordinary typing must not re-run the strategy over the line.</summary>

@@ -13,6 +13,10 @@ public sealed class TextEditorOptions : INotifyPropertyChanged
     private bool _showColumnRuler;
     private int _columnRulerPosition = 80;
     private bool _highlightCurrentLine;
+    private bool _enableHyperlinks = true;
+    private bool _enableEmailHyperlinks = true;
+    private bool _requireControlModifierForHyperlinkClick = true;
+    private bool _cutCopyWholeLine = true;
 
     public int IndentationSize
     {
@@ -85,6 +89,34 @@ public sealed class TextEditorOptions : INotifyPropertyChanged
     {
         get => _showEndOfLine;
         set => Set(ref _showEndOfLine, value);
+    }
+
+    /// <summary>Turns web addresses in the text into links. On by default, as in the original.</summary>
+    public bool EnableHyperlinks
+    {
+        get => _enableHyperlinks;
+        set => Set(ref _enableHyperlinks, value);
+    }
+
+    /// <summary>Turns mail addresses in the text into links. On by default, as in the original.</summary>
+    public bool EnableEmailHyperlinks
+    {
+        get => _enableEmailHyperlinks;
+        set => Set(ref _enableEmailHyperlinks, value);
+    }
+
+    /// <summary>Whether a link needs Ctrl held to follow it, rather than a plain click.</summary>
+    public bool RequireControlModifierForHyperlinkClick
+    {
+        get => _requireControlModifierForHyperlinkClick;
+        set => Set(ref _requireControlModifierForHyperlinkClick, value);
+    }
+
+    /// <summary>Copying with nothing selected takes the whole line. On by default, as in the original.</summary>
+    public bool CutCopyWholeLine
+    {
+        get => _cutCopyWholeLine;
+        set => Set(ref _cutCopyWholeLine, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
