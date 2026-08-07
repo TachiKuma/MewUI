@@ -33,8 +33,8 @@ public sealed class FoldingVisualTests
             return;
         }
 
-        byte[] withoutFoldings = Render(SINGLE_FOLD_TEXT, addFoldings: false, folded: false, outline: true);
-        byte[] withFoldings = Render(SINGLE_FOLD_TEXT, addFoldings: true, folded: false, outline: true);
+        byte[] withoutFoldings = Render(SINGLE_FOLD_TEXT, addFoldings: false, folded: false);
+        byte[] withFoldings = Render(SINGLE_FOLD_TEXT, addFoldings: true, folded: false);
 
         // The document's only box sits on the second row, so anything differing further down the
         // gutter can only be the line running to the section end.
@@ -201,17 +201,69 @@ public sealed class FoldingVisualTests
             return;
         }
 
-        // Same collapsed document either way, so the whole frame already isolates the renderer;
-        // no region is needed and the placeholder sits close to the gutter.
-        byte[] withoutOutline = Render(TEXT, addFoldings: true, folded: true, outline: false);
-        byte[] withOutline = Render(TEXT, addFoldings: true, folded: true, outline: true);
+        // The placeholder and its box are the only things drawn in the marker colour right of the
+        // gutter, so counting that colour isolates them from the rest of the document.
+        var marker = new TextEditor().FoldingMarkerColor;
+        int boxed = CountPixelsColored(
+            Render(TEXT, addFoldings: true, folded: true),
+            new Rect(GUTTER_WIDTH, 0, WIDTH - GUTTER_WIDTH, HEIGHT),
+            marker);
 
-        int differing = CountDifferingPixels(withoutOutline, withOutline, new Rect(0, 0, WIDTH, HEIGHT));
+        // The same glyph, in the same colour, with nothing drawn around it.
+        int glyphOnly = CountPixelsColored(
+            RenderElement(BuildPlainEditor("…", marker)), new Rect(0, 0, WIDTH, HEIGHT), marker);
 
-        Assert.IsGreaterThan(0, differing, "The collapsed placeholder was not outlined.");
+        Assert.IsGreaterThan(glyphOnly, boxed, "The collapsed placeholder was not outlined.");
     }
 
-    private static byte[] Render(string text, bool addFoldings, bool folded, bool outline)
+    private static TextEditor BuildPlainEditor(string text, Color foreground)
+    {
+        var editor = new TextEditor
+        {
+            Text = text,
+            Foreground = foreground,
+            ShowLineNumbers = false,
+            SkipViewportCull = true
+        };
+        editor.Measure(new Size(WIDTH, HEIGHT));
+        editor.Arrange(new Rect(0, 0, WIDTH, HEIGHT));
+        return editor;
+    }
+
+    /// <summary>
+    /// Pixels close to <paramref name="color"/>. Both the glyph and the stroke are antialiased, so
+    /// an exact match would count almost nothing.
+    /// </summary>
+    private static int CountPixelsColored(byte[] frame, Rect region, Color color)
+    {
+        const int TOLERANCE = 24;
+        // The surface stores premultiplied colour, and the marker is not opaque.
+        int blue = color.B * color.A / 255;
+        int green = color.G * color.A / 255;
+        int red = color.R * color.A / 255;
+        int matching = 0;
+        for (int y = (int)region.Y; y < (int)region.Bottom && y < HEIGHT; y++)
+        {
+            for (int x = (int)region.X; x < (int)region.Right && x < WIDTH; x++)
+            {
+                int offset = (y * WIDTH + x) * 4;
+                if (offset + 2 >= frame.Length)
+                {
+                    continue;
+                }
+                if (frame[offset + 3] != 0 &&
+                    Math.Abs(frame[offset] - blue) <= TOLERANCE &&
+                    Math.Abs(frame[offset + 1] - green) <= TOLERANCE &&
+                    Math.Abs(frame[offset + 2] - red) <= TOLERANCE)
+                {
+                    matching++;
+                }
+            }
+        }
+        return matching;
+    }
+
+    private static byte[] Render(string text, bool addFoldings, bool folded)
     {
         var editor = new TextEditor
         {
@@ -220,11 +272,6 @@ public sealed class FoldingVisualTests
             SkipViewportCull = true
         };
         var manager = FoldingManager.Install(editor);
-        if (!outline)
-        {
-            // The manager registers exactly one background renderer, the placeholder outline.
-            editor.TextArea.TextView.BackgroundRenderers.Clear();
-        }
         if (addFoldings)
         {
             new BraceFoldingStrategy().UpdateFoldings(manager, editor.Document);

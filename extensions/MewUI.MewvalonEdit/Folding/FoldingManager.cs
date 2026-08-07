@@ -1,26 +1,33 @@
-using Aprillz.MewUI.MewvalonEdit.Rendering;
-using Aprillz.MewUI.Rendering;
-using Aprillz.MewUI.Text;
+﻿using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Folding;
+
+/// <summary>
+/// Hides the logical lines a fold element on an earlier line already covers, which the core
+/// requires of an extension that makes a line reach past its own end.
+/// </summary>
+internal sealed class FoldedLineCollapser(FoldingManager manager) : ITextLineCollapser
+{
+    public bool IsCollapsed(LogicalTextLine line) => manager.IsLineCollapsed(line);
+}
 
 public sealed class FoldingManager
 {
     private readonly TextEditor _editor;
-    private readonly FoldingProjection _projection;
+    private readonly FoldingElementGenerator _generator;
+    private readonly FoldedLineCollapser _collapser;
     private readonly FoldingMargin _margin;
     private readonly List<FoldingSection> _foldings = [];
-    private readonly List<FoldingSection> _collapsed = [];
     private readonly List<(int Start, int End)> _collapsedRanges = [];
     private bool _uninstalled;
 
     private FoldingManager(TextEditor editor)
     {
         _editor = editor;
-        _projection = new FoldingProjection(this);
-        _editor.Surface.Extensions.Projections.Add(_projection);
-        _editor.Surface.Extensions.LineCollapsers.Add(_projection);
-        _editor.BackgroundRenderers.Add(new FoldedSectionRenderer(this));
+        _generator = new FoldingElementGenerator(editor) { FoldingManager = this };
+        _collapser = new FoldedLineCollapser(this);
+        _editor.TextArea.TextView.ElementGenerators.Add(_generator);
+        _editor.Surface.Extensions.LineCollapsers.Add(_collapser);
         _margin = new FoldingMargin { FoldingManager = this };
         _editor.TextArea.LeftMargins.Add(_margin);
         _editor.TextArea.TextView.Services.AddService(this);
@@ -46,8 +53,8 @@ public sealed class FoldingManager
         ArgumentNullException.ThrowIfNull(manager);
         if (manager._uninstalled) return;
         manager._uninstalled = true;
-        manager._editor.Surface.Extensions.Projections.Remove(manager._projection);
-        manager._editor.Surface.Extensions.LineCollapsers.Remove(manager._projection);
+        manager._editor.TextArea.TextView.ElementGenerators.Remove(manager._generator);
+        manager._editor.Surface.Extensions.LineCollapsers.Remove(manager._collapser);
         manager._editor.TextArea.LeftMargins.Remove(manager._margin);
         manager._editor.TextArea.TextView.Services.RemoveService<FoldingManager>();
         manager._margin.FoldingManager = null;
@@ -125,6 +132,28 @@ public sealed class FoldingManager
 
     public FoldingSection? GetNextFolding(int startOffset)
     {
+        int index = FindFirstFoldingWithStartAfter(startOffset);
+        return index < _foldings.Count ? _foldings[index] : null;
+    }
+
+    /// <summary>
+    /// First offset at or after <paramref name="startOffset"/> where a folded section starts, or -1
+    /// when none does.
+    /// </summary>
+    public int GetNextFoldedFoldingStart(int startOffset)
+    {
+        for (int index = FindFirstFoldingWithStartAfter(startOffset); index < _foldings.Count; index++)
+        {
+            if (_foldings[index].IsFolded)
+            {
+                return _foldings[index].StartOffset;
+            }
+        }
+        return -1;
+    }
+
+    private int FindFirstFoldingWithStartAfter(int startOffset)
+    {
         int low = 0;
         int high = _foldings.Count;
         while (low < high)
@@ -133,11 +162,8 @@ public sealed class FoldingManager
             if (_foldings[middle].StartOffset < startOffset) low = middle + 1;
             else high = middle;
         }
-        return low < _foldings.Count ? _foldings[low] : null;
+        return low;
     }
-
-    internal IReadOnlyList<FoldingSection> Collapsed
-        => _collapsed;
 
     internal void NotifyChanged()
     {
@@ -149,10 +175,8 @@ public sealed class FoldingManager
 
     private void RebuildCollapsedIndex()
     {
-        _collapsed.Clear();
-        _collapsed.AddRange(_foldings.Where(static item => item.IsFolded));
         _collapsedRanges.Clear();
-        foreach (var folding in _collapsed)
+        foreach (var folding in _foldings.Where(static item => item.IsFolded))
         {
             if (_collapsedRanges.Count > 0 && folding.StartOffset <= _collapsedRanges[^1].End)
             {
@@ -166,7 +190,12 @@ public sealed class FoldingManager
         }
     }
 
-    private bool IsLineCollapsed(LogicalTextLine line)
+    /// <summary>
+    /// Whether the fold element on an earlier line already covers this one. The element reaches to
+    /// the end of the logical line the fold ends on, so that line is swallowed too even when the
+    /// fold stops in the middle of it.
+    /// </summary>
+    internal bool IsLineCollapsed(LogicalTextLine line)
     {
         int low = 0;
         int high = _collapsedRanges.Count;
@@ -178,120 +207,6 @@ public sealed class FoldingManager
         }
         if (low == 0) return false;
         var range = _collapsedRanges[low - 1];
-        return line.Offset > range.Start && line.Offset + line.Length <= range.End;
-    }
-
-    /// <summary>
-    /// Outlines the placeholder a collapsed section leaves behind. The projection turns the folded
-    /// range into placeholder text, so the box is found by mapping the section's source range
-    /// through the line's offset map rather than by measuring the text again.
-    /// </summary>
-    private sealed class FoldedSectionRenderer(FoldingManager manager) : Rendering.IBackgroundRenderer
-    {
-        private const double CORNER_RADIUS = 2;
-
-        // Under the glyphs, so the placeholder text stays readable on top of the box.
-        public Rendering.KnownLayer Layer => Rendering.KnownLayer.Text;
-
-        public void Draw(Rendering.TextView textView, IGraphicsContext context)
-        {
-            var folds = manager.Collapsed;
-            if (folds.Count == 0)
-            {
-                return;
-            }
-
-            var host = textView.Host;
-            var viewport = host.TextViewportBounds;
-            var scroll = host.ScrollOffset;
-            double scale = textView.DpiScale;
-            var pen = new Rendering.ColorPen(manager._editor.FoldingMarkerColor).SnapThickness(scale);
-            var bounds = new List<Rect>();
-            foreach (var line in host.VisibleTextLines)
-            {
-                var logical = line.LogicalLine;
-                foreach (var folding in folds)
-                {
-                    if (folding.StartOffset < logical.Offset ||
-                        folding.StartOffset >= logical.Offset + logical.Length + 1)
-                    {
-                        continue;
-                    }
-
-                    int start = line.MapSourceOffsetToProjected(
-                        Math.Clamp(folding.StartOffset - logical.Offset, 0, logical.Length));
-                    int end = line.MapSourceOffsetToProjected(
-                        Math.Clamp(folding.EndOffset - logical.Offset, 0, logical.Length));
-                    if (end <= start)
-                    {
-                        continue;
-                    }
-
-                    bounds.Clear();
-                    line.GetRangeBounds(new TextRange(start, end - start), bounds);
-                    foreach (var rect in bounds)
-                    {
-                        // The stroke sits on the edge it is given, so the box is inset by half of
-                        // it; a fixed half-DIP inset left it straddling a pixel at other scales.
-                        var box = LayoutRounding.SnapBoundsRectToPixels(
-                            new Rect(
-                                viewport.X + line.DocumentX + rect.X - scroll.X,
-                                viewport.Y + line.DocumentY + rect.Y - scroll.Y,
-                                rect.Width,
-                                rect.Height),
-                            scale);
-                        context.DrawRoundedRectangle(
-                            box.Deflate(new Thickness(pen.Thickness / 2)),
-                            CORNER_RADIUS, CORNER_RADIUS, pen.Color, pen.Thickness);
-                    }
-                }
-            }
-        }
-    }
-
-    private sealed class FoldingProjection(FoldingManager manager) : ITextProjection, ITextLineCollapser
-    {
-        public bool IsCollapsed(LogicalTextLine line)
-            => manager.IsLineCollapsed(line);
-
-        public ProjectedText Project(in TextProjectionContext context)
-        {
-            var folds = manager.Collapsed;
-            if (folds.Count == 0)
-            {
-                return new ProjectedText(context.SourceText, IdentityTextOffsetMap.Instance);
-            }
-
-            int lineStart = context.LogicalLine.Offset;
-            int lineLength = context.SourceText.Length;
-            int lineEnd = lineStart + lineLength;
-            var overlapping = folds
-                .Where(item => item.StartOffset < lineEnd && item.EndOffset > lineStart)
-                .OrderBy(static item => item.StartOffset)
-                .ToArray();
-            if (overlapping.Length == 0)
-            {
-                return new ProjectedText(context.SourceText, IdentityTextOffsetMap.Instance);
-            }
-
-            var replacements = new List<ReplacementProjection.Replacement>(overlapping.Length);
-            int cursor = 0;
-            foreach (var folding in overlapping)
-            {
-                int foldStart = Math.Clamp(folding.StartOffset - lineStart, 0, lineLength);
-                int foldEnd = Math.Clamp(folding.EndOffset - lineStart, 0, lineLength);
-                if (foldEnd <= cursor) continue;
-                foldStart = Math.Max(cursor, foldStart);
-                // A fold opened on an earlier line has its placeholder there, so the part reaching
-                // into this one is hidden outright.
-                string placeholder = folding.StartOffset >= lineStart && folding.StartOffset < lineEnd
-                    ? (string.IsNullOrEmpty(folding.Title) ? "…" : folding.Title!)
-                    : string.Empty;
-                replacements.Add(new ReplacementProjection.Replacement(
-                    foldStart, foldEnd - foldStart, placeholder));
-                cursor = foldEnd;
-            }
-            return ReplacementProjection.Build(context.SourceText, replacements);
-        }
+        return line.Offset > range.Start && line.Offset <= range.End;
     }
 }

@@ -269,6 +269,44 @@ public sealed class EditorExtensionTests
         Assert.IsLessThan(foldings[1].StartOffset, foldings[0].StartOffset);
     }
 
+    /// <summary>
+    /// A folded section stands in one line: the element covers the whole range, so the lines it
+    /// swallows are gone from the surface and the caret still resolves inside them.
+    /// </summary>
+    [TestMethod]
+    public void AFoldedSectionCollapsesIntoOneLine()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        var editor = new TextEditor { Text = "class A\n{\n    int x;\n}\nafter\n", SkipViewportCull = true };
+        var manager = FoldingManager.Install(editor);
+        editor.Measure(new Size(360, 200));
+        editor.Arrange(new Rect(0, 0, 360, 200));
+        int before = editor.TextArea.TextView.Host.VisibleTextLines.Count;
+
+        manager.UpdateFoldings([new NewFolding(8, 22) { DefaultClosed = true }], -1);
+        editor.Measure(new Size(360, 200));
+        editor.Arrange(new Rect(0, 0, 360, 200));
+
+        var lines = editor.TextArea.TextView.Host.VisibleTextLines;
+        Assert.IsLessThan(before, lines.Count, "Folding hid no line.");
+        var covering = lines.Single(line => line.LogicalLine.LineNumber == 1);
+        Assert.IsGreaterThanOrEqualTo(22, covering.LogicalLine.Offset + covering.LogicalLine.Length,
+            "The fold element did not make its line reach the end of the folded range.");
+
+        manager.AllFoldings.Single().IsFolded = false;
+        editor.Measure(new Size(360, 200));
+        editor.Arrange(new Rect(0, 0, 360, 200));
+
+        Assert.AreEqual(before, editor.TextArea.TextView.Host.VisibleTextLines.Count,
+            "Unfolding did not bring the hidden lines back.");
+        FoldingManager.Uninstall(manager);
+    }
+
     [TestMethod]
     [Timeout(30_000, CooperativeCancellation = true)]
     public void FoldingRefreshReusesLargeExistingSetWithoutQuadraticLookup()
