@@ -311,6 +311,45 @@ public sealed class TextViewLayoutTests
             "The line's source reaches the end of the line the element lands in.");
     }
 
+    /// <summary>
+    /// A caret offset inside the range a spanning element swallowed resolves against the line that
+    /// covers it, which needs the swallowed line collapsed so it is not laid out a second time.
+    /// </summary>
+    [TestMethod]
+    public void ASwallowedLineResolvesAgainstTheLineCoveringIt()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument("first\nsecond");
+        var extensions = new TextViewExtensionPipeline { Revision = 1 };
+        extensions.ElementGenerators.Add(new SpanningElementGenerator(startOffset: 2, documentLength: 7));
+        extensions.LineCollapsers.Add(new CollapseLine(1));
+
+        using var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            document,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.NoWrap },
+            extensions,
+            dpi: 96);
+        view.SetViewport(new TextViewport(300, 100));
+
+        Assert.HasCount(1, view.MaterializedLines);
+        var bounds = view.GetCaretBounds(document.TextLength);
+        Assert.IsGreaterThan(0, bounds.Width + bounds.Height,
+            "An offset on the swallowed line still resolves to a caret rectangle.");
+    }
+
+    private sealed class CollapseLine(int lineNumber) : ITextLineCollapser
+    {
+        public bool IsCollapsed(LogicalTextLine line) => line.LineNumber == lineNumber;
+    }
+
     /// <summary>Stands in for one fixed document range, wherever it falls.</summary>
     private sealed class SpanningElementGenerator(int startOffset, int documentLength) : ITextElementGenerator
     {

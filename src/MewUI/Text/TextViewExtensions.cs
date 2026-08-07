@@ -50,7 +50,8 @@ public interface ITextElementGenerator
     /// <summary>
     /// The element at <paramref name="offset"/>, or null to decline. A
     /// <see cref="GeneratedTextElement.DocumentLength"/> reaching past the line's end makes the
-    /// line cover the logical lines up to it.
+    /// line cover the logical lines up to it; the lines it swallows must then be collapsed through
+    /// an <see cref="ITextLineCollapser"/>, or they are laid out a second time on their own.
     /// </summary>
     GeneratedTextElement? ConstructElement(in TextElementScanContext context, int offset);
 }
