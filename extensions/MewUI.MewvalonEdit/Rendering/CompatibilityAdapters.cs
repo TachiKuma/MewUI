@@ -129,6 +129,7 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
 {
     private readonly RunConstructionContext _context = new(editor);
     private readonly Dictionary<int, CachedScan> _scans = [];
+    private readonly Dictionary<VisualLineElementGenerator, int> _interests = [];
     private long _scanVersion = -1;
     private int _scanGeneration;
     private int _cachedGeneration;
@@ -182,28 +183,103 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
         return ReplacementProjection.Build(context.SourceText, replacements);
     }
 
-    public void Generate(in TextElementContext context, IList<InlineRun> output)
+    /// <inheritdoc/>
+    public int GetFirstInterestedOffset(in TextElementScanContext context, int startOffset)
     {
         if (Generators.Count == 0)
         {
-            return;
+            return -1;
+        }
+        // The walk restarts at the line start, and the elements it produces replace whatever the
+        // previous walk of this line recorded.
+        if (startOffset == context.LineStartOffset)
+        {
+            BeginLine(context.LineStartOffset);
         }
 
-        var scan = EnsureScanned(context.LogicalLine);
-        foreach (var element in scan.Elements)
+        int best = -1;
+        _interests.Clear();
+        WithGenerators(context.LineStartOffset, generator =>
         {
-            if (!element.ReplacesText)
+            int interested = generator.GetFirstInterestedOffset(startOffset);
+            _interests[generator] = interested;
+            if (interested >= startOffset && (best < 0 || interested < best))
             {
-                continue;
+                best = interested;
             }
-            int start = context.OffsetMap.MapFromSource(element.RelativeTextOffset);
-            int end = context.OffsetMap.MapFromSource(element.RelativeTextOffset + element.DocumentLength);
-            // Only the columns the element paints become the object; the rest of its visual text is
-            // laid out normally. The original reaches the same split by handing out one run per column.
-            int length = Math.Min(end - start, element.PaintedVisualLength);
-            if (length > 0)
+        });
+        return best;
+    }
+
+    /// <inheritdoc/>
+    public GeneratedTextElement? ConstructElement(in TextElementScanContext context, int offset)
+    {
+        if (Generators.Count == 0)
+        {
+            return null;
+        }
+
+        VisualLineElement? built = null;
+        WithGenerators(context.LineStartOffset, generator =>
+        {
+            // The interest from the preceding query, as the original caches it. Asking again would
+            // let a generator that counts the calls see the same offset twice.
+            if (built is not null || !_interests.TryGetValue(generator, out int interested) || interested != offset)
             {
-                output.Add(new InlineRun(start, length, new ElementInline(editor, element)));
+                return;
+            }
+            built = generator.ConstructElement(offset);
+        });
+        if (built is null)
+        {
+            return null;
+        }
+
+        built.RelativeTextOffset = offset - context.LineStartOffset;
+        CurrentLine(context.LineStartOffset).Add(built);
+        // Only the columns the element paints become the object; the rest of its visual text is laid
+        // out normally, which is how a tab marker paints a glyph and still reaches its tab stop.
+        return new GeneratedTextElement(
+            built.DocumentLength,
+            built.ReplacesText ? built.PaintedVisualLength : 0,
+            built.ReplacesText ? new ElementInline(editor, built) : null);
+    }
+
+    private void BeginLine(int lineStart)
+    {
+        ResetScansIfStale();
+        _scans[lineStart] = new CachedScan(0, []);
+    }
+
+    private List<VisualLineElement> CurrentLine(int lineStart)
+    {
+        if (!_scans.TryGetValue(lineStart, out var scan))
+        {
+            scan = new CachedScan(0, []);
+            _scans[lineStart] = scan;
+        }
+        return scan.Elements;
+    }
+
+    private void WithGenerators(int lineStart, Action<VisualLineElementGenerator> action)
+    {
+        _context.CurrentDocumentLine = editor.Document.GetLineByOffset(lineStart);
+        foreach (var generator in Generators)
+        {
+            generator.StartGeneration(_context);
+        }
+        try
+        {
+            foreach (var generator in Generators)
+            {
+                action(generator);
+            }
+        }
+        finally
+        {
+            foreach (var generator in Generators)
+            {
+                generator.FinishGeneration();
             }
         }
     }
@@ -275,7 +351,40 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
         return null;
     }
 
+    /// <summary>
+    /// Elements the core walk recorded for this line. The walk runs before the text is read, so the
+    /// list is already there by the time the projection and classification stages ask for it.
+    /// </summary>
     private CachedScan EnsureScanned(in LogicalTextLine logical)
+    {
+        ResetScansIfStale();
+        if (_scans.TryGetValue(logical.Offset, out var cached))
+        {
+            return cached;
+        }
+
+        // The core walk normally fills this before the projection and classification stages run.
+        // A caller that reaches these stages on its own still gets the elements.
+        var context = new TextElementScanContext(editor.Document.CoreDocument, logical.Offset);
+        int end = logical.Offset + logical.Length;
+        for (int offset = logical.Offset; offset < end;)
+        {
+            int interested = GetFirstInterestedOffset(in context, offset);
+            if (interested < offset || interested >= end)
+            {
+                break;
+            }
+            if (ConstructElement(in context, interested) is not { } element)
+            {
+                offset = interested + 1;
+                continue;
+            }
+            offset = interested + Math.Max(1, element.DocumentLength);
+        }
+        return _scans.TryGetValue(logical.Offset, out var filled) ? filled : new CachedScan(0, []);
+    }
+
+    private void ResetScansIfStale()
     {
         long version = editor.Document.CoreDocument.Version;
         if (version != _scanVersion || _scanGeneration != _cachedGeneration)
@@ -284,67 +393,6 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
             _scanVersion = version;
             _cachedGeneration = _scanGeneration;
         }
-        if (_scans.TryGetValue(logical.Offset, out var cached) && cached.Length == logical.Length)
-        {
-            return cached;
-        }
-
-        var scan = new CachedScan(logical.Length, RunScan(logical));
-        _scans[logical.Offset] = scan;
-        return scan;
-    }
-
-    private List<VisualLineElement> RunScan(in LogicalTextLine logical)
-    {
-        var elements = new List<VisualLineElement>();
-        int lineStart = logical.Offset;
-        int lineEnd = lineStart + logical.Length;
-        _context.CurrentDocumentLine = editor.Document.GetLineByOffset(lineStart);
-        foreach (var generator in Generators)
-        {
-            generator.StartGeneration(_context);
-        }
-        try
-        {
-            int offset = lineStart;
-            while (offset < lineEnd)
-            {
-                int bestOffset = int.MaxValue;
-                VisualLineElementGenerator? winner = null;
-                foreach (var generator in Generators)
-                {
-                    int interested = generator.GetFirstInterestedOffset(offset);
-                    if (interested >= offset && interested < bestOffset && interested < lineEnd)
-                    {
-                        bestOffset = interested;
-                        winner = generator;
-                    }
-                }
-                if (winner is null)
-                {
-                    break;
-                }
-
-                var element = winner.ConstructElement(bestOffset);
-                if (element is null)
-                {
-                    // Declining the offset must still advance, or the scan would not terminate.
-                    offset = bestOffset + 1;
-                    continue;
-                }
-                element.RelativeTextOffset = bestOffset - lineStart;
-                elements.Add(element);
-                offset = bestOffset + Math.Max(1, element.DocumentLength);
-            }
-        }
-        finally
-        {
-            foreach (var generator in Generators)
-            {
-                generator.FinishGeneration();
-            }
-        }
-        return elements;
     }
 
     private readonly record struct CachedScan(int Length, List<VisualLineElement> Elements);

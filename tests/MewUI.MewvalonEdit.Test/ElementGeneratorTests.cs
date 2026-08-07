@@ -29,13 +29,24 @@ public sealed class ElementGeneratorTests
     private static List<InlineRun> Generate(TextEditor editor)
     {
         var runs = new List<InlineRun>();
-        var context = new TextElementContext(
-            new LogicalTextLine(0, 0, editor.Text.Length, editor.Text.Length),
-            editor.Text.AsMemory(),
-            IdentityTextOffsetMap.Instance);
+        var context = new TextElementScanContext(editor.Document.CoreDocument, 0);
         foreach (var generator in editor.TextArea.TextView.Extensions.ElementGenerators)
         {
-            generator.Generate(in context, runs);
+            for (int offset = 0; offset < editor.Text.Length;)
+            {
+                int interested = generator.GetFirstInterestedOffset(in context, offset);
+                if (interested < offset) break;
+                var element = generator.ConstructElement(in context, interested);
+                if (element is not { } value) { offset = interested + 1; continue; }
+                // No projection here, so the element occupies its document range; the object covers
+                // only the columns it paints, as the layout clamps it.
+                int length = Math.Min(value.DocumentLength, value.VisualLength);
+                if (value.Object is not null && length > 0)
+                {
+                    runs.Add(new InlineRun(interested, length, value.Object));
+                }
+                offset = interested + Math.Max(1, value.DocumentLength);
+            }
         }
         return runs;
     }

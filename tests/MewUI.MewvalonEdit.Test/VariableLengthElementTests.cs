@@ -38,10 +38,30 @@ public sealed class VariableLengthElementTests
         }
 
         var runs = new List<InlineRun>();
-        var context = new TextElementContext(logical, projected.Text, projected.OffsetMap);
+        var context = new TextElementScanContext(editor.Document.CoreDocument, logical.Offset);
         foreach (var generator in pipeline.ElementGenerators)
         {
-            generator.Generate(in context, runs);
+            for (int offset = logical.Offset; offset < logical.Offset + logical.Length;)
+            {
+                int interested = generator.GetFirstInterestedOffset(in context, offset);
+                if (interested < offset)
+                {
+                    break;
+                }
+                if (generator.ConstructElement(in context, interested) is not { } element)
+                {
+                    offset = interested + 1;
+                    continue;
+                }
+                if (element.Object is not null && element.VisualLength > 0)
+                {
+                    runs.Add(new InlineRun(
+                        projected.OffsetMap.MapFromSource(interested - logical.Offset),
+                        element.VisualLength,
+                        element.Object));
+                }
+                offset = interested + Math.Max(1, element.DocumentLength);
+            }
         }
         return (projected, runs);
     }
