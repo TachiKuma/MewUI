@@ -21,8 +21,9 @@ public class TextSegment : ISegment
 }
 
 /// <summary>
-/// Segments kept up to date across document edits. AvalonEdit backs this with an interval tree;
-/// this port keeps a flat list, which is enough for the marker counts editors hold in practice.
+/// Segments kept up to date across document edits, enumerated by start offset. AvalonEdit backs
+/// this with an interval tree; this port keeps a sorted list, which is enough for the marker counts
+/// editors hold in practice and still answers a start-offset lookup by bisection.
 /// </summary>
 public sealed class TextSegmentCollection<T> : ICollection<T> where T : TextSegment
 {
@@ -45,7 +46,7 @@ public sealed class TextSegmentCollection<T> : ICollection<T> where T : TextSegm
     public void Add(T item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        _segments.Add(item);
+        _segments.Insert(FindFirstIndexWithStartAfter(item.StartOffset), item);
     }
 
     public bool Remove(T item) => _segments.Remove(item);
@@ -55,13 +56,19 @@ public sealed class TextSegmentCollection<T> : ICollection<T> where T : TextSegm
     public IEnumerator<T> GetEnumerator() => _segments.GetEnumerator();
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    /// <summary>Segments overlapping the given range, ordered by start offset.</summary>
+    /// <summary>Segment at <paramref name="index"/> in start-offset order.</summary>
+    public T this[int index] => _segments[index];
+
+    /// <summary>
+    /// Segments overlapping the given range, touching ones included, ordered by start offset. A
+    /// segment an edit emptied still touches the edit, which is how the caller gets to drop it.
+    /// </summary>
     public ReadOnlyCollection<T> FindOverlappingSegments(int offset, int length)
     {
+        ArgumentOutOfRangeException.ThrowIfNegative(length);
         int end = offset + length;
         return new ReadOnlyCollection<T>(_segments
-            .Where(segment => segment.StartOffset < end && segment.EndOffset > offset)
-            .OrderBy(static segment => segment.StartOffset)
+            .Where(segment => segment.StartOffset <= end && segment.EndOffset >= offset)
             .ToList());
     }
 
@@ -73,15 +80,30 @@ public sealed class TextSegmentCollection<T> : ICollection<T> where T : TextSegm
 
     /// <summary>Segments covering the given offset.</summary>
     public ReadOnlyCollection<T> FindSegmentsContaining(int offset)
-        => new(_segments
-            .Where(segment => segment.StartOffset <= offset && segment.EndOffset >= offset)
-            .OrderBy(static segment => segment.StartOffset)
-            .ToList());
+        => FindOverlappingSegments(offset, 0);
 
     public T? FindFirstSegmentWithStartAfter(int offset)
-        => _segments.Where(segment => segment.StartOffset >= offset)
-            .OrderBy(static segment => segment.StartOffset)
-            .FirstOrDefault();
+    {
+        int index = FindFirstIndexWithStartAfter(offset);
+        return index < _segments.Count ? _segments[index] : null;
+    }
+
+    /// <summary>
+    /// Index of the first segment starting at or after <paramref name="offset"/>, or
+    /// <see cref="Count"/> when none does.
+    /// </summary>
+    public int FindFirstIndexWithStartAfter(int offset)
+    {
+        int low = 0;
+        int high = _segments.Count;
+        while (low < high)
+        {
+            int middle = low + ((high - low) / 2);
+            if (_segments[middle].StartOffset < offset) low = middle + 1;
+            else high = middle;
+        }
+        return low;
+    }
 
     /// <summary>Shifts the stored offsets for an edit. Called automatically when built with a document.</summary>
     public void UpdateOffsets(DocumentChangeEventArgs e)
@@ -90,6 +112,10 @@ public sealed class TextSegmentCollection<T> : ICollection<T> where T : TextSegm
         UpdateOffsets(e.Offset, e.RemovalLength, e.InsertionLength);
     }
 
+    /// <remarks>
+    /// The shift is monotonic, so segments that were in start order stay in it and the list needs
+    /// no resorting.
+    /// </remarks>
     private void UpdateOffsets(int offset, int removalLength, int insertionLength)
     {
         int delta = insertionLength - removalLength;

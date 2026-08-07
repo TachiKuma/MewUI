@@ -307,6 +307,93 @@ public sealed class EditorExtensionTests
         FoldingManager.Uninstall(manager);
     }
 
+    /// <summary>
+    /// A folding is a segment of the document, so text inserted before it carries it along instead
+    /// of leaving it pointing at whatever moved into its old offsets.
+    /// </summary>
+    [TestMethod]
+    public void FoldingOffsetsFollowTheDocument()
+    {
+        var editor = new TextEditor { Text = "class A\n{\n    int x;\n}\n" };
+        var manager = FoldingManager.Install(editor);
+        manager.UpdateFoldings([new NewFolding(8, 22)], -1);
+
+        editor.Document.Insert(0, "// header\n");
+
+        var section = manager.AllFoldings.Single();
+        Assert.AreEqual(18, section.StartOffset);
+        Assert.AreEqual(32, section.EndOffset);
+        FoldingManager.Uninstall(manager);
+    }
+
+    /// <summary>
+    /// Re-parsing matches sections by start offset alone: a block that gained a line is the same
+    /// block, and refolding it would undo what the reader opened.
+    /// </summary>
+    [TestMethod]
+    public void RefreshingAFoldingWhoseEndMovedKeepsItFolded()
+    {
+        var editor = new TextEditor { Text = "class A\n{\n    int x;\n    int y;\n}\n" };
+        var manager = FoldingManager.Install(editor);
+        manager.UpdateFoldings([new NewFolding(8, 22)], -1);
+        manager.AllFoldings.Single().IsFolded = true;
+
+        manager.UpdateFoldings([new NewFolding(8, 33)], -1);
+
+        var section = manager.AllFoldings.Single();
+        Assert.AreEqual(33, section.EndOffset);
+        Assert.IsTrue(section.IsFolded, "A section that only grew was replaced instead of reused.");
+        FoldingManager.Uninstall(manager);
+    }
+
+    /// <summary>
+    /// A strategy's DefaultClosed applies while the document opens. A region that appears later must
+    /// not close under the reader.
+    /// </summary>
+    [TestMethod]
+    public void DefaultClosedAppliesOnlyToTheFirstUpdate()
+    {
+        var editor = new TextEditor { Text = "class A\n{\n    int x;\n}\nclass B\n{\n    int y;\n}\n" };
+        var manager = FoldingManager.Install(editor);
+        manager.UpdateFoldings([new NewFolding(8, 22) { DefaultClosed = true }], -1);
+        Assert.IsTrue(manager.AllFoldings.Single().IsFolded);
+
+        manager.UpdateFoldings(
+            [new NewFolding(8, 22) { DefaultClosed = true }, new NewFolding(31, 45) { DefaultClosed = true }], -1);
+
+        Assert.IsFalse(manager.AllFoldings.Last().IsFolded, "A region found later closed on its own.");
+        FoldingManager.Uninstall(manager);
+    }
+
+    /// <summary>An edit that leaves a section with no text removes it, so nothing unfoldable stays.</summary>
+    [TestMethod]
+    public void AnEditThatEmptiesASectionRemovesIt()
+    {
+        var editor = new TextEditor { Text = "class A\n{\n    int x;\n}\n" };
+        var manager = FoldingManager.Install(editor);
+        manager.UpdateFoldings([new NewFolding(8, 22)], -1);
+
+        editor.Document.Remove(8, 14);
+
+        Assert.IsEmpty(manager.AllFoldings);
+        FoldingManager.Uninstall(manager);
+    }
+
+    /// <summary>Moving the caret inside a folded section opens it, or the caret would be invisible.</summary>
+    [TestMethod]
+    public void MovingTheCaretIntoAFoldedSectionUnfoldsIt()
+    {
+        var editor = new TextEditor { Text = "class A\n{\n    int x;\n}\n" };
+        var manager = FoldingManager.Install(editor);
+        manager.UpdateFoldings([new NewFolding(8, 22) { DefaultClosed = true }], -1);
+        Assert.IsTrue(manager.AllFoldings.Single().IsFolded);
+
+        editor.CaretOffset = 15;
+
+        Assert.IsFalse(manager.AllFoldings.Single().IsFolded);
+        FoldingManager.Uninstall(manager);
+    }
+
     [TestMethod]
     [Timeout(30_000, CooperativeCancellation = true)]
     public void FoldingRefreshReusesLargeExistingSetWithoutQuadraticLookup()

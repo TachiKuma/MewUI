@@ -1,4 +1,6 @@
-﻿using Aprillz.MewUI.Text;
+using Aprillz.MewUI.MewvalonEdit.Document;
+using Aprillz.MewUI.Text;
+using System.Collections.ObjectModel;
 
 namespace Aprillz.MewUI.MewvalonEdit.Folding;
 
@@ -11,19 +13,27 @@ internal sealed class FoldedLineCollapser(FoldingManager manager) : ITextLineCol
     public bool IsCollapsed(LogicalTextLine line) => manager.IsLineCollapsed(line);
 }
 
+/// <summary>Holds the foldings of one editor. Install it with <see cref="Install(TextEditor)"/>.</summary>
 public sealed class FoldingManager
 {
     private readonly TextEditor _editor;
     private readonly FoldingElementGenerator _generator;
     private readonly FoldedLineCollapser _collapser;
     private readonly FoldingMargin _margin;
-    private readonly List<FoldingSection> _foldings = [];
+    private readonly TextSegmentCollection<FoldingSection> _foldings;
     private readonly List<(int Start, int End)> _collapsedRanges = [];
+    private bool _isFirstUpdate = true;
     private bool _uninstalled;
+    // The original's Redraw only marks a view dirty; ours rebuilds it, so a batch that touches every
+    // section has to announce itself once rather than per section.
+    private int _batchDepth;
+    private bool _batchChanged;
 
     private FoldingManager(TextEditor editor)
     {
         _editor = editor;
+        _foldings = new TextSegmentCollection<FoldingSection>(editor.Document);
+        editor.Document.Changed += OnDocumentChanged;
         _generator = new FoldingElementGenerator(editor) { FoldingManager = this };
         _collapser = new FoldedLineCollapser(this);
         _editor.TextArea.TextView.ElementGenerators.Add(_generator);
@@ -31,9 +41,14 @@ public sealed class FoldingManager
         _margin = new FoldingMargin { FoldingManager = this };
         _editor.TextArea.LeftMargins.Add(_margin);
         _editor.TextArea.TextView.Services.AddService(this);
+        _editor.TextArea.Caret.PositionChanged += OnCaretPositionChanged;
     }
 
+    internal TextDocument Document => _editor.Document;
+
+    /// <summary>All foldings, ordered by start offset.</summary>
     public IEnumerable<FoldingSection> AllFoldings => _foldings;
+
     public event EventHandler? FoldingsChanged;
 
     public static FoldingManager Install(TextEditor editor)
@@ -42,7 +57,7 @@ public sealed class FoldingManager
         return new FoldingManager(editor);
     }
 
-    public static FoldingManager Install(Aprillz.MewUI.MewvalonEdit.Editing.TextArea textArea)
+    public static FoldingManager Install(Editing.TextArea textArea)
     {
         ArgumentNullException.ThrowIfNull(textArea);
         return Install(textArea.Editor);
@@ -53,6 +68,9 @@ public sealed class FoldingManager
         ArgumentNullException.ThrowIfNull(manager);
         if (manager._uninstalled) return;
         manager._uninstalled = true;
+        manager.Clear();
+        manager._editor.Document.Changed -= manager.OnDocumentChanged;
+        manager._editor.TextArea.Caret.PositionChanged -= manager.OnCaretPositionChanged;
         manager._editor.TextArea.TextView.ElementGenerators.Remove(manager._generator);
         manager._editor.Surface.Extensions.LineCollapsers.Remove(manager._collapser);
         manager._editor.TextArea.LeftMargins.Remove(manager._margin);
@@ -61,80 +79,161 @@ public sealed class FoldingManager
         manager._editor.InvalidateTextView();
     }
 
-    /// <summary>Replaces the current foldings, keeping the folded state of sections that survive.</summary>
+    /// <summary>Creates a folding over the given range.</summary>
+    public FoldingSection CreateFolding(int startOffset, int endOffset)
+    {
+        if (startOffset >= endOffset)
+        {
+            throw new ArgumentException("startOffset must be less than endOffset", nameof(startOffset));
+        }
+        if (startOffset < 0 || endOffset > _editor.Document.TextLength)
+        {
+            throw new ArgumentException("Folding must be within document boundary", nameof(startOffset));
+        }
+        var section = new FoldingSection(this, startOffset, endOffset);
+        _foldings.Add(section);
+        Redraw();
+        return section;
+    }
+
+    public void RemoveFolding(FoldingSection folding)
+    {
+        ArgumentNullException.ThrowIfNull(folding);
+        folding.IsFolded = false;
+        _foldings.Remove(folding);
+        Redraw();
+    }
+
+    public void Clear()
+    {
+        _batchDepth++;
+        try
+        {
+            foreach (var section in _foldings)
+            {
+                section.IsFolded = false;
+            }
+            _foldings.Clear();
+            _batchChanged = true;
+        }
+        finally
+        {
+            EndBatch();
+        }
+    }
+
+    /// <summary>
+    /// Replaces the current foldings with <paramref name="newFoldings"/>, keeping the folded state
+    /// of the sections that survive.
+    /// </summary>
     /// <param name="newFoldings">Sections the strategy found, sorted by start offset.</param>
     /// <param name="firstErrorOffset">
     /// Offset the parser stopped understanding the document at, or a negative value when it parsed
-    /// the whole document. Foldings at or after it are carried over from the current set.
+    /// the whole document. Existing foldings starting at or after it are kept even when they are
+    /// absent from <paramref name="newFoldings"/>.
     /// </param>
     public void UpdateFoldings(IEnumerable<NewFolding> newFoldings, int firstErrorOffset)
     {
         ObjectDisposedException.ThrowIf(_uninstalled, this);
         ArgumentNullException.ThrowIfNull(newFoldings);
-        // Past the error the new list carries no information, so dropping those foldings would
-        // collapse regions the parser simply could not reach.
-        int keepFrom = firstErrorOffset < 0 ? int.MaxValue : firstErrorOffset;
-        var ordered = newFoldings.OrderBy(static item => item.StartOffset).ThenBy(static item => item.EndOffset).ToArray();
-        var existingByRange = new Dictionary<(int Start, int End), FoldingSection>(_foldings.Count);
-        foreach (var existing in _foldings)
+        if (firstErrorOffset < 0)
         {
-            existingByRange.TryAdd((existing.StartOffset, existing.EndOffset), existing);
+            firstErrorOffset = int.MaxValue;
         }
-        int previousStart = -1;
-        var replacement = new List<FoldingSection>(ordered.Length);
-        foreach (var folding in ordered)
+
+        _batchDepth++;
+        try
         {
-            if (folding.StartOffset < 0 || folding.EndOffset < folding.StartOffset ||
-                folding.EndOffset > _editor.Document.TextLength)
+            MergeFoldings(newFoldings, firstErrorOffset);
+        }
+        finally
+        {
+            EndBatch();
+        }
+    }
+
+    private void MergeFoldings(IEnumerable<NewFolding> newFoldings, int firstErrorOffset)
+    {
+        var oldFoldings = _foldings.ToArray();
+        int oldFoldingIndex = 0;
+        int previousStartOffset = 0;
+        // Both lists run in start-offset order, so one walk over the two keeps the sections that
+        // still exist, and with them whatever the reader folded.
+        foreach (var newFolding in newFoldings)
+        {
+            if (newFolding.StartOffset < previousStartOffset)
             {
-                throw new ArgumentOutOfRangeException(nameof(newFoldings), "Folding offsets must be inside the document.");
+                throw new ArgumentException("newFoldings must be sorted by start offset", nameof(newFoldings));
             }
-            if (folding.StartOffset < previousStart)
+            previousStartOffset = newFolding.StartOffset;
+            if (newFolding.StartOffset == newFolding.EndOffset)
             {
-                throw new ArgumentException("Foldings must be sorted by start offset.", nameof(newFoldings));
+                continue;
             }
-            previousStart = folding.StartOffset;
-            if (!existingByRange.TryGetValue((folding.StartOffset, folding.EndOffset), out var existing))
+
+            while (oldFoldingIndex < oldFoldings.Length &&
+                   newFolding.StartOffset > oldFoldings[oldFoldingIndex].StartOffset)
             {
-                existing = new FoldingSection(this, folding);
+                RemoveFolding(oldFoldings[oldFoldingIndex++]);
+            }
+
+            FoldingSection section;
+            if (oldFoldingIndex < oldFoldings.Length &&
+                newFolding.StartOffset == oldFoldings[oldFoldingIndex].StartOffset)
+            {
+                // Matched on the start alone: an end that moved is the same section grown or shrunk,
+                // and folding it again because the block gained a line would fight the reader.
+                section = oldFoldings[oldFoldingIndex++];
+                section.Length = newFolding.EndOffset - newFolding.StartOffset;
             }
             else
             {
-                existing.Title = folding.Name;
-                existing.IsDefinition = folding.IsDefinition;
-            }
-            replacement.Add(existing);
-        }
-        if (keepFrom != int.MaxValue)
-        {
-            var claimed = new HashSet<(int Start, int End)>(
-                replacement.Select(static item => (item.StartOffset, item.EndOffset)));
-            foreach (var existing in _foldings)
-            {
-                if (existing.StartOffset >= keepFrom && claimed.Add((existing.StartOffset, existing.EndOffset)))
+                section = CreateFolding(newFolding.StartOffset, newFolding.EndOffset);
+                // Only while opening the document: a region added later must not close under the
+                // reader because the strategy declared it closed by default.
+                if (_isFirstUpdate)
                 {
-                    replacement.Add(existing);
+                    section.IsFolded = newFolding.DefaultClosed;
                 }
+                section.Tag = newFolding;
             }
-            // GetNextFolding binary-searches this list, so the carried-over sections must land in order.
-            replacement.Sort(static (left, right) => left.StartOffset != right.StartOffset
-                ? left.StartOffset.CompareTo(right.StartOffset)
-                : left.EndOffset.CompareTo(right.EndOffset));
+            section.Title = newFolding.Name;
+            section.IsDefinition = newFolding.IsDefinition;
         }
-        _foldings.Clear();
-        _foldings.AddRange(replacement);
-        NotifyChanged();
+        _isFirstUpdate = false;
+
+        while (oldFoldingIndex < oldFoldings.Length)
+        {
+            var oldSection = oldFoldings[oldFoldingIndex++];
+            if (oldSection.StartOffset >= firstErrorOffset)
+            {
+                break;
+            }
+            RemoveFolding(oldSection);
+        }
+        _batchChanged = true;
     }
 
-    public System.Collections.ObjectModel.ReadOnlyCollection<FoldingSection> GetFoldingsContaining(int offset)
-        => _foldings.Where(item => item.StartOffset <= offset && offset <= item.EndOffset)
-            .ToList().AsReadOnly();
+    /// <summary>All foldings containing <paramref name="offset"/>.</summary>
+    public ReadOnlyCollection<FoldingSection> GetFoldingsContaining(int offset)
+        => _foldings.FindSegmentsContaining(offset);
 
-    public FoldingSection? GetNextFolding(int startOffset)
+    /// <summary>All foldings starting exactly at <paramref name="startOffset"/>.</summary>
+    public ReadOnlyCollection<FoldingSection> GetFoldingsAt(int startOffset)
     {
-        int index = FindFirstFoldingWithStartAfter(startOffset);
-        return index < _foldings.Count ? _foldings[index] : null;
+        var result = new List<FoldingSection>();
+        for (int index = _foldings.FindFirstIndexWithStartAfter(startOffset);
+             index < _foldings.Count && _foldings[index].StartOffset == startOffset;
+             index++)
+        {
+            result.Add(_foldings[index]);
+        }
+        return result.AsReadOnly();
     }
+
+    /// <summary>First folding starting at or after <paramref name="startOffset"/>, or null.</summary>
+    public FoldingSection? GetNextFolding(int startOffset)
+        => _foldings.FindFirstSegmentWithStartAfter(startOffset);
 
     /// <summary>
     /// First offset at or after <paramref name="startOffset"/> where a folded section starts, or -1
@@ -142,7 +241,7 @@ public sealed class FoldingManager
     /// </summary>
     public int GetNextFoldedFoldingStart(int startOffset)
     {
-        for (int index = FindFirstFoldingWithStartAfter(startOffset); index < _foldings.Count; index++)
+        for (int index = _foldings.FindFirstIndexWithStartAfter(startOffset); index < _foldings.Count; index++)
         {
             if (_foldings[index].IsFolded)
             {
@@ -152,25 +251,81 @@ public sealed class FoldingManager
         return -1;
     }
 
-    private int FindFirstFoldingWithStartAfter(int startOffset)
-    {
-        int low = 0;
-        int high = _foldings.Count;
-        while (low < high)
-        {
-            int middle = low + (high - low) / 2;
-            if (_foldings[middle].StartOffset < startOffset) low = middle + 1;
-            else high = middle;
-        }
-        return low;
-    }
-
-    internal void NotifyChanged()
+    internal void Redraw()
     {
         if (_uninstalled) return;
+        if (_batchDepth > 0)
+        {
+            _batchChanged = true;
+            return;
+        }
         RebuildCollapsedIndex();
         FoldingsChanged?.Invoke(this, EventArgs.Empty);
         _editor.InvalidateTextView();
+    }
+
+    private void EndBatch()
+    {
+        _batchDepth--;
+        if (_batchDepth > 0 || !_batchChanged) return;
+        _batchChanged = false;
+        Redraw();
+    }
+
+    private void OnDocumentChanged(object? sender, DocumentChangeEventArgs e)
+    {
+        // The collection has already shifted the offsets. What an edit can still leave behind is a
+        // section the text no longer has, which the reader would otherwise never be able to unfold.
+        int newEndOffset = e.Offset + e.InsertionLength;
+        var endLine = _editor.Document.GetLineByOffset(Math.Clamp(newEndOffset, 0, _editor.Document.TextLength));
+        newEndOffset = endLine.Offset + endLine.TotalLength;
+        _batchDepth++;
+        try
+        {
+            foreach (var affected in _foldings.FindOverlappingSegments(e.Offset, newEndOffset - e.Offset).ToArray())
+            {
+                if (affected.Length == 0)
+                {
+                    RemoveFolding(affected);
+                }
+            }
+        }
+        finally
+        {
+            EndBatch();
+        }
+    }
+
+    private void OnCaretPositionChanged(object? sender, EventArgs e)
+    {
+        int caretOffset = _editor.CaretOffset;
+        foreach (var section in GetFoldingsContaining(caretOffset))
+        {
+            if (section.IsFolded && section.StartOffset < caretOffset && caretOffset < section.EndOffset)
+            {
+                section.IsFolded = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Whether the fold element on an earlier line already covers this one. The element reaches to
+    /// the end of the logical line the fold ends on, so that line is swallowed too even when the
+    /// fold stops in the middle of it.
+    /// </summary>
+    internal bool IsLineCollapsed(LogicalTextLine line)
+    {
+        int low = 0;
+        int high = _collapsedRanges.Count;
+        while (low < high)
+        {
+            int middle = low + ((high - low) / 2);
+            if (_collapsedRanges[middle].Start < line.Offset) low = middle + 1;
+            else high = middle;
+        }
+        if (low == 0) return false;
+        var range = _collapsedRanges[low - 1];
+        return line.Offset > range.Start && line.Offset <= range.End;
     }
 
     private void RebuildCollapsedIndex()
@@ -188,25 +343,5 @@ public sealed class FoldingManager
                 _collapsedRanges.Add((folding.StartOffset, folding.EndOffset));
             }
         }
-    }
-
-    /// <summary>
-    /// Whether the fold element on an earlier line already covers this one. The element reaches to
-    /// the end of the logical line the fold ends on, so that line is swallowed too even when the
-    /// fold stops in the middle of it.
-    /// </summary>
-    internal bool IsLineCollapsed(LogicalTextLine line)
-    {
-        int low = 0;
-        int high = _collapsedRanges.Count;
-        while (low < high)
-        {
-            int middle = low + (high - low) / 2;
-            if (_collapsedRanges[middle].Start < line.Offset) low = middle + 1;
-            else high = middle;
-        }
-        if (low == 0) return false;
-        var range = _collapsedRanges[low - 1];
-        return line.Offset > range.Start && line.Offset <= range.End;
     }
 }
