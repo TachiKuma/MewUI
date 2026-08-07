@@ -19,6 +19,13 @@ public sealed class UndoStack
     private int _groupDepth;
     private bool _lastCanUndo;
     private bool _lastCanRedo;
+    // Undo steps between here and the state marked as original. Negative puts the marker in the
+    // redo direction; int.MinValue means it can no longer be reached, which is what a new edit made
+    // after undoing past it does, since that edit throws the redo branch away.
+    private int _stepsToOriginal;
+    private bool _isOriginalFile = true;
+    private bool _replaying;
+    private bool _countedThisGroup;
 
     internal UndoStack(TextDocument document) => _document = document.CoreDocument;
 
@@ -33,6 +40,74 @@ public sealed class UndoStack
 
     /// <summary>Raised after <see cref="CanRedo"/> changed.</summary>
     public event EventHandler? CanRedoChanged;
+
+    /// <summary>Raised after <see cref="SizeLimit"/> changed.</summary>
+    public event EventHandler? SizeLimitChanged;
+
+    /// <summary>
+    /// Whether the document is in the state last marked as original. A file view shows its dirty
+    /// marker off this, and undoing back to the marked state turns it on again.
+    /// </summary>
+    public bool IsOriginalFile => _isOriginalFile;
+
+    /// <summary>Raised after <see cref="IsOriginalFile"/> changed.</summary>
+    public event EventHandler? IsOriginalFileChanged;
+
+    /// <summary>Marks the current state as original, discarding any previous marker.</summary>
+    public void MarkAsOriginalFile()
+    {
+        _stepsToOriginal = 0;
+        RecalculateIsOriginalFile();
+    }
+
+    /// <summary>Drops the marker, so no state counts as original until one is marked again.</summary>
+    public void DiscardOriginalFileMarker()
+    {
+        _stepsToOriginal = int.MinValue;
+        RecalculateIsOriginalFile();
+    }
+
+    private void RecalculateIsOriginalFile()
+    {
+        bool isOriginal = _stepsToOriginal == 0;
+        if (isOriginal == _isOriginalFile)
+        {
+            return;
+        }
+        _isOriginalFile = isOriginal;
+        IsOriginalFileChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Counts an edit that reached the document. Called for every change, so it ignores the ones an
+    /// undo or a redo applied, and counts a group once however many edits it holds: a group is one
+    /// step, and undoing it once has to reach the state before it.
+    /// </summary>
+    internal void NotifyDocumentChanged()
+    {
+        if (_replaying)
+        {
+            return;
+        }
+        if (IsInUndoGroup)
+        {
+            if (_countedThisGroup)
+            {
+                return;
+            }
+            _countedThisGroup = true;
+        }
+        if (_stepsToOriginal < 0)
+        {
+            // The marker sat in the redo branch this edit just threw away.
+            _stepsToOriginal = int.MinValue;
+        }
+        else if (_stepsToOriginal != int.MinValue)
+        {
+            _stepsToOriginal++;
+        }
+        RecalculateIsOriginalFile();
+    }
 
     /// <summary>
     /// Raises the events whose value changed. Called once an edit, an undo or a redo has finished
@@ -61,7 +136,16 @@ public sealed class UndoStack
     public int SizeLimit
     {
         get => _document.UndoSizeLimit;
-        set => _document.UndoSizeLimit = value;
+        set
+        {
+            if (_document.UndoSizeLimit == value)
+            {
+                return;
+            }
+            _document.UndoSizeLimit = value;
+            SizeLimitChanged?.Invoke(this, EventArgs.Empty);
+            NotifyHistoryChanged();
+        }
     }
 
     /// <summary>Whether a group is open, which is when an edit joins the one before it.</summary>
@@ -91,6 +175,7 @@ public sealed class UndoStack
         {
             _group?.Dispose();
             _group = null;
+            _countedThisGroup = false;
         }
     }
 
@@ -105,25 +190,44 @@ public sealed class UndoStack
     }
 
     /// <summary>Undoes one step. False when there was nothing to undo.</summary>
-    public bool Undo()
-    {
-        bool undone = _document.Undo();
-        NotifyHistoryChanged();
-        return undone;
-    }
+    public bool Undo() => Replay(_document.Undo, -1);
 
     /// <summary>Redoes one step. False when there was nothing to redo.</summary>
-    public bool Redo()
+    public bool Redo() => Replay(_document.Redo, 1);
+
+    private bool Replay(Func<bool> replay, int steps)
     {
-        bool redone = _document.Redo();
+        _replaying = true;
+        bool moved;
+        try
+        {
+            moved = replay();
+        }
+        finally
+        {
+            _replaying = false;
+        }
+        if (moved && _stepsToOriginal != int.MinValue)
+        {
+            _stepsToOriginal += steps;
+            RecalculateIsOriginalFile();
+        }
         NotifyHistoryChanged();
-        return redone;
+        return moved;
     }
 
-    /// <summary>Drops both stacks, so what is in the document becomes the starting point.</summary>
+    /// <summary>
+    /// Drops both stacks, so what is in the document becomes the starting point. The original
+    /// marker goes with them: no step remains that could reach it.
+    /// </summary>
     public void ClearAll()
     {
         _document.ClearUndoHistory();
+        if (_stepsToOriginal != 0)
+        {
+            _stepsToOriginal = int.MinValue;
+            RecalculateIsOriginalFile();
+        }
         NotifyHistoryChanged();
     }
 

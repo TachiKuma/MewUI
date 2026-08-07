@@ -32,6 +32,15 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         editor.Surface.EditingStateChanged += OnEditingStateChanged;
         editor.Surface.TextInput += OnTextInput;
         DefaultInputHandler = new TextAreaInputHandler(this);
+        // Claimed here rather than left to the editing surface, which has the same shortcuts: the
+        // original-file marker counts undo steps, and a step taken behind the stack's back would
+        // leave the count pointing at a state the document is no longer in.
+        DefaultInputHandler.AddBinding(
+            new KeyGesture(Key.Z, ModifierKeys.Primary), () => Document.UndoStack.Undo());
+        DefaultInputHandler.AddBinding(
+            new KeyGesture(Key.Z, ModifierKeys.Primary | ModifierKeys.Shift), () => Document.UndoStack.Redo());
+        DefaultInputHandler.AddBinding(
+            new KeyGesture(Key.Y, ModifierKeys.Primary), () => Document.UndoStack.Redo());
         ActiveInputHandler = DefaultInputHandler;
     }
 

@@ -202,6 +202,12 @@ public sealed class TextDocument : ITextSource
     /// <see cref="Replace(int, int, string)"/>.
     /// </summary>
     internal void NotifyUndoHistoryChanged() => _undoStack?.NotifyHistoryChanged();
+
+    /// <summary>
+    /// Counts a change against the original-file marker. Every change reaches it, including the
+    /// ones an undo applied, which the stack tells apart itself.
+    /// </summary>
+    private void CountAgainstOriginalFile() => _undoStack?.NotifyDocumentChanged();
     public void Replace(ISegment segment, string? text)
     {
         ArgumentNullException.ThrowIfNull(segment);
@@ -287,6 +293,7 @@ public sealed class TextDocument : ITextSource
         var entry = new OffsetChangeMapEntry(change.Offset, change.RemovedLength, change.InsertedLength);
         UpdateAnchors(in entry);
         _version = _version.Append(entry);
+        CountAgainstOriginalFile();
         Changed?.Invoke(this, new DocumentChangeEventArgs(
             change.Offset,
             change.RemovedText,

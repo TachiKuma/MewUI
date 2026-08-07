@@ -599,23 +599,50 @@ public class TextEditor : Control, ITextEditorComponent
     /// <summary>Undoes the most recent command. False when there was nothing to undo.</summary>
     public bool Undo()
     {
-        if (!CanUndo || IsReadOnly)
+        if (IsReadOnly)
         {
             return false;
         }
-        _surface.Undo();
-        return true;
+        // Through the stack, which is what keeps the original-file marker counting steps.
+        return Document.UndoStack.Undo();
     }
 
     /// <summary>Redoes the most recently undone command. False when there was nothing to redo.</summary>
     public bool Redo()
     {
-        if (!CanRedo || IsReadOnly)
+        if (IsReadOnly)
         {
             return false;
         }
-        _surface.Redo();
-        return true;
+        return Document.UndoStack.Redo();
+    }
+
+    /// <summary>
+    /// Whether the document has changed since it was last marked unmodified. Undoing back to that
+    /// state clears it again. Assigning false marks the current state, which is what saving does;
+    /// assigning true drops the marker, so nothing counts as unmodified until one is set again.
+    /// </summary>
+    public bool IsModified
+    {
+        get => !Document.UndoStack.IsOriginalFile;
+        set
+        {
+            if (value)
+            {
+                Document.UndoStack.DiscardOriginalFileMarker();
+            }
+            else
+            {
+                Document.UndoStack.MarkAsOriginalFile();
+            }
+        }
+    }
+
+    /// <summary>Raised after <see cref="IsModified"/> changed.</summary>
+    public event EventHandler? IsModifiedChanged
+    {
+        add => Document.UndoStack.IsOriginalFileChanged += value;
+        remove => Document.UndoStack.IsOriginalFileChanged -= value;
     }
     public void InvalidateTextView() => _surface.InvalidateTextView();
 

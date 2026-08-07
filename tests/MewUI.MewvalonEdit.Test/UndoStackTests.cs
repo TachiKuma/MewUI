@@ -123,6 +123,138 @@ public sealed class UndoStackTests
         Assert.IsTrue(editor.Document.UndoStack.CanUndo);
     }
 
+    /// <summary>
+    /// A file view shows its dirty marker off this, so undoing back to the saved state has to clear
+    /// it again rather than leave the file looking changed.
+    /// </summary>
+    [TestMethod]
+    public void UndoingBackToTheMarkedStateMakesTheFileOriginalAgain()
+    {
+        var document = new TextDocument("saved");
+        var stack = document.UndoStack;
+        stack.MarkAsOriginalFile();
+        Assert.IsTrue(stack.IsOriginalFile);
+
+        document.Insert(0, "x");
+        Assert.IsFalse(stack.IsOriginalFile);
+
+        stack.Undo();
+        Assert.IsTrue(stack.IsOriginalFile);
+
+        stack.Redo();
+        Assert.IsFalse(stack.IsOriginalFile);
+    }
+
+    [TestMethod]
+    public void AGroupCountsAsOneStepTowardsTheMarker()
+    {
+        var document = new TextDocument("saved");
+        var stack = document.UndoStack;
+        stack.MarkAsOriginalFile();
+
+        using (stack.OpenUndoGroup())
+        {
+            document.Insert(0, "a");
+            document.Insert(0, "b");
+            document.Insert(0, "c");
+        }
+        stack.Undo();
+
+        Assert.IsTrue(stack.IsOriginalFile, "The group was one step away from the marked state.");
+    }
+
+    /// <summary>
+    /// Editing after undoing past the marker throws away the redo branch the marker sat in, so no
+    /// state reachable from here is the marked one any more.
+    /// </summary>
+    [TestMethod]
+    public void EditingPastTheMarkerLosesIt()
+    {
+        var document = new TextDocument("saved");
+        var stack = document.UndoStack;
+        document.Insert(0, "a");
+        stack.MarkAsOriginalFile();
+        stack.Undo();
+        Assert.IsFalse(stack.IsOriginalFile);
+
+        document.Insert(0, "b");
+        stack.Undo();
+
+        Assert.IsFalse(stack.IsOriginalFile);
+    }
+
+    [TestMethod]
+    public void DiscardingTheMarkerLeavesNothingOriginal()
+    {
+        var document = new TextDocument("saved");
+        var stack = document.UndoStack;
+        stack.MarkAsOriginalFile();
+
+        stack.DiscardOriginalFileMarker();
+
+        Assert.IsFalse(stack.IsOriginalFile);
+    }
+
+    [TestMethod]
+    public void TheStackReportsWhenTheFileStopsBeingOriginal()
+    {
+        var document = new TextDocument("saved");
+        var stack = document.UndoStack;
+        stack.MarkAsOriginalFile();
+        int changes = 0;
+        stack.IsOriginalFileChanged += (_, _) => changes++;
+
+        document.Insert(0, "a");
+        Assert.AreEqual(1, changes);
+
+        document.Insert(0, "b");
+        Assert.AreEqual(1, changes, "It was already not original.");
+
+        stack.Undo();
+        stack.Undo();
+        Assert.AreEqual(2, changes);
+    }
+
+    [TestMethod]
+    public void IsModifiedFollowsTheMarker()
+    {
+        var editor = new TextEditor { Text = "saved" };
+        editor.IsModified = false;
+        Assert.IsFalse(editor.IsModified);
+
+        editor.Document.Insert(0, "x");
+        Assert.IsTrue(editor.IsModified);
+
+        editor.Undo();
+        Assert.IsFalse(editor.IsModified);
+    }
+
+    [TestMethod]
+    public void SettingIsModifiedTrueDropsTheMarker()
+    {
+        var editor = new TextEditor { Text = "saved" };
+        editor.IsModified = false;
+
+        editor.IsModified = true;
+
+        Assert.IsTrue(editor.IsModified);
+        editor.Undo();
+        Assert.IsTrue(editor.IsModified, "There was no marked state left to return to.");
+    }
+
+    [TestMethod]
+    public void TheSizeLimitReportsWhenItChanges()
+    {
+        var document = new TextDocument("abc");
+        int changes = 0;
+        document.UndoStack.SizeLimitChanged += (_, _) => changes++;
+
+        document.UndoStack.SizeLimit = 4;
+        document.UndoStack.SizeLimit = 4;
+
+        Assert.AreEqual(1, changes);
+    }
+
     [TestMethod]
     public void EndingAGroupThatWasNeverStartedThrows()
     {
