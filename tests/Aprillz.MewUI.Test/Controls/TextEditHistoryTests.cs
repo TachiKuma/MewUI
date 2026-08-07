@@ -312,6 +312,41 @@ public sealed class TextEditHistoryTests
         Assert.AreEqual(0, second.CaretPosition, "The second session kept a caret past the end of the text.");
     }
 
+    /// <summary>
+    /// An extension that counts undo steps, such as one tracking whether a file is modified, can
+    /// only stay right if it sees every step. It intercepts these two; a third would go past it and
+    /// leave its count pointing at a state the document is no longer in.
+    /// </summary>
+    [TestMethod]
+    public void TheOnlyWaysToUndoAreTheControlAndTheDocument()
+    {
+        var entryPoints = typeof(TextBase).Assembly.GetTypes()
+            .SelectMany(static type => type.GetMethods(
+                System.Reflection.BindingFlags.Public |
+                System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.Static |
+                System.Reflection.BindingFlags.DeclaredOnly))
+            .Where(static method => method.IsPublic && method.DeclaringType!.IsPublic)
+            .Where(static method => method.Name is "Undo" or "Redo")
+            .Select(static method => $"{method.DeclaringType!.Name}.{method.Name}")
+            .Distinct()
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToList();
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "EditableTextDocument.Redo",
+                "EditableTextDocument.Undo",
+                "TextBase.Redo",
+                "TextBase.Undo",
+                "TextEditorSession.Redo",
+                "TextEditorSession.Undo",
+            },
+            entryPoints,
+            $"The set of public undo entry points changed: {string.Join(", ", entryPoints)}");
+    }
+
     [TestMethod]
     public void SharedDocumentMergesHistoryAcrossSessions()
     {
