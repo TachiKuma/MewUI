@@ -462,7 +462,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
 
         // Alignment ignores the space a wrap left at the end of the line, so right-aligned text ends
         // flush with the edge instead of one space short of it.
-        double trailingWhitespace = GetTrailingWhitespaceWidth(snapshot, clusters);
+        (double trailingWhitespace, int trailingWhitespaceLength) = GetTrailingWhitespace(snapshot, clusters);
         double x = ResolveLineX(snapshot.Paragraph, width - trailingWhitespace);
         double cursor = x;
         foreach (var cluster in clusters)
@@ -475,7 +475,13 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         int textLength = clusters.Count == 0 ? 0 : clusters[^1].End - textStart;
         return new ManagedTextLine(
             new TextLayoutLineMetrics(
-                textStart, textLength, newLineLength, new Rect(x, y, width, height), baseline, trailingWhitespace),
+                textStart,
+                textLength,
+                newLineLength,
+                new Rect(x, y, width, height),
+                baseline,
+                trailingWhitespace,
+                trailingWhitespaceLength),
             clusters);
     }
 
@@ -553,12 +559,17 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         return start == text.Length ? 0 : context.MeasureText(text[start..], font).Width;
     }
 
-    /// <summary>Width of the whitespace runs a wrap or an explicit break left at the end of a line.</summary>
-    private static double GetTrailingWhitespaceWidth(
+    /// <summary>
+    /// The whitespace runs a wrap or an explicit break left at the end of a line, in both units. The
+    /// character count is what column arithmetic needs, since a caller placing a selection works in
+    /// columns and cannot divide a width back into characters.
+    /// </summary>
+    private static (double Width, int Length) GetTrailingWhitespace(
         TextLayoutRequestSnapshot snapshot,
         List<ManagedTextCluster> clusters)
     {
-        double trailing = 0;
+        double width = 0;
+        int length = 0;
         for (int index = clusters.Count - 1; index >= 0; index--)
         {
             var cluster = clusters[index];
@@ -572,9 +583,10 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                 break;
             }
 
-            trailing += cluster.Width;
+            width += cluster.Width;
+            length += cluster.Length;
         }
-        return trailing;
+        return (width, length);
     }
 
     private static bool IsWhitespaceRun(string text, int start, int length)

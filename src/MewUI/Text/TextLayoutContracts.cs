@@ -92,18 +92,26 @@ public sealed record TextLayoutRequest
     public bool Transient { get; init; }
 }
 
+/// <summary>
+/// One laid-out line. The two trailing-whitespace values describe the same run in different units,
+/// and both are zero on a line no wrap or break ended.
+/// </summary>
 public readonly record struct TextLayoutLineMetrics(
     int TextStart,
     int TextLength,
     int NewLineLength,
     Rect Bounds,
     double Baseline,
-    double TrailingWhitespaceWidth = 0)
+    double TrailingWhitespaceWidth = 0,
+    int TrailingWhitespaceLength = 0)
 {
     public int TextEnd => checked(TextStart + TextLength);
 
     /// <summary>Line width without the whitespace a wrap or a break left at its end.</summary>
     public double VisibleWidth => Math.Max(0, Bounds.Width - TrailingWhitespaceWidth);
+
+    /// <summary>Text length without the whitespace a wrap or a break left at its end.</summary>
+    public int VisibleLength => Math.Max(0, TextLength - TrailingWhitespaceLength);
 }
 
 public interface ITextLayout

@@ -61,6 +61,37 @@ public sealed class WrappedLineAlignmentTests
             "The last line has no wrap, so it must carry no trailing whitespace.");
     }
 
+    /// <summary>
+    /// The character count of the whitespace a wrap left, which is what a caller working in columns
+    /// needs; a width cannot be divided back into characters.
+    /// </summary>
+    [TestMethod]
+    public void LineMetricsReportTrailingWhitespaceInCharactersAsWellAsWidth()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI backend is Windows-only.");
+            return;
+        }
+
+        using var factory = new GdiGraphicsFactory();
+        var layout = CreateLayout(factory, TextAlignment.Left);
+        Assert.IsGreaterThan(1, layout.Lines.Count, "The sample text did not wrap.");
+
+        var wrapped = layout.Lines[0];
+        Assert.IsGreaterThan(0, wrapped.TrailingWhitespaceLength,
+            "The wrapped line reported no trailing whitespace characters.");
+        Assert.AreEqual(wrapped.TextLength - wrapped.TrailingWhitespaceLength, wrapped.VisibleLength);
+        for (int index = 0; index < wrapped.TrailingWhitespaceLength; index++)
+        {
+            Assert.IsTrue(char.IsWhiteSpace(LONG_TEXT[wrapped.TextEnd - 1 - index]),
+                "The reported count reaches past the whitespace at the line end.");
+        }
+
+        Assert.AreEqual(0, layout.Lines[^1].TrailingWhitespaceLength,
+            "The last line has no wrap, so it must carry no trailing whitespace.");
+    }
+
     [TestMethod]
     public void MeasuredWidthCountsTrailingWhitespaceOnlyAfterAHardBreak()
     {
