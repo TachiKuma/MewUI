@@ -398,23 +398,29 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
             var bounds = new List<Rect>();
             layout.GetRangeBounds(span.Range.Start, span.Range.Length, bounds);
             Color color = span.Foreground ?? Color.FromArgb(255, 0, 0, 0);
+            double dpiScale = _context.DpiScale;
+            double thickness = LayoutRounding.SnapThicknessToPixels(1, dpiScale, 1);
             foreach (var rect in bounds)
             {
+                // Snapped like the style-run decorations: both ends round the same way, so a
+                // decoration cut into several spans stays contiguous where they meet.
+                double left = LayoutRounding.RoundToPixel(origin.X + rect.X, dpiScale);
+                double width = LayoutRounding.RoundToPixel(origin.X + rect.Right, dpiScale) - left;
+                if (width <= 0)
+                {
+                    continue;
+                }
                 if (span.Decoration.HasFlag(TextDecoration.Underline))
                 {
-                    _context.FillRectangle(new Rect(
-                        origin.X + rect.X,
-                        origin.Y + Math.Max(rect.Y, rect.Bottom - 1),
-                        rect.Width,
-                        1), color);
+                    double y = LayoutRounding.RoundToPixel(
+                        origin.Y + Math.Max(rect.Y, rect.Bottom - thickness), dpiScale);
+                    _context.FillRectangle(new Rect(left, y, width, thickness), color);
                 }
                 if (span.Decoration.HasFlag(TextDecoration.Strikethrough))
                 {
-                    _context.FillRectangle(new Rect(
-                        origin.X + rect.X,
-                        origin.Y + rect.Y + Math.Max(0, (rect.Height - 1) * 0.55),
-                        rect.Width,
-                        1), color);
+                    double y = LayoutRounding.RoundToPixel(
+                        origin.Y + rect.Y + Math.Max(0, (rect.Height - thickness) * 0.55), dpiScale);
+                    _context.FillRectangle(new Rect(left, y, width, thickness), color);
                 }
             }
         }
@@ -505,15 +511,17 @@ internal sealed class LegacyTextRenderContext : ITextRenderContext, IDisposable
             return;
         }
 
-        double clampedLeft = Math.Max(left, runBounds.X);
-        double width = Math.Min(right, runBounds.Right) - clampedLeft;
+        // Pixel-snap the line position, ends and thickness so antialiasing does not smear the
+        // stroke. Both ends round the same way, so a decoration cut into segments by paint spans
+        // stays contiguous: neighboring segments share an edge and land on the same pixel.
+        double dpiScale = _context.DpiScale;
+        double clampedLeft = LayoutRounding.RoundToPixel(Math.Max(left, runBounds.X), dpiScale);
+        double width = LayoutRounding.RoundToPixel(Math.Min(right, runBounds.Right), dpiScale) - clampedLeft;
         if (width <= 0)
         {
             return;
         }
 
-        // Pixel-snap the line position and thickness so antialiasing does not smear the stroke.
-        double dpiScale = _context.DpiScale;
         double thickness = LayoutRounding.SnapThicknessToPixels(1, dpiScale, 1);
         if (style.Decoration.HasFlag(TextDecoration.Underline))
         {
