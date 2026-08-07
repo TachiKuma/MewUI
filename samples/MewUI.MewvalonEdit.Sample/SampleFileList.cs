@@ -17,7 +17,6 @@ public sealed class SampleFileList : UserControl
     public SampleFileList()
     {
         Width = 190;
-        Padding = new Thickness(8);
 
         var files = EnumerateFiles().Select(static path => new SampleFile(path)).ToList();
         _list.Items(files, static file => file.Name, keySelector: static file => file.Path);
@@ -26,8 +25,8 @@ public sealed class SampleFileList : UserControl
         _list.ItemTemplate(new DelegateTemplate<SampleFile>(
             build: context => new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 }
                 .Children(
-                    new Image { Width = ICON_SIZE, Height = ICON_SIZE }.Register(context, "Icon"),
-                    new TextBlock().Register(context, "Name")),
+                    new Image().Size(ICON_SIZE).CenterVertical().Register(context, "Icon"),
+                    new TextBlock().CenterVertical().Register(context, "Name")),
             bind: (_, file, _, context) =>
             {
                 context.Get<Image>("Icon").Source = IconFor(file);
@@ -51,6 +50,12 @@ public sealed class SampleFileList : UserControl
     /// <summary>Raised when a file in the list is picked.</summary>
     public event Action<SampleFile>? Opened;
 
+    /// <summary>
+    /// Drops the highlighted row, for when the editor was loaded from somewhere other than this
+    /// list and the row would otherwise claim to be what is open.
+    /// </summary>
+    public void ClearSelection() => _list.ClearSelection();
+
     private static ImageSource? IconFor(SampleFile file)
         => Application.IsRunning
             ? Application.Current.PlatformServices.ShellIconProvider.GetIcon(file.Path, isDirectory: false, ICON_SIZE)
@@ -73,15 +78,12 @@ public sealed class SampleFile(string path)
 
     public string Name { get; } = System.IO.Path.GetFileName(path);
 
-    /// <summary>Highlighting the extension asks for, or null when there is none for it.</summary>
-    public string? HighlightingName => System.IO.Path.GetExtension(Path).ToLowerInvariant() switch
-    {
-        ".html" or ".htm" => "HTML",
-        ".xml" or ".xshd" => "XML",
-        ".cs" => "C#",
-        ".json" => "JSON",
-        _ => null
-    };
+    /// <summary>
+    /// Highlighting the extension asks for, or null when there is none for it. The manager owns the
+    /// mapping, so .xaml and .xshd reach XML without this having to know they are XML dialects.
+    /// </summary>
+    public string? HighlightingName => Highlighting.HighlightingManager.Instance
+        .GetDefinitionByExtension(System.IO.Path.GetExtension(Path))?.Name;
 
     public string ReadText() => File.ReadAllText(Path);
 

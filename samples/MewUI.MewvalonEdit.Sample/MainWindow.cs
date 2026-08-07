@@ -22,6 +22,7 @@ public sealed class MainWindow : Window
     private readonly TextBlock _documentState = new();
     private readonly TextBlock _searchState = new();
     private readonly TextBlock _encoding = new() { Text = "UTF-8" };
+    private readonly SampleFileList _files = new();
     private readonly Border _optionsPanel;
     private DispatcherTimer? _smokeTimer;
 
@@ -57,15 +58,14 @@ public sealed class MainWindow : Window
             UpdateFoldings(_editor.SyntaxHighlighting?.Name);
         };
 
-        LoadSample(SampleText.CSharp, "C#");
-        var files = new SampleFileList();
-        files.Opened += file => LoadSample(file.ReadText(), file.HighlightingName);
+        _files.Opened += file => LoadSample(file.ReadText(), file.HighlightingName);
+        LoadBuiltIn(SampleText.CSharp, "C#");
         Content = new DockPanel()
             .Spacing(8)
             .Children(
                 CreateToolbar().DockTop(),
                 CreateStatusBar().DockBottom(),
-                files.DockLeft(),
+                _files.DockLeft(),
                 _optionsPanel.DockRight(),
                 _editor);
     }
@@ -79,10 +79,10 @@ public sealed class MainWindow : Window
             switch (phase++)
             {
                 case 0:
-                    LoadSample(SampleText.Xml, "XML");
+                    LoadBuiltIn(SampleText.Xml, "XML");
                     break;
                 case 1:
-                    LoadSample(SampleText.CSharp, "C#");
+                    LoadBuiltIn(SampleText.CSharp, "C#");
                     ToggleFirstFolding();
                     break;
                 case 2:
@@ -120,11 +120,11 @@ public sealed class MainWindow : Window
             Spacing = 6,
             Padding = new Thickness(8)
         }.Children(
-            new Button().Content("C#").OnClick(() => LoadSample(SampleText.CSharp, "C#")),
-            new Button().Content("XML").OnClick(() => LoadSample(SampleText.Xml, "XML")),
-            new Button().Content("JSON").OnClick(() => LoadSample(SampleText.Json, "JSON")),
-            new Button().Content("Long").OnClick(() => LoadSample(SampleText.LongDocument(), "C#")),
-            new Button().Content("Control chars").OnClick(() => LoadSample(ControlCharacterSample.Text(), null)),
+            new Button().Content("C#").OnClick(() => LoadBuiltIn(SampleText.CSharp, "C#")),
+            new Button().Content("XML").OnClick(() => LoadBuiltIn(SampleText.Xml, "XML")),
+            new Button().Content("JSON").OnClick(() => LoadBuiltIn(SampleText.Json, "Json")),
+            new Button().Content("Long").OnClick(() => LoadBuiltIn(SampleText.LongDocument(), "C#")),
+            new Button().Content("Control chars").OnClick(() => LoadBuiltIn(ControlCharacterSample.Text(), null)),
             new Button().Content("Undo").OnClick(() => _editor.Undo()),
             new Button().Content("Redo").OnClick(() => _editor.Redo()),
             searchBox,
@@ -230,6 +230,16 @@ public sealed class MainWindow : Window
                 Orientation = Orientation.Horizontal,
                 Spacing = 18
             }.Children(_position, _selection, _documentState, _foldingState, _encoding, _searchState));
+
+    /// <summary>
+    /// Loads one of the samples built into this executable. The file list holds no row for it, so
+    /// its highlighted row goes, which would otherwise claim to be what is open.
+    /// </summary>
+    private void LoadBuiltIn(string text, string? highlightingName)
+    {
+        _files.ClearSelection();
+        LoadSample(text, highlightingName);
+    }
 
     private void LoadSample(string text, string? highlightingName)
     {
