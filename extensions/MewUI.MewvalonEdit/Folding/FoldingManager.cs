@@ -188,6 +188,8 @@ public sealed class FoldingManager
     /// </summary>
     private sealed class FoldedSectionRenderer(FoldingManager manager) : Rendering.IBackgroundRenderer
     {
+        private const double CORNER_RADIUS = 2;
+
         // Under the glyphs, so the placeholder text stays readable on top of the box.
         public Rendering.KnownLayer Layer => Rendering.KnownLayer.Text;
 
@@ -202,7 +204,8 @@ public sealed class FoldingManager
             var host = textView.Host;
             var viewport = host.TextViewportBounds;
             var scroll = host.ScrollOffset;
-            var color = manager._editor.FoldingMarkerColor;
+            double scale = textView.DpiScale;
+            var pen = new Rendering.ColorPen(manager._editor.FoldingMarkerColor).SnapThickness(scale);
             var bounds = new List<Rect>();
             foreach (var line in host.VisibleTextLines)
             {
@@ -228,12 +231,18 @@ public sealed class FoldingManager
                     line.GetRangeBounds(new TextRange(start, end - start), bounds);
                     foreach (var rect in bounds)
                     {
-                        var box = new Rect(
-                            viewport.X + line.DocumentX + rect.X - scroll.X,
-                            viewport.Y + line.DocumentY + rect.Y - scroll.Y,
-                            rect.Width,
-                            rect.Height).Deflate(new Thickness(0, 0.5, 0, 0.5));
-                        context.DrawRoundedRectangle(box, 2, 2, color, 1);
+                        // The stroke sits on the edge it is given, so the box is inset by half of
+                        // it; a fixed half-DIP inset left it straddling a pixel at other scales.
+                        var box = LayoutRounding.SnapBoundsRectToPixels(
+                            new Rect(
+                                viewport.X + line.DocumentX + rect.X - scroll.X,
+                                viewport.Y + line.DocumentY + rect.Y - scroll.Y,
+                                rect.Width,
+                                rect.Height),
+                            scale);
+                        context.DrawRoundedRectangle(
+                            box.Deflate(new Thickness(pen.Thickness / 2)),
+                            CORNER_RADIUS, CORNER_RADIUS, pen.Color, pen.Thickness);
                     }
                 }
             }

@@ -48,25 +48,21 @@ public sealed class FoldingMargin : AbstractMargin
         MewProperty<Color?>.Register<FoldingMargin>(nameof(FoldingMarkerBackgroundBrush), null,
             MewPropertyOptions.AffectsRender);
 
-    /// <summary>Outline and line colour. Null follows the theme, so it tracks light and dark.</summary>
+    /// <summary>Outline and line colour, which must be opaque. Null follows the theme.</summary>
     public Color? FoldingMarkerBrush
     {
         get => GetValue(FoldingMarkerBrushProperty);
         set => SetValue(FoldingMarkerBrushProperty, value);
     }
 
-    /// <summary>
-    /// Fill of the marker box. Null takes the theme's control background, which is what keeps the
-    /// extent line from running through the box; AvalonEdit fills it with a solid brush for the
-    /// same reason.
-    /// </summary>
+    /// <summary>Fill of the marker box, which must be opaque. Null follows the theme.</summary>
     public Color? FoldingMarkerBackgroundBrush
     {
         get => GetValue(FoldingMarkerBackgroundBrushProperty);
         set => SetValue(FoldingMarkerBackgroundBrushProperty, value);
     }
 
-    private Color ResolvedMarker => FoldingMarkerBrush ?? Theme.Palette.PlaceholderText;
+    private Color ResolvedMarker => FoldingMarkerBrush ?? Theme.Palette.ControlBorder;
     private Color ResolvedMarkerBackground => FoldingMarkerBackgroundBrush ?? Theme.Palette.ControlBackground;
 
     protected override Size MeasureContent(Size availableSize)
@@ -74,34 +70,45 @@ public sealed class FoldingMargin : AbstractMargin
 
     protected override void OnRenderTextViewport(IGraphicsContext context, Rect textViewport)
     {
-        double middleX = Bounds.X + Bounds.Width / 2;
-        foreach ((var section, var box) in EnumerateBoxes(textViewport))
+        if (TextView is not TextView view)
         {
-            // An expanded section marks how far it reaches with a line running down to its end
-            // row, so the gutter shows the extent the box would collapse.
+            return;
+        }
+
+        double scale = view.DpiScale;
+        var pen = new ColorPen(ResolvedMarker).SnapThickness(scale);
+        double middleX = pen.SnapStrokeCenter(Bounds.X + (Bounds.Width - pen.Thickness) / 2, scale);
+        foreach ((var section, var rawBox) in EnumerateBoxes(textViewport))
+        {
+            var box = LayoutRounding.SnapBoundsRectToPixels(rawBox, scale);
+
+            // A nested section's extent line runs down the same X as its parent's, so a translucent
+            // marker would blend twice and draw the nested rows darker.
             if (!section.IsFolded)
             {
-                double endY = ResolveEndY(section, textViewport);
+                double endY = pen.SnapStrokeCenter(ResolveEndY(section, textViewport), scale);
                 if (endY > box.Bottom)
                 {
                     context.DrawLine(
-                        new Point(middleX, box.Bottom), new Point(middleX, endY), ResolvedMarker, 1);
+                        new Point(middleX, box.Bottom), new Point(middleX, endY), pen.ToPen());
                     context.DrawLine(
-                        new Point(middleX, endY), new Point(middleX + BOX_SIZE / 2, endY), ResolvedMarker, 1);
+                        new Point(middleX, endY), new Point(middleX + BOX_SIZE / 2, endY), pen.ToPen());
                 }
             }
 
             // Filled before the outline so the extent line drawn above stops at the box edge.
             context.FillRectangle(box, ResolvedMarkerBackground);
-            context.DrawRectangle(box, ResolvedMarker, 1);
-            double middleY = box.Y + box.Height / 2;
+            // Inset by half the stroke, which is centred on the edge it is given: on the snapped
+            // edge itself it would cover half a pixel on each side.
+            context.DrawRectangle(box.Deflate(new Thickness(pen.Thickness / 2)), pen.ToPen());
+            double middleY = pen.SnapStrokeCenter(box.Y + (box.Height - pen.Thickness) / 2, scale);
             context.DrawLine(
-                new Point(box.X + 2, middleY), new Point(box.Right - 2, middleY), ResolvedMarker, 1);
+                new Point(box.X + 2, middleY), new Point(box.Right - 2, middleY), pen.ToPen());
             if (section.IsFolded)
             {
-                double centerX = box.X + box.Width / 2;
+                double centerX = pen.SnapStrokeCenter(box.X + (box.Width - pen.Thickness) / 2, scale);
                 context.DrawLine(
-                    new Point(centerX, box.Y + 2), new Point(centerX, box.Bottom - 2), ResolvedMarker, 1);
+                    new Point(centerX, box.Y + 2), new Point(centerX, box.Bottom - 2), pen.ToPen());
             }
         }
     }

@@ -29,6 +29,7 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
         {
             return;
         }
+        rectangle = SnapToPixels(rectangle, textArea.TextView.DpiScale);
 
         var color = textArea.Caret.CaretBrush ?? textArea.Editor.Foreground;
         if (textArea.OverstrikeMode)
@@ -66,5 +67,18 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
             }
         }
         return new Rect(caret.X, caret.Y, width, Math.Max(MINIMUM_WIDTH, caret.Height));
+    }
+
+    /// <summary>The caret band on whole device pixels, never thinner than one.</summary>
+    private static Rect SnapToPixels(Rect rectangle, double dpiScale)
+    {
+        // Snapped edges alone would round a one-DIP caret away wherever a scale makes it land
+        // inside a pixel, so the width is taken as a thickness instead.
+        var snapped = LayoutRounding.SnapBoundsRectToPixels(rectangle, dpiScale);
+        return new Rect(
+            snapped.X,
+            snapped.Y,
+            LayoutRounding.SnapThicknessToPixels(rectangle.Width, dpiScale, 1),
+            LayoutRounding.SnapThicknessToPixels(rectangle.Height, dpiScale, 1));
     }
 }
