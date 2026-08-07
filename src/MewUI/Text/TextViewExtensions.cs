@@ -26,15 +26,33 @@ public interface ITextLineTransformer
         IList<InlineRun> inlines);
 }
 
-/// <summary>Element generation input. <see cref="Text"/> is the projected display text; <see cref="OffsetMap"/> converts between its offsets and source document offsets.</summary>
-public readonly record struct TextElementContext(
-    LogicalTextLine LogicalLine,
-    ReadOnlyMemory<char> Text,
-    ITextOffsetMap OffsetMap);
+/// <summary>Element scan input. Offsets are document offsets, before any projection.</summary>
+public readonly record struct TextElementScanContext(IReadOnlyTextDocument Document, int LineStartOffset);
+
+/// <summary>
+/// An element standing in for a document range. <see cref="VisualLength"/> is how many columns it
+/// occupies on the visual surface; <see cref="Object"/> paints them, or null to leave the range as
+/// ordinary text that the element only decorates.
+/// </summary>
+public readonly record struct GeneratedTextElement(
+    int DocumentLength,
+    int VisualLength,
+    IInlineTextObject? Object);
 
 public interface ITextElementGenerator
 {
-    void Generate(in TextElementContext context, IList<InlineRun> output);
+    /// <summary>
+    /// First document offset at or after <paramref name="startOffset"/> this generator wants an
+    /// element at, or -1 for none. Must not return an offset before <paramref name="startOffset"/>.
+    /// </summary>
+    int GetFirstInterestedOffset(in TextElementScanContext context, int startOffset);
+
+    /// <summary>
+    /// The element at <paramref name="offset"/>, or null to decline. A
+    /// <see cref="GeneratedTextElement.DocumentLength"/> reaching past the line's end makes the
+    /// line cover the logical lines up to it.
+    /// </summary>
+    GeneratedTextElement? ConstructElement(in TextElementScanContext context, int offset);
 }
 
 /// <summary>

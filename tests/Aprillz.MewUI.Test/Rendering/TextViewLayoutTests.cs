@@ -277,17 +277,12 @@ public sealed class TextViewLayoutTests
             dpi: 96);
 
     /// <summary>
-    /// Pins that a line's source range stops at its logical line, whatever an element says. An
-    /// element standing in for a range that reaches into the next line gets only the part on its
-    /// own line, and the rest keeps its own line.
+    /// A visual line is not bound one to one to a logical line: an element standing in for a range
+    /// that reaches past its line makes the line's source reach that far too, which is the reverse
+    /// of wrapping.
     /// </summary>
-    /// <remarks>
-    /// This is the gap `agent/mewvalonedit-parity/folding.md` 4-1 proposes to close: the reverse of
-    /// wrapping, where one visual line covers several logical lines. When that lands this test
-    /// flips - line 2 is no longer materialized on its own and line 1 carries both.
-    /// </remarks>
     [TestMethod]
-    public void AnElementCannotMakeALineReachIntoTheNextOne()
+    public void AnElementReachingPastItsLineExtendsTheLineSource()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -297,6 +292,8 @@ public sealed class TextViewLayoutTests
 
         var document = new TestReadOnlyDocument("first\nsecond");
         var extensions = new TextViewExtensionPipeline { Revision = 1 };
+        // Covers "rst\nsec": from offset 2 into the middle of the second line.
+        extensions.ElementGenerators.Add(new SpanningElementGenerator(startOffset: 2, documentLength: 7));
 
         using var factory = new GdiGraphicsFactory();
         using var view = new TextViewLayout(
@@ -308,12 +305,20 @@ public sealed class TextViewLayoutTests
             dpi: 96);
         view.SetViewport(new TextViewport(300, 100));
 
-        Assert.HasCount(2, view.MaterializedLines);
         var first = view.MaterializedLines[0].LogicalLine;
-        Assert.AreEqual("first".Length, first.Length,
-            "The first line's source stops at its own line end.");
-        Assert.AreEqual(document.GetLineByNumber(1).Offset, view.MaterializedLines[1].LogicalLine.Offset,
-            "The second line is materialized on its own.");
+        Assert.AreEqual(0, first.Offset);
+        Assert.AreEqual(document.TextLength, first.Length,
+            "The line's source reaches the end of the line the element lands in.");
+    }
+
+    /// <summary>Stands in for one fixed document range, wherever it falls.</summary>
+    private sealed class SpanningElementGenerator(int startOffset, int documentLength) : ITextElementGenerator
+    {
+        public int GetFirstInterestedOffset(in TextElementScanContext context, int scanFrom)
+            => scanFrom <= startOffset ? startOffset : -1;
+
+        public GeneratedTextElement? ConstructElement(in TextElementScanContext context, int offset)
+            => new GeneratedTextElement(documentLength, 1, new FixedInline());
     }
 
     private sealed class TestReadOnlyDocument : IReadOnlyTextDocument
@@ -418,8 +423,11 @@ public sealed class TextViewLayoutTests
 
     private sealed class EllipsisInlineGenerator : ITextElementGenerator
     {
-        public void Generate(in TextElementContext context, IList<InlineRun> output)
-            => output.Add(new InlineRun(3, 1, new FixedInline()));
+        public int GetFirstInterestedOffset(in TextElementScanContext context, int startOffset)
+            => startOffset <= context.LineStartOffset + 3 ? context.LineStartOffset + 3 : -1;
+
+        public GeneratedTextElement? ConstructElement(in TextElementScanContext context, int offset)
+            => new GeneratedTextElement(1, 1, new FixedInline());
     }
 
     private sealed class FixedInline : IInlineTextObject

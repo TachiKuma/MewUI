@@ -190,6 +190,72 @@ public sealed class TextViewLayout : ITextViewLayout
         MaterializeViewport();
     }
 
+    /// <summary>
+    /// Walks the element generators over the line's document range, growing the range when an
+    /// element reaches past its end. Mirrors the construction loop the original editor uses: ask
+    /// where a generator wants to act, let the winner build, and pick the line end up again from
+    /// wherever the element landed.
+    /// </summary>
+    private List<(int Offset, GeneratedTextElement Element)> ScanElements(int lineStart, ref int length)
+    {
+        var elements = new List<(int, GeneratedTextElement)>();
+        var generators = _extensions.ElementGenerators;
+        if (generators.Count == 0)
+        {
+            return elements;
+        }
+
+        var context = new TextElementScanContext(_document, lineStart);
+        var interests = new int[generators.Count];
+        int offset = lineStart;
+        int lineEnd = lineStart + length;
+        // 0 or 1: after a zero-length element the same offset must not be offered again, or the
+        // generators would be asked forever.
+        int askInterestOffset = 0;
+
+        while (offset + askInterestOffset <= lineEnd)
+        {
+            int pieceEnd = lineEnd;
+            for (int i = 0; i < generators.Count; i++)
+            {
+                interests[i] = generators[i].GetFirstInterestedOffset(in context, offset + askInterestOffset);
+                if (interests[i] >= offset && interests[i] < pieceEnd)
+                {
+                    pieceEnd = interests[i];
+                }
+            }
+            if (pieceEnd > offset)
+            {
+                offset = pieceEnd;
+            }
+
+            askInterestOffset = 1;
+            for (int i = 0; i < generators.Count; i++)
+            {
+                if (interests[i] != offset || generators[i].ConstructElement(in context, offset) is not { } element)
+                {
+                    continue;
+                }
+                elements.Add((offset, element));
+                if (element.DocumentLength <= 0)
+                {
+                    continue;
+                }
+                askInterestOffset = 0;
+                offset += element.DocumentLength;
+                if (offset > lineEnd)
+                {
+                    var reached = _document.GetLineByOffset(Math.Min(offset, _document.TextLength));
+                    lineEnd = Math.Max(lineEnd, reached.Offset + reached.Length);
+                }
+                break;
+            }
+        }
+
+        length = lineEnd - lineStart;
+        return elements;
+    }
+
     private void DirtyLines(int firstLine, int lastLine)
     {
         for (int i = firstLine; i <= lastLine; i++)
@@ -426,6 +492,10 @@ public sealed class TextViewLayout : ITextViewLayout
             state.Layout = null;
         }
 
+        // The walk runs before the text is read: an element may stand in for a range that reaches
+        // past this logical line, and then the line's source has to reach that far as well.
+        var scannedElements = ScanElements(source.Offset + sliceStart, ref sliceLength);
+
         string sourceText = _document.GetText(source.Offset + sliceStart, sliceLength);
         var logical = new LogicalTextLine(
             source.LineNumber,
@@ -454,10 +524,22 @@ public sealed class TextViewLayout : ITextViewLayout
 
         var geometryRuns = new List<GeometryStyleRun>();
         var inlines = new List<InlineRun>();
-        var elementContext = new TextElementContext(logical, text.AsMemory(), offsetMap);
-        foreach (var generator in _extensions.ElementGenerators)
+        foreach ((int elementOffset, var element) in scannedElements)
         {
-            generator.Generate(in elementContext, inlines);
+            if (element.Object is null)
+            {
+                continue;
+            }
+            int position = offsetMap.MapFromSource(elementOffset - logical.Offset);
+            int projectedEnd = offsetMap.MapFromSource(elementOffset - logical.Offset + element.DocumentLength);
+            // Only the columns the element paints become the object; anything the projection left
+            // beyond them is laid out as ordinary text, which is how a tab marker paints one glyph
+            // and still lets the tab reach its stop.
+            int length = Math.Min(projectedEnd - position, element.VisualLength);
+            if (position >= 0 && length > 0)
+            {
+                inlines.Add(new InlineRun(position, length, element.Object));
+            }
         }
         var transformContext = new TextLineTransformContext(logical, text.AsMemory(), _defaultStyle, offsetMap);
         foreach (var transformer in _extensions.Transformers)
