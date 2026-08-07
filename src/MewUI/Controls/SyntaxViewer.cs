@@ -121,7 +121,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
 
     public void Copy()
     {
-        var clipboard = ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformHost.Clipboard : null);
+        var clipboard = ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformServices.Clipboard : null);
         if (SelectionLength > 0 && clipboard is not null)
         {
             clipboard.TrySetText(SelectedText);

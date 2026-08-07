@@ -637,13 +637,13 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     }
 
     private protected bool TrySetClipboardText(string text)
-        => (ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformHost.Clipboard : null))
+        => (ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformServices.Clipboard : null))
             ?.TrySetText(text) == true;
 
     private protected bool TryGetClipboardText(out string text)
     {
         text = string.Empty;
-        var clipboard = ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformHost.Clipboard : null);
+        var clipboard = ClipboardService ?? (Application.IsRunning ? Application.Current.PlatformServices.Clipboard : null);
         return clipboard is not null && clipboard.TryGetText(out text);
     }
 

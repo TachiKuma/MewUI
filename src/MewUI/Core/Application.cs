@@ -167,6 +167,14 @@ public sealed class Application
     /// </summary>
     internal IPlatformHost PlatformHost { get; }
 
+    /// <summary>
+    /// The services the running platform offers: clipboard, message boxes, file dialogs and the
+    /// shell's file icons. The host behind them stays internal.
+    /// </summary>
+    public PlatformServices PlatformServices => _platformServices ??= new PlatformServices(PlatformHost);
+
+    private PlatformServices? _platformServices;
+
     internal static event Action<IDispatcher?>? DispatcherChanged;
 
     public IDispatcher? Dispatcher
