@@ -26,8 +26,12 @@ public interface ITextLineTransformer
         IList<InlineRun> inlines);
 }
 
-/// <summary>Element scan input. Offsets are document offsets, before any projection.</summary>
-public readonly record struct TextElementScanContext(IReadOnlyTextDocument Document, int LineStartOffset);
+/// <summary>
+/// Element scan input. Offsets are document offsets, before any projection.
+/// <see cref="ScanStartOffset"/> is where this walk begins, which is the line's start except on a
+/// line long enough to be laid out one piece at a time.
+/// </summary>
+public readonly record struct TextElementScanContext(IReadOnlyTextDocument Document, int ScanStartOffset);
 
 /// <summary>
 /// An element standing in for a document range. <see cref="VisualLength"/> is how many columns it

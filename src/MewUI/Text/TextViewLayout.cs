@@ -149,7 +149,7 @@ public sealed class TextViewLayout : ITextViewLayout
                 change.Offset + change.InsertedLength,
                 0,
                 _document.TextLength)).LineNumber;
-        DirtyLines(firstLine, lastLine);
+        DirtyLines(ExpandToCoveringLine(firstLine), lastLine);
         MaterializeViewport();
     }
 
@@ -186,7 +186,7 @@ public sealed class TextViewLayout : ITextViewLayout
         int lastLine = Math.Clamp(
             _document.GetLineByOffset(end).LineNumber, firstLine, Math.Max(0, _states.Length - 1));
 
-        DirtyLines(firstLine, lastLine);
+        DirtyLines(ExpandToCoveringLine(firstLine), lastLine);
         MaterializeViewport();
     }
 
@@ -254,6 +254,38 @@ public sealed class TextViewLayout : ITextViewLayout
 
         length = lineEnd - lineStart;
         return elements;
+    }
+
+    /// <summary>
+    /// Records on every logical line a layout reached past its own end which line covers it, or
+    /// withdraws those records when <paramref name="covering"/> is -1.
+    /// </summary>
+    private void MarkCoveredLines(int lineNumber, int sourceOffset, int spanLength, int covering)
+    {
+        if (sourceOffset < 0 || spanLength <= 0 || _document.LineCount == 0)
+        {
+            return;
+        }
+
+        int end = Math.Clamp(sourceOffset + spanLength, 0, _document.TextLength);
+        int lastLine = Math.Min(_document.GetLineByOffset(end).LineNumber, _states.Length - 1);
+        for (int candidate = lineNumber + 1; candidate <= lastLine; candidate++)
+        {
+            if (covering >= 0 || _states[candidate].CoveredBy == lineNumber)
+            {
+                _states[candidate].CoveredBy = covering;
+            }
+        }
+    }
+
+    /// <summary>
+    /// The line that has to be rebuilt for <paramref name="lineNumber"/> to be redrawn, which is a
+    /// line further up when an element made that line's layout swallow this one.
+    /// </summary>
+    private int ExpandToCoveringLine(int lineNumber)
+    {
+        int covering = _states[lineNumber].CoveredBy;
+        return covering >= 0 && covering < lineNumber ? covering : lineNumber;
     }
 
     private void DirtyLines(int firstLine, int lastLine)
@@ -416,7 +448,7 @@ public sealed class TextViewLayout : ITextViewLayout
             state.SourceOffset == source.Offset && state.SourceLength == source.Length &&
             state.Width == Viewport.Width &&
             sourceOffset.Value >= state.SliceStart &&
-            sourceOffset.Value <= state.SliceStart + state.SliceLength)
+            sourceOffset.Value <= state.SliceStart + state.SpanLength)
         {
             // A slice sits at its estimated x, so two slices of one line do not share a coordinate
             // system. Re-cutting the line around a caret would place the caret in a different
@@ -493,15 +525,17 @@ public sealed class TextViewLayout : ITextViewLayout
         }
 
         // The walk runs before the text is read: an element may stand in for a range that reaches
-        // past this logical line, and then the line's source has to reach that far as well.
-        var scannedElements = ScanElements(source.Offset + sliceStart, ref sliceLength);
+        // past this logical line, and then the line's source has to reach that far as well. The
+        // requested slice stays as it was, because it is what identifies this layout in the cache.
+        int spanLength = sliceLength;
+        var scannedElements = ScanElements(source.Offset + sliceStart, ref spanLength);
 
-        string sourceText = _document.GetText(source.Offset + sliceStart, sliceLength);
+        string sourceText = _document.GetText(source.Offset + sliceStart, spanLength);
         var logical = new LogicalTextLine(
             source.LineNumber,
             source.Offset + sliceStart,
-            sliceLength,
-            sliceLength);
+            spanLength,
+            spanLength);
         ReadOnlyMemory<char> projectedMemory = sourceText.AsMemory();
         ITextOffsetMap offsetMap = IdentityTextOffsetMap.Instance;
         foreach (var projection in _extensions.Projections)
@@ -556,7 +590,7 @@ public sealed class TextViewLayout : ITextViewLayout
             DefaultStyle = _defaultStyle,
             Runs = geometryRuns,
             Inlines = inlines,
-            Revision = HashCode.Combine(_document.Version, _extensions.Revision, sliceStart, sliceLength)
+            Revision = HashCode.Combine(_document.Version, _extensions.Revision, sliceStart, spanLength)
         };
         var textLayout = _engine.GetOrCreateLayout(request, TextLayoutCachePolicy.Owner, state.Owner);
         var layout = new TextLineLayout(
@@ -571,11 +605,14 @@ public sealed class TextViewLayout : ITextViewLayout
         state.Layout = layout;
         state.Version = _document.Version;
         state.Dirty = false;
+        MarkCoveredLines(lineNumber, state.SourceOffset, state.SpanLength, covering: -1);
         state.SourceOffset = source.Offset;
         state.SourceLength = source.Length;
         state.Width = Viewport.Width;
         state.SliceStart = sliceStart;
         state.SliceLength = sliceLength;
+        state.SpanLength = spanLength;
+        MarkCoveredLines(lineNumber, source.Offset + sliceStart, spanLength, covering: lineNumber);
         if (state.Virtual is { } activeVirtual)
         {
             activeVirtual.Refine(sliceLength, layout.VisualLines.Count, layout.Height);
@@ -838,6 +875,11 @@ public sealed class TextViewLayout : ITextViewLayout
         public VirtualNoWrapState? VirtualNoWrap { get; set; }
         public int SliceStart { get; set; } = -1;
         public int SliceLength { get; set; } = -1;
+        // Document length the layout actually covers: the slice, grown by any element reaching past
+        // the logical line. Survives dirtying so the rebuild can withdraw the marks it left behind.
+        public int SpanLength { get; set; } = -1;
+        // Line whose span swallowed this one, or -1.
+        public int CoveredBy { get; set; } = -1;
         public double Width { get; set; } = -1;
         public double ExtentWidth { get; set; }
         public bool Collapsed { get; set; }

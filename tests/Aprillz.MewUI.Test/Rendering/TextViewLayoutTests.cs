@@ -1,4 +1,4 @@
-using Aprillz.MewUI;
+﻿using Aprillz.MewUI;
 using Aprillz.MewUI.Rendering.Gdi;
 using Aprillz.MewUI.Text;
 using Aprillz.MewUI.Text.Editing;
@@ -345,6 +345,79 @@ public sealed class TextViewLayoutTests
             "An offset on the swallowed line still resolves to a caret rectangle.");
     }
 
+    /// <summary>
+    /// The range a line reaches is not the range that identifies its cached layout, so a line the
+    /// scan extended still answers from the cache instead of being rebuilt on every pass.
+    /// </summary>
+    [TestMethod]
+    public void AnExtendedLineKeepsItsCachedLayout()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument("first\nsecond");
+        var extensions = new TextViewExtensionPipeline { Revision = 1 };
+        var generator = new SpanningElementGenerator(startOffset: 2, documentLength: 7);
+        extensions.ElementGenerators.Add(generator);
+        extensions.LineCollapsers.Add(new CollapseLine(1));
+
+        using var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            document,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.NoWrap },
+            extensions,
+            dpi: 96);
+        view.SetViewport(new TextViewport(300, 100));
+
+        int afterFirstPass = generator.Constructions;
+        view.SetViewport(new TextViewport(300, 100));
+        view.GetLineLayout(0);
+
+        Assert.AreEqual(afterFirstPass, generator.Constructions,
+            "A line whose element reached past its end was rebuilt again.");
+    }
+
+    /// <summary>
+    /// Invalidating a line another line swallowed reaches the line that draws it, which is the only
+    /// one that will be laid out again.
+    /// </summary>
+    [TestMethod]
+    public void InvalidatingASwallowedLineRebuildsTheLineCoveringIt()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument("first\nsecond");
+        var extensions = new TextViewExtensionPipeline { Revision = 1 };
+        var generator = new SpanningElementGenerator(startOffset: 2, documentLength: 7);
+        extensions.ElementGenerators.Add(generator);
+        extensions.LineCollapsers.Add(new CollapseLine(1));
+
+        using var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            document,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.NoWrap },
+            extensions,
+            dpi: 96);
+        view.SetViewport(new TextViewport(300, 100));
+
+        int afterFirstPass = generator.Constructions;
+        view.InvalidateRange(document.GetLineByNumber(1).Offset, 1);
+
+        Assert.IsGreaterThan(afterFirstPass, generator.Constructions,
+            "The covering line kept a layout built from the text that was invalidated.");
+    }
+
     private sealed class CollapseLine(int lineNumber) : ITextLineCollapser
     {
         public bool IsCollapsed(LogicalTextLine line) => line.LineNumber == lineNumber;
@@ -353,11 +426,16 @@ public sealed class TextViewLayoutTests
     /// <summary>Stands in for one fixed document range, wherever it falls.</summary>
     private sealed class SpanningElementGenerator(int startOffset, int documentLength) : ITextElementGenerator
     {
+        public int Constructions { get; private set; }
+
         public int GetFirstInterestedOffset(in TextElementScanContext context, int scanFrom)
             => scanFrom <= startOffset ? startOffset : -1;
 
         public GeneratedTextElement? ConstructElement(in TextElementScanContext context, int offset)
-            => new GeneratedTextElement(documentLength, 1, new FixedInline());
+        {
+            Constructions++;
+            return new GeneratedTextElement(documentLength, 1, new FixedInline());
+        }
     }
 
     private sealed class TestReadOnlyDocument : IReadOnlyTextDocument
@@ -463,7 +541,7 @@ public sealed class TextViewLayoutTests
     private sealed class EllipsisInlineGenerator : ITextElementGenerator
     {
         public int GetFirstInterestedOffset(in TextElementScanContext context, int startOffset)
-            => startOffset <= context.LineStartOffset + 3 ? context.LineStartOffset + 3 : -1;
+            => startOffset <= context.ScanStartOffset + 3 ? context.ScanStartOffset + 3 : -1;
 
         public GeneratedTextElement? ConstructElement(in TextElementScanContext context, int offset)
             => new GeneratedTextElement(1, 1, new FixedInline());
@@ -478,7 +556,7 @@ public sealed class TextViewLayoutTests
     private sealed class FoldingProjection : ITextProjection
     {
         public ProjectedText Project(in TextProjectionContext context)
-            => new("abc…def".AsMemory(), new FoldingOffsetMap());
+            => new("abc?쫉ef".AsMemory(), new FoldingOffsetMap());
     }
 
     private sealed class FoldingOffsetMap : ITextOffsetMap

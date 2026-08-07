@@ -214,6 +214,11 @@ public readonly record struct TextChange(
     }
 }
 
+/// <summary>
+/// A point resolved against the view. <paramref name="LineNumber"/> is the line that was laid out,
+/// which can cover more than its own logical line, so the document line is the one holding
+/// <paramref name="DocumentOffset"/>.
+/// </summary>
 public readonly record struct TextViewHit(
     int DocumentOffset,
     int LineNumber,
