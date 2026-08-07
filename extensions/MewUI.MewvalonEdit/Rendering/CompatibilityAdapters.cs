@@ -60,12 +60,28 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
             {
                 continue;
             }
+            (int start, int length) = Project(element, context.OffsetMap);
+            if (length <= 0)
+            {
+                continue;
+            }
             output.Add(new TextPaintSpan(
-                new TextRange(element.RelativeTextOffset, element.DocumentLength),
+                new TextRange(start, length),
                 foreground,
                 background,
                 properties.TextDecorations));
         }
+    }
+
+    /// <summary>
+    /// The element's document range as columns of the laid-out text. A transformer names a document
+    /// range, and an element standing more columns in for the text it covers moves the two apart.
+    /// </summary>
+    private static (int Start, int Length) Project(VisualLineElement element, ITextOffsetMap offsetMap)
+    {
+        int start = offsetMap.MapFromSource(element.RelativeTextOffset);
+        int end = offsetMap.MapFromSource(element.RelativeTextOffset + element.DocumentLength);
+        return (start, end - start);
     }
 
     public void Transform(
@@ -88,7 +104,11 @@ internal sealed class LineTransformerAdapter(TextEditor editor) : ITextClassifie
                 Weight = properties.FontWeight ?? context.DefaultStyle.Weight,
                 Italic = properties.Italic ?? context.DefaultStyle.Italic
             };
-            geometryRuns.Add(new GeometryStyleRun(element.RelativeTextOffset, element.DocumentLength, style));
+            (int start, int length) = Project(element, context.OffsetMap);
+            if (length > 0)
+            {
+                geometryRuns.Add(new GeometryStyleRun(start, length, style));
+            }
         }
     }
 

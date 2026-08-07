@@ -169,10 +169,14 @@ public sealed class SearchPanel : ITextClassifier
             if (result.Offset >= lineEnd) break;
             int start = Math.Max(lineStart, result.Offset);
             int end = Math.Min(lineEnd, result.EndOffset);
-            if (end > start)
+            // A paint span addresses the laid-out text, which an element standing more columns in
+            // for the text it covers, such as the tab marker, has moved away from the document.
+            int projectedStart = context.OffsetMap.MapFromSource(start - lineStart);
+            int projectedEnd = context.OffsetMap.MapFromSource(end - lineStart);
+            if (projectedEnd > projectedStart)
             {
                 output.Add(new TextPaintSpan(
-                    new TextRange(start - lineStart, end - start),
+                    new TextRange(projectedStart, projectedEnd - projectedStart),
                     Background: MarkerBrush));
             }
         }
