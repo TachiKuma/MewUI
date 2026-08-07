@@ -74,6 +74,12 @@ public abstract class Selection
     public abstract Selection StartSelectionOrSetEndpoint(
         TextViewPosition startPosition, TextViewPosition endPosition);
 
+    /// <summary>
+    /// Whether this selection reaches past the end of a line. It follows the option, except for a
+    /// rectangular selection, which spans columns and so needs virtual space whatever it says.
+    /// </summary>
+    public virtual bool EnableVirtualSpace => TextArea.Options.EnableVirtualSpace;
+
     public virtual bool IsEmpty => Length == 0;
 
     /// <summary>Whether the selection reaches across more than one line.</summary>

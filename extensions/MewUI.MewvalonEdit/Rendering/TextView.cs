@@ -317,14 +317,14 @@ public sealed class TextView : MewObject, ITextEditorComponent
     /// point is outside the laid-out lines.
     /// </summary>
     public TextViewPosition? GetPosition(Point documentPoint)
-        => GetVisualLineFromVisualTop(documentPoint.Y)?.GetTextViewPosition(documentPoint, ALLOW_VIRTUAL_SPACE);
+        => GetVisualLineFromVisualTop(documentPoint.Y)?.GetTextViewPosition(documentPoint, AllowVirtualSpace);
 
     /// <summary>
     /// Position at a document-space point, rounded down to the character the point is inside. Null
     /// when the point is outside the laid-out lines.
     /// </summary>
     public TextViewPosition? GetPositionFloor(Point documentPoint)
-        => GetVisualLineFromVisualTop(documentPoint.Y)?.GetTextViewPositionFloor(documentPoint, ALLOW_VIRTUAL_SPACE);
+        => GetVisualLineFromVisualTop(documentPoint.Y)?.GetTextViewPositionFloor(documentPoint, AllowVirtualSpace);
 
     /// <summary>
     /// The laid-out line of a document line, laying it out when it is off screen. Null only before
@@ -357,7 +357,7 @@ public sealed class TextView : MewObject, ITextEditorComponent
             return default;
         }
 
-        int visualColumn = visualLine.ValidateVisualColumn(offset, position.VisualColumn, ALLOW_VIRTUAL_SPACE);
+        int visualColumn = visualLine.ValidateVisualColumn(offset, position.VisualColumn, AllowVirtualSpace);
         return visualLine.GetVisualPosition(visualColumn, position.IsAtEndOfLine, yPositionMode);
     }
 
@@ -371,9 +371,12 @@ public sealed class TextView : MewObject, ITextEditorComponent
             rect.Y - viewport.Y + Host.ScrollOffset.Y);
     }
 
-    // Becomes Options.EnableVirtualSpace once that option lands; until then no position is past
-    // the end of its line.
-    private const bool ALLOW_VIRTUAL_SPACE = false;
+    /// <summary>
+    /// Whether a position may sit past the end of its line. A rectangular selection needs it
+    /// whatever the option says, since it spans columns rather than offsets.
+    /// </summary>
+    private bool AllowVirtualSpace
+        => textArea.Options.EnableVirtualSpace || textArea.Selection is RectangleSelection;
 
     public double HorizontalOffset => Host.ScrollOffset.X;
 

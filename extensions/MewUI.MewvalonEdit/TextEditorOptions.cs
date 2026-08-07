@@ -14,6 +14,9 @@ public class TextEditorOptions : MewObject
     public static readonly MewProperty<bool> ConvertTabsToSpacesProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(ConvertTabsToSpaces), false);
 
+    public static readonly MewProperty<bool> EnableVirtualSpaceProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(EnableVirtualSpace), false);
+
     public static readonly MewProperty<bool> ShowSpacesProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowSpaces), false);
 
@@ -82,6 +85,16 @@ public class TextEditorOptions : MewObject
         return ConvertTabsToSpaces
             ? new string(' ', IndentationSize - ((column - 1) % IndentationSize))
             : "\t";
+    }
+
+    /// <summary>
+    /// Whether the caret can go past the end of a line, into virtual space. A rectangular selection
+    /// uses virtual space whatever this says, since it spans columns rather than offsets.
+    /// </summary>
+    public virtual bool EnableVirtualSpace
+    {
+        get => GetValue(EnableVirtualSpaceProperty);
+        set => SetValue(EnableVirtualSpaceProperty, value);
     }
 
     public virtual bool ShowSpaces
