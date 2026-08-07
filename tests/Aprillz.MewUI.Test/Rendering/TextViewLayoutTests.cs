@@ -276,6 +276,46 @@ public sealed class TextViewLayoutTests
             new TextParagraphStyle { MaxWidth = width, Wrapping = TextWrapping.Wrap },
             dpi: 96);
 
+    /// <summary>
+    /// Pins that a line's source range stops at its logical line, whatever an element says. An
+    /// element standing in for a range that reaches into the next line gets only the part on its
+    /// own line, and the rest keeps its own line.
+    /// </summary>
+    /// <remarks>
+    /// This is the gap `agent/mewvalonedit-parity/folding.md` 4-1 proposes to close: the reverse of
+    /// wrapping, where one visual line covers several logical lines. When that lands this test
+    /// flips - line 2 is no longer materialized on its own and line 1 carries both.
+    /// </remarks>
+    [TestMethod]
+    public void AnElementCannotMakeALineReachIntoTheNextOne()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("GDI is Windows-only.");
+            return;
+        }
+
+        var document = new TestReadOnlyDocument("first\nsecond");
+        var extensions = new TextViewExtensionPipeline { Revision = 1 };
+
+        using var factory = new GdiGraphicsFactory();
+        using var view = new TextViewLayout(
+            factory.TextEngine,
+            document,
+            new TextRunStyle("Segoe UI", 14),
+            new TextParagraphStyle { Wrapping = TextWrapping.NoWrap },
+            extensions,
+            dpi: 96);
+        view.SetViewport(new TextViewport(300, 100));
+
+        Assert.HasCount(2, view.MaterializedLines);
+        var first = view.MaterializedLines[0].LogicalLine;
+        Assert.AreEqual("first".Length, first.Length,
+            "The first line's source stops at its own line end.");
+        Assert.AreEqual(document.GetLineByNumber(1).Offset, view.MaterializedLines[1].LogicalLine.Offset,
+            "The second line is materialized on its own.");
+    }
+
     private sealed class TestReadOnlyDocument : IReadOnlyTextDocument
     {
         private string _text;
