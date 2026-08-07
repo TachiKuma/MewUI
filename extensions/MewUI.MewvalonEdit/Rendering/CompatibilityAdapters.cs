@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Editing;
 using Aprillz.MewUI.Text;
@@ -192,14 +192,14 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
         }
         // The walk restarts at the line start, and the elements it produces replace whatever the
         // previous walk of this line recorded.
-        if (startOffset == context.LineStartOffset)
+        if (startOffset == context.ScanStartOffset)
         {
-            BeginLine(context.LineStartOffset);
+            BeginLine(context.ScanStartOffset);
         }
 
         int best = -1;
         _interests.Clear();
-        WithGenerators(context.LineStartOffset, generator =>
+        WithGenerators(context.ScanStartOffset, generator =>
         {
             int interested = generator.GetFirstInterestedOffset(startOffset);
             _interests[generator] = interested;
@@ -220,7 +220,7 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
         }
 
         VisualLineElement? built = null;
-        WithGenerators(context.LineStartOffset, generator =>
+        WithGenerators(context.ScanStartOffset, generator =>
         {
             // The interest from the preceding query, as the original caches it. Asking again would
             // let a generator that counts the calls see the same offset twice.
@@ -235,8 +235,8 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
             return null;
         }
 
-        built.RelativeTextOffset = offset - context.LineStartOffset;
-        CurrentLine(context.LineStartOffset).Add(built);
+        built.RelativeTextOffset = offset - context.ScanStartOffset;
+        CurrentLine(context.ScanStartOffset).Add(built);
         // Only the columns the element paints become the object; the rest of its visual text is laid
         // out normally, which is how a tab marker paints a glyph and still reaches its tab stop.
         return new GeneratedTextElement(
