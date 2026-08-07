@@ -58,11 +58,14 @@ public sealed class MainWindow : Window
         };
 
         LoadSample(SampleText.CSharp, "C#");
+        var files = new SampleFileList();
+        files.Opened += file => LoadSample(file.ReadText(), file.HighlightingName);
         Content = new DockPanel()
             .Spacing(8)
             .Children(
                 CreateToolbar().DockTop(),
                 CreateStatusBar().DockBottom(),
+                files.DockLeft(),
                 _optionsPanel.DockRight(),
                 _editor);
     }
