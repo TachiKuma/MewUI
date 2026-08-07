@@ -14,6 +14,10 @@ public sealed class TextViewLayout : ITextViewLayout
     private readonly uint _dpi;
     private readonly TextViewExtensionPipeline _extensions;
     private readonly List<TextLineLayout> _materialized = [];
+    // What the last materialization produced, kept to tell a rebuild that changed nothing from one
+    // that did. Holds the position as well: the same layout at a new y is a change to a subscriber.
+    private readonly List<(TextLineLayout Layout, double DocumentY)> _previouslyMaterialized = [];
+    private bool _materializedValid;
     private LineState[] _states;
     private readonly LineMetricsIndex _metrics;
     private double _estimatedLineHeight;
@@ -120,6 +124,14 @@ public sealed class TextViewLayout : ITextViewLayout
             viewport.HorizontalOffset < 0 || viewport.VerticalOffset < 0)
         {
             throw new ArgumentOutOfRangeException(nameof(viewport));
+        }
+
+        // The render path applies the viewport every frame. Standing the same lines up again would
+        // announce a change that did not happen, and a subscriber that repaints on it would ask for
+        // the next frame from inside this one.
+        if (_materializedValid && Viewport == viewport && _states.Length == _document.LineCount)
+        {
+            return;
         }
 
         Viewport = viewport;
@@ -290,6 +302,7 @@ public sealed class TextViewLayout : ITextViewLayout
 
     private void DirtyLines(int firstLine, int lastLine)
     {
+        _materializedValid = false;
         for (int i = firstLine; i <= lastLine; i++)
         {
             var state = _states[i];
@@ -393,8 +406,10 @@ public sealed class TextViewLayout : ITextViewLayout
     private void MaterializeViewport()
     {
         _materialized.Clear();
+        _materializedValid = false;
         if (_states.Length == 0 || Viewport.Width <= 0 || Viewport.Height <= 0)
         {
+            _previouslyMaterialized.Clear();
             return;
         }
 
@@ -424,7 +439,13 @@ public sealed class TextViewLayout : ITextViewLayout
             _materializing = false;
         }
 
-        LinesChanged?.Invoke(this);
+        bool changed = HasMaterializationChanged();
+        RecordMaterialization();
+        _materializedValid = true;
+        if (changed)
+        {
+            LinesChanged?.Invoke(this);
+        }
 
         if (_pendingInvalidation is { } pending)
         {
@@ -432,6 +453,33 @@ public sealed class TextViewLayout : ITextViewLayout
             // it must not perform from inside the loop.
             _pendingInvalidation = null;
             InvalidateRange(pending.Offset, pending.Length);
+        }
+    }
+
+    private bool HasMaterializationChanged()
+    {
+        if (_previouslyMaterialized.Count != _materialized.Count)
+        {
+            return true;
+        }
+        for (int index = 0; index < _materialized.Count; index++)
+        {
+            (var layout, double documentY) = _previouslyMaterialized[index];
+            if (!ReferenceEquals(layout, _materialized[index]) ||
+                documentY != _materialized[index].DocumentY)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void RecordMaterialization()
+    {
+        _previouslyMaterialized.Clear();
+        foreach (var layout in _materialized)
+        {
+            _previouslyMaterialized.Add((layout, layout.DocumentY));
         }
     }
 
@@ -788,12 +836,14 @@ public sealed class TextViewLayout : ITextViewLayout
         }
         _states = replacement;
         _metrics.Reset(_states);
+        _materializedValid = false;
         ApplyLineCollapsing();
     }
 
     private void ApplyLineCollapsing()
     {
         if (_extensions.LineCollapsers.Count == 0) return;
+        _materializedValid = false;
         for (int lineNumber = 0; lineNumber < _states.Length; lineNumber++)
         {
             var source = _document.GetLineByNumber(lineNumber);
@@ -817,6 +867,12 @@ public sealed class TextViewLayout : ITextViewLayout
     private void SetStateMetrics(int lineNumber, double height, double width)
     {
         var state = _states[lineNumber];
+        // A height that moved shifts every line below it, so a laying-out query made outside the
+        // materialization loop leaves the standing result out of date.
+        if (state.Height != height)
+        {
+            _materializedValid = false;
+        }
         state.Height = height;
         state.ExtentWidth = width;
         _metrics.Update(lineNumber, height, width);
