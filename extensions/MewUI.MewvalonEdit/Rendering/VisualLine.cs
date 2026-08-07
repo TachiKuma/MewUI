@@ -50,6 +50,73 @@ public sealed class VisualLine
 
     public double Height => _layout.Height;
 
+    /// <summary>The rows this line wraps into, in order. A line that does not wrap has one.</summary>
+    public IReadOnlyList<VisualTextLine> TextLines => _layout.VisualLines;
+
+    /// <summary>
+    /// <see cref="VisualLength"/> plus the column standing for the line terminator, which is the
+    /// position a selection reaching past the end of the line stops at.
+    /// </summary>
+    public int VisualLengthWithEndOfLineMarker
+        => VisualLength + (FirstDocumentLine.DelimiterLength > 0 ? 1 : 0);
+
+    /// <summary>First visual column of <paramref name="row"/>.</summary>
+    public int GetTextLineVisualStartColumn(VisualTextLine row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return row.LogicalStart;
+    }
+
+    /// <summary>Metrics the engine measured for <paramref name="row"/>.</summary>
+    public TextLayoutLineMetrics GetTextLineMetrics(VisualTextLine row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return row.Layout.Lines[row.LayoutLineIndex];
+    }
+
+    /// <summary>Document-space top of <paramref name="row"/>, measured as <paramref name="yPositionMode"/> asks.</summary>
+    public double GetTextLineVisualYPosition(VisualTextLine row, VisualYPosition yPositionMode)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        return GetRowVisualYPosition(row, yPositionMode);
+    }
+
+    /// <summary>
+    /// Document-space x of a visual column, read on <paramref name="row"/> rather than wherever the
+    /// column resolves. At the seam of a wrap the column belongs to two rows and they answer with
+    /// different x, which is why the caller names the row.
+    /// </summary>
+    public double GetTextLineVisualXPosition(VisualTextLine row, int visualColumn)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        int rowEnd = row.LogicalStart + row.LogicalLength;
+        if (visualColumn >= rowEnd && !ReferenceEquals(row, TextLines[^1]))
+        {
+            return row.Bounds.Right;
+        }
+        double x = _layout.DocumentX
+            + _layout.GetCaretBounds(new CharacterHit(Math.Min(visualColumn, VisualLength), 0)).X;
+        if (visualColumn > VisualLength)
+        {
+            x += (visualColumn - VisualLength) * _textView.WideSpaceWidth;
+        }
+        return x;
+    }
+
+    /// <summary>Bounds of a visual column range that lies inside <paramref name="row"/>.</summary>
+    public void GetTextBounds(VisualTextLine row, int startColumn, int length, IList<Rect> output)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        ArgumentNullException.ThrowIfNull(output);
+        int rowEnd = row.LogicalStart + row.LogicalLength;
+        int start = Math.Clamp(startColumn, row.LogicalStart, rowEnd);
+        int end = Math.Clamp(startColumn + length, start, rowEnd);
+        if (end > start)
+        {
+            _layout.GetRangeBounds(new TextRange(start, end - start), output);
+        }
+    }
+
     /// <summary>Visual column of a document offset relative to <see cref="StartOffset"/>.</summary>
     public int GetVisualColumn(int relativeTextOffset)
         => _layout.MapSourceOffsetToProjected(Math.Clamp(relativeTextOffset, 0, DocumentLength));

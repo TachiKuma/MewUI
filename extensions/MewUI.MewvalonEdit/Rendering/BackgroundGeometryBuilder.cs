@@ -1,41 +1,55 @@
 using Aprillz.MewUI.MewvalonEdit.Document;
-using Aprillz.MewUI.MewvalonEdit.Editing;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Rendering;
 
-/// <summary>Maps document segments to view rectangles and geometry, as AvalonEdit's builder does for background renderers.</summary>
+/// <summary>
+/// Builds a geometry for the background of a document segment. Rectangles that touch are joined
+/// into one outline, so a selection spanning several lines is drawn as a single rounded shape
+/// rather than a stack of boxes.
+/// </summary>
 public sealed class BackgroundGeometryBuilder
 {
-    private readonly List<Rect> _rectangles = [];
+    private readonly PathGeometry _figures = new();
+    private readonly List<Segment> _figure = [];
+    private bool _hasFigure;
+    private Point _figureStart;
+    private int _insertionIndex;
+    private double _lastTop, _lastBottom, _lastLeft, _lastRight;
 
-    /// <summary>Radius of the geometry's corners.</summary>
+    /// <summary>Radius of the rounded corners.</summary>
     public double CornerRadius { get; set; }
 
-    /// <summary>Snaps rectangle edges to whole pixels, keeping 1px marker borders crisp.</summary>
+    /// <summary>
+    /// Whether to align to whole pixels. With <see cref="BorderThickness"/> at 0 the geometry is
+    /// aligned; with a non-zero thickness the outer edge of the border is.
+    /// </summary>
     public bool AlignToWholePixels { get; set; }
 
-    /// <summary>Half of this inset is taken off each rectangle so a stroked border stays inside it.</summary>
+    /// <summary>
+    /// Border thickness the geometry will be stroked with. Only has an effect while
+    /// <see cref="AlignToWholePixels"/> is set.
+    /// </summary>
     public double BorderThickness { get; set; }
 
-    /// <summary>Extends rectangles that reach a line end to the right edge of the viewport.</summary>
+    /// <summary>Whether to extend the rectangles to full width at a line end.</summary>
     public bool ExtendToFullWidthAtLineEnd { get; set; }
 
-    /// <summary>Adds the visible rectangles of the segment.</summary>
+    /// <summary>Adds the specified segment to the geometry.</summary>
     public void AddSegment(TextView textView, ISegment segment)
     {
         ArgumentNullException.ThrowIfNull(textView);
         ArgumentNullException.ThrowIfNull(segment);
-        foreach (var rect in GetRectsCore(textView, segment.Offset, segment.EndOffset, ExtendToFullWidthAtLineEnd))
+        foreach (var rect in GetRectsForSegment(textView, segment, ExtendToFullWidthAtLineEnd))
         {
             AddRectangle(textView, rect);
         }
     }
 
     /// <summary>
-    /// Adds one rectangle in view coordinates, aligned per <see cref="AlignToWholePixels"/>. The
-    /// view supplies the pixel size; use the four-coordinate overload for already aligned input.
+    /// Adds a rectangle, aligning it as <see cref="AlignToWholePixels"/> asks. Use the
+    /// four-coordinate overload when the coordinates are already aligned.
     /// </summary>
     public void AddRectangle(TextView textView, Rect rectangle)
     {
@@ -48,61 +62,112 @@ public sealed class BackgroundGeometryBuilder
 
         // Rounded on the outer edge and offset back by half the border, so a stroke of that width
         // sits centred on a device pixel instead of straddling two.
-        double scale = textView.DpiScale;
+        double dpiScale = textView.DpiScale;
         double halfBorder = 0.5 * BorderThickness;
         AddRectangle(
-            LayoutRounding.RoundToPixel(rectangle.Left - halfBorder, scale) + halfBorder,
-            LayoutRounding.RoundToPixel(rectangle.Top - halfBorder, scale) + halfBorder,
-            LayoutRounding.RoundToPixel(rectangle.Right + halfBorder, scale) - halfBorder,
-            LayoutRounding.RoundToPixel(rectangle.Bottom + halfBorder, scale) - halfBorder);
+            LayoutRounding.RoundToPixel(rectangle.Left - halfBorder, dpiScale) + halfBorder,
+            LayoutRounding.RoundToPixel(rectangle.Top - halfBorder, dpiScale) + halfBorder,
+            LayoutRounding.RoundToPixel(rectangle.Right + halfBorder, dpiScale) - halfBorder,
+            LayoutRounding.RoundToPixel(rectangle.Bottom + halfBorder, dpiScale) - halfBorder);
     }
 
-    /// <summary>Adds one rectangle whose coordinates are already aligned.</summary>
+    /// <summary>
+    /// Adds a rectangle whose coordinates are already aligned. A rectangle whose top meets the
+    /// previous bottom continues that outline instead of starting a new one.
+    /// </summary>
     public void AddRectangle(double left, double top, double right, double bottom)
     {
-        if (right > left && bottom > top)
+        if (!IsClose(top, _lastBottom))
         {
-            _rectangles.Add(new Rect(left, top, right - left, bottom - top));
+            CloseFigure();
         }
+        if (!_hasFigure)
+        {
+            _hasFigure = true;
+            _figure.Clear();
+            _figureStart = new Point(left, top + CornerRadius);
+            if (Math.Abs(left - right) > CornerRadius)
+            {
+                _figure.Add(Segment.Arc(left + CornerRadius, top, clockwise: true));
+                _figure.Add(Segment.Line(right - CornerRadius, top));
+                _figure.Add(Segment.Arc(right, top + CornerRadius, clockwise: true));
+            }
+            _figure.Add(Segment.Line(right, bottom - CornerRadius));
+            _insertionIndex = _figure.Count;
+        }
+        else
+        {
+            // The right edge grows downwards and the left edge upwards, so the segments of each go
+            // in at the seam between them rather than at either end of the list.
+            if (!IsClose(_lastRight, right))
+            {
+                double radius = right < _lastRight ? -CornerRadius : CornerRadius;
+                bool inward = right < _lastRight;
+                _figure.Insert(_insertionIndex++, Segment.Arc(_lastRight + radius, _lastBottom, inward));
+                _figure.Insert(_insertionIndex++, Segment.Line(right - radius, top));
+                _figure.Insert(_insertionIndex++, Segment.Arc(right, top + CornerRadius, !inward));
+            }
+            _figure.Insert(_insertionIndex++, Segment.Line(right, bottom - CornerRadius));
+            _figure.Insert(_insertionIndex, Segment.Line(_lastLeft, _lastTop + CornerRadius));
+            if (!IsClose(_lastLeft, left))
+            {
+                double radius = left < _lastLeft ? CornerRadius : -CornerRadius;
+                bool outward = left < _lastLeft;
+                _figure.Insert(_insertionIndex, Segment.Arc(_lastLeft, _lastBottom - CornerRadius, !outward));
+                _figure.Insert(_insertionIndex, Segment.Line(_lastLeft - radius, _lastBottom));
+                _figure.Insert(_insertionIndex, Segment.Arc(left + radius, _lastBottom, outward));
+            }
+        }
+        _lastTop = top;
+        _lastBottom = bottom;
+        _lastLeft = left;
+        _lastRight = right;
     }
 
-    /// <summary>Geometry of everything added so far, or null when nothing was added.</summary>
-    public PathGeometry? CreateGeometry()
+    /// <summary>Closes the outline built so far, so the next rectangle starts a new one.</summary>
+    public void CloseFigure()
     {
-        if (_rectangles.Count == 0)
+        if (!_hasFigure)
         {
-            return null;
+            return;
         }
-        var geometry = new PathGeometry();
-        foreach (var rect in _rectangles)
+
+        _figure.Insert(_insertionIndex, Segment.Line(_lastLeft, _lastTop + CornerRadius));
+        if (Math.Abs(_lastLeft - _lastRight) > CornerRadius)
         {
-            double radius = Math.Min(CornerRadius, Math.Min(rect.Width, rect.Height) / 2);
-            if (radius <= 0)
+            _figure.Insert(_insertionIndex, Segment.Arc(_lastLeft, _lastBottom - CornerRadius, clockwise: true));
+            _figure.Insert(_insertionIndex, Segment.Line(_lastLeft + CornerRadius, _lastBottom));
+            _figure.Insert(_insertionIndex, Segment.Arc(_lastRight - CornerRadius, _lastBottom, clockwise: true));
+        }
+
+        _figures.MoveTo(_figureStart);
+        foreach (var segment in _figure)
+        {
+            if (segment.IsArc)
             {
-                geometry.MoveTo(rect.X, rect.Y);
-                geometry.LineTo(rect.Right, rect.Y);
-                geometry.LineTo(rect.Right, rect.Bottom);
-                geometry.LineTo(rect.X, rect.Bottom);
-                geometry.Close();
+                _figures.SvgArcTo(CornerRadius, CornerRadius, 0, false, segment.Clockwise, segment.X, segment.Y);
             }
             else
             {
-                geometry.MoveTo(rect.X + radius, rect.Y);
-                geometry.LineTo(rect.Right - radius, rect.Y);
-                geometry.ArcTo(rect.Right, rect.Y, rect.Right, rect.Y + radius, radius);
-                geometry.LineTo(rect.Right, rect.Bottom - radius);
-                geometry.ArcTo(rect.Right, rect.Bottom, rect.Right - radius, rect.Bottom, radius);
-                geometry.LineTo(rect.X + radius, rect.Bottom);
-                geometry.ArcTo(rect.X, rect.Bottom, rect.X, rect.Bottom - radius, radius);
-                geometry.LineTo(rect.X, rect.Y + radius);
-                geometry.ArcTo(rect.X, rect.Y, rect.X + radius, rect.Y, radius);
-                geometry.Close();
+                _figures.LineTo(segment.X, segment.Y);
             }
         }
-        return geometry;
+        _figures.Close();
+        _figure.Clear();
+        _hasFigure = false;
     }
 
-    /// <summary>Rectangles covering the visible parts of <paramref name="segment"/>, in view coordinates.</summary>
+    /// <summary>The geometry of everything added so far, or null when nothing was added.</summary>
+    public PathGeometry? CreateGeometry()
+    {
+        CloseFigure();
+        return _figures.IsEmpty ? null : _figures;
+    }
+
+    /// <summary>
+    /// The rectangles the segment is shown in. Usually one per line inside the segment, but more
+    /// where a line wraps or bidirectional text splits it.
+    /// </summary>
     public static IEnumerable<Rect> GetRectsForSegment(
         TextView textView,
         ISegment segment,
@@ -110,49 +175,191 @@ public sealed class BackgroundGeometryBuilder
     {
         ArgumentNullException.ThrowIfNull(textView);
         ArgumentNullException.ThrowIfNull(segment);
-        return GetRectsCore(textView, segment.Offset, segment.EndOffset, extendToFullWidthAtLineEnd);
+        return GetRectsForSegmentImpl(textView, segment, extendToFullWidthAtLineEnd);
     }
 
-    private static List<Rect> GetRectsCore(TextView textView, int startOffset, int endOffset, bool extendToFullWidth)
+    private static IEnumerable<Rect> GetRectsForSegmentImpl(
+        TextView textView, ISegment segment, bool extendToFullWidthAtLineEnd)
     {
-        var result = new List<Rect>();
-        var surface = textView.Surface;
-        var viewport = surface.TextViewportBounds;
-        var bounds = new List<Rect>();
-        foreach (var line in surface.VisibleTextLines)
+        int segmentStart = Math.Clamp(segment.Offset, 0, textView.Document.TextLength);
+        int segmentEnd = Math.Clamp(segment.Offset + segment.Length, 0, textView.Document.TextLength);
+        var start = new TextViewPosition(textView.Document.GetLocation(segmentStart));
+        var end = new TextViewPosition(textView.Document.GetLocation(segmentEnd));
+
+        foreach (var visualLine in textView.VisualLines)
         {
-            var logical = line.LogicalLine;
-            int lineStart = logical.Offset;
-            int lineEnd = lineStart + logical.Length;
-            if (endOffset <= lineStart || startOffset > lineEnd)
+            int lineStart = visualLine.StartOffset;
+            if (lineStart > segmentEnd)
+            {
+                break;
+            }
+            int lineEnd = lineStart + visualLine.DocumentLength;
+            if (lineEnd < segmentStart)
             {
                 continue;
             }
 
-            int from = Math.Max(startOffset, lineStart) - lineStart;
-            int to = Math.Min(endOffset, lineEnd) - lineStart;
-            double lineTop = viewport.Y + line.DocumentY - surface.VerticalOffset;
-            double left = viewport.X - surface.HorizontalOffset;
-
-            if (to <= from)
+            int segmentStartVC = segmentStart < lineStart
+                ? 0
+                : visualLine.ValidateVisualColumn(start, extendToFullWidthAtLineEnd);
+            int segmentEndVC;
+            if (segmentEnd > lineEnd)
             {
-                // Zero-length or line-end match: fall back to the caret slot so empty
-                // selections and end-of-line markers still produce a rectangle.
-                var caret = line.GetCaretBounds(new CharacterHit(Math.Clamp(from, 0, logical.Length), 0));
-                result.Add(new Rect(left + caret.X, lineTop + caret.Y, extendToFullWidth ? viewport.Width : 1, caret.Height));
-                continue;
+                segmentEndVC = extendToFullWidthAtLineEnd
+                    ? int.MaxValue
+                    : visualLine.VisualLengthWithEndOfLineMarker;
+            }
+            else
+            {
+                segmentEndVC = visualLine.ValidateVisualColumn(end, extendToFullWidthAtLineEnd);
             }
 
-            bounds.Clear();
-            line.GetRangeBounds(new TextRange(from, to - from), bounds);
-            foreach (var rect in bounds)
+            foreach (var rect in ProcessTextLines(textView, visualLine, segmentStartVC, segmentEndVC))
             {
-                double width = extendToFullWidth && to >= logical.Length
-                    ? Math.Max(rect.Width, viewport.Right - (left + rect.X))
-                    : rect.Width;
-                result.Add(new Rect(left + rect.X, lineTop + rect.Y, width, rect.Height));
+                yield return rect;
             }
         }
-        return result;
+    }
+
+    /// <summary>The rectangles of a visual column range, one per row the range covers.</summary>
+    public static IEnumerable<Rect> GetRectsFromVisualSegment(
+        TextView textView, VisualLine line, int startVC, int endVC)
+    {
+        ArgumentNullException.ThrowIfNull(textView);
+        ArgumentNullException.ThrowIfNull(line);
+        return ProcessTextLines(textView, line, startVC, endVC);
+    }
+
+    private static IEnumerable<Rect> ProcessTextLines(
+        TextView textView, VisualLine visualLine, int segmentStartVC, int segmentEndVC)
+    {
+        var rows = visualLine.TextLines;
+        var lastRow = rows[^1];
+        var surface = textView.Surface;
+        var viewport = surface.TextViewportBounds;
+        double scrollX = surface.HorizontalOffset - viewport.X;
+        double scrollY = surface.VerticalOffset - viewport.Y;
+        var bounds = new List<Rect>();
+        double lineLeft = visualLine.GetVisualXPosition(0);
+
+        for (int index = 0; index < rows.Count; index++)
+        {
+            var row = rows[index];
+            var metrics = visualLine.GetTextLineMetrics(row);
+            double y = visualLine.GetTextLineVisualYPosition(row, VisualYPosition.LineTop);
+            int visualStartCol = visualLine.GetTextLineVisualStartColumn(row);
+            int visualEndCol = visualStartCol + row.LogicalLength;
+            if (ReferenceEquals(row, lastRow))
+            {
+                visualEndCol -= 1; // one position for the end of the paragraph
+            }
+            else
+            {
+                visualEndCol -= metrics.TrailingWhitespaceLength;
+            }
+
+            if (segmentEndVC < visualStartCol)
+            {
+                break;
+            }
+            if (!ReferenceEquals(row, lastRow) && segmentStartVC > visualEndCol)
+            {
+                continue;
+            }
+            int segmentStartVCInLine = Math.Max(segmentStartVC, visualStartCol);
+            int segmentEndVCInLine = Math.Min(segmentEndVC, visualEndCol);
+            y -= scrollY;
+            var lastRect = Rect.Empty;
+            if (segmentStartVCInLine == segmentEndVCInLine)
+            {
+                // A zero-width range still has to produce a rectangle, or an empty line inside the
+                // selection would show nothing. The two skips drop the duplicate a wrap boundary
+                // would emit, since one offset maps to the end of a row and the start of the next.
+                if (segmentEndVCInLine == visualEndCol && index < rows.Count - 1 &&
+                    segmentEndVC > segmentEndVCInLine && metrics.TrailingWhitespaceLength == 0)
+                {
+                    continue;
+                }
+                if (segmentStartVCInLine == visualStartCol && index > 0 &&
+                    segmentStartVC < segmentStartVCInLine &&
+                    visualLine.GetTextLineMetrics(rows[index - 1]).TrailingWhitespaceLength == 0)
+                {
+                    continue;
+                }
+                double pos = visualLine.GetTextLineVisualXPosition(row, segmentStartVCInLine) - scrollX;
+                lastRect = new Rect(pos, y, textView.EmptyLineSelectionWidth, row.Bounds.Height);
+            }
+            else if (segmentStartVCInLine <= visualEndCol)
+            {
+                bounds.Clear();
+                visualLine.GetTextBounds(
+                    row, segmentStartVCInLine, segmentEndVCInLine - segmentStartVCInLine, bounds);
+                foreach (var bound in bounds)
+                {
+                    double left = lineLeft + bound.X - scrollX;
+                    double right = left + bound.Width;
+                    if (!lastRect.IsEmpty)
+                    {
+                        yield return lastRect;
+                    }
+                    // left > right is possible in right-to-left runs.
+                    lastRect = new Rect(Math.Min(left, right), y, Math.Abs(right - left), row.Bounds.Height);
+                }
+            }
+
+            // A range reaching past the row end continues into virtual space or into the next row,
+            // and the rectangle has to reach that far with it.
+            if (segmentEndVC > visualEndCol)
+            {
+                double left;
+                if (segmentStartVC > visualLine.VisualLengthWithEndOfLineMarker)
+                {
+                    left = visualLine.GetTextLineVisualXPosition(lastRow, segmentStartVC);
+                }
+                else
+                {
+                    // Everything up to visualEndCol is already out, so only the remainder is left.
+                    // A wrapped row's visualEndCol leaves out the whitespace the wrap hid, which has
+                    // to be covered here; the last row's already includes it.
+                    left = row.Bounds.X +
+                        (ReferenceEquals(row, lastRow) ? metrics.Bounds.Width : metrics.VisibleWidth);
+                }
+                double right = !ReferenceEquals(row, lastRow) || segmentEndVC == int.MaxValue
+                    ? Math.Max(surface.ExtentWidth, viewport.Width)
+                    : visualLine.GetTextLineVisualXPosition(lastRow, segmentEndVC);
+
+                left -= scrollX;
+                right -= scrollX;
+                var extendSelection = new Rect(
+                    Math.Min(left, right), y, Math.Abs(right - left), row.Bounds.Height);
+                if (lastRect.IsEmpty)
+                {
+                    yield return extendSelection;
+                }
+                else if (extendSelection.IntersectsWith(lastRect))
+                {
+                    yield return lastRect.Union(extendSelection);
+                }
+                else
+                {
+                    // An end of line inside a right-to-left run leaves the two apart.
+                    yield return lastRect;
+                    yield return extendSelection;
+                }
+            }
+            else
+            {
+                yield return lastRect;
+            }
+        }
+    }
+
+    private static bool IsClose(double left, double right) => Math.Abs(left - right) < 0.01;
+
+    private readonly record struct Segment(bool IsArc, double X, double Y, bool Clockwise)
+    {
+        public static Segment Line(double x, double y) => new(false, x, y, false);
+
+        public static Segment Arc(double x, double y, bool clockwise) => new(true, x, y, clockwise);
     }
 }

@@ -77,6 +77,20 @@ public sealed class TextView : MewObject, ITextEditorComponent
         set => SetValue(NonPrintableCharacterBrushProperty, value);
     }
 
+    public static readonly MewProperty<double> EmptyLineSelectionWidthProperty =
+        MewProperty<double>.Register<TextView>(nameof(EmptyLineSelectionWidth), 1.0,
+            MewPropertyOptions.AffectsRender);
+
+    /// <summary>
+    /// Width of the selection rectangle drawn where a selected line has nothing on it, so a
+    /// multi-line selection does not break across an empty line.
+    /// </summary>
+    public double EmptyLineSelectionWidth
+    {
+        get => GetValue(EmptyLineSelectionWidthProperty);
+        set => SetValue(EmptyLineSelectionWidthProperty, value);
+    }
+
     public static readonly MewProperty<Color?> FoldingMarkerBrushProperty =
         MewProperty<Color?>.Register<TextView>(nameof(FoldingMarkerBrush), null,
             MewPropertyOptions.AffectsRender);
