@@ -247,6 +247,8 @@ public sealed class TextArea : MewObject, ITextEditorComponent
 
     private void OnEditingStateChanged()
     {
+        // After the edit finished recording, which is the first moment the history answers for it.
+        Document.NotifyUndoHistoryChanged();
         Caret.RaisePositionChanged();
         if (!_applyingSelection)
         {

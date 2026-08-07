@@ -8,16 +8,17 @@ namespace Aprillz.MewUI.MewvalonEdit.Document;
 /// edits line by line, such as indenting a block, would otherwise cost one undo step per line.
 /// </summary>
 /// <remarks>
-/// The original raises <c>PropertyChanged</c> for <see cref="CanUndo"/> and <see cref="CanRedo"/>.
-/// These read the document instead, because the core raises no signal once the history has changed:
-/// its own change event runs while the edit is still being recorded. A binding over them therefore
-/// has nothing to follow yet.
+/// The original raises <c>PropertyChanged</c> for <c>CanUndo</c> and <c>CanRedo</c>. MewUI has no
+/// such interface, so each is its own event. The document's own change event is no substitute: it
+/// runs while the edit is still being recorded, so the history has not changed yet when it fires.
 /// </remarks>
 public sealed class UndoStack
 {
     private readonly EditableTextDocument _document;
     private IDisposable? _group;
     private int _groupDepth;
+    private bool _lastCanUndo;
+    private bool _lastCanRedo;
 
     internal UndoStack(TextDocument document) => _document = document.CoreDocument;
 
@@ -26,6 +27,32 @@ public sealed class UndoStack
 
     /// <summary>Whether there is an undone edit to redo.</summary>
     public bool CanRedo => _document.CanRedo;
+
+    /// <summary>Raised after <see cref="CanUndo"/> changed.</summary>
+    public event EventHandler? CanUndoChanged;
+
+    /// <summary>Raised after <see cref="CanRedo"/> changed.</summary>
+    public event EventHandler? CanRedoChanged;
+
+    /// <summary>
+    /// Raises the events whose value changed. Called once an edit, an undo or a redo has finished
+    /// recording, which is the first moment the history answers for what just happened.
+    /// </summary>
+    internal void NotifyHistoryChanged()
+    {
+        bool canUndo = _document.CanUndo;
+        if (canUndo != _lastCanUndo)
+        {
+            _lastCanUndo = canUndo;
+            CanUndoChanged?.Invoke(this, EventArgs.Empty);
+        }
+        bool canRedo = _document.CanRedo;
+        if (canRedo != _lastCanRedo)
+        {
+            _lastCanRedo = canRedo;
+            CanRedoChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>
     /// Most recent edits to keep, oldest dropped past it. Negative keeps every edit; zero records
@@ -78,13 +105,27 @@ public sealed class UndoStack
     }
 
     /// <summary>Undoes one step. False when there was nothing to undo.</summary>
-    public bool Undo() => _document.Undo();
+    public bool Undo()
+    {
+        bool undone = _document.Undo();
+        NotifyHistoryChanged();
+        return undone;
+    }
 
     /// <summary>Redoes one step. False when there was nothing to redo.</summary>
-    public bool Redo() => _document.Redo();
+    public bool Redo()
+    {
+        bool redone = _document.Redo();
+        NotifyHistoryChanged();
+        return redone;
+    }
 
     /// <summary>Drops both stacks, so what is in the document becomes the starting point.</summary>
-    public void ClearAll() => _document.ClearUndoHistory();
+    public void ClearAll()
+    {
+        _document.ClearUndoHistory();
+        NotifyHistoryChanged();
+    }
 
     private sealed class GroupScope(UndoStack stack) : IDisposable
     {

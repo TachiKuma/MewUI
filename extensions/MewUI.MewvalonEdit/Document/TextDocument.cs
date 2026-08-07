@@ -12,6 +12,9 @@ public sealed class TextDocument : ITextSource
     private TextSourceVersion _version;
     private ServiceContainer? _services;
     private UndoStack? _undoStack;
+    // Records edits made with no editor attached. Created on first such edit, so a document that
+    // only ever backs an editor never builds one.
+    private TextEditorSession? _session;
     private string? _fileName;
     private int _lastTextLength;
     private int _lastLineCount;
@@ -185,9 +188,20 @@ public sealed class TextDocument : ITextSource
         }
         else
         {
-            _document.Replace(offset, length, text);
+            // Through a session even with no editor attached: an edit applied to the document
+            // directly is unrecorded, and the core drops the whole history when it sees one, so a
+            // document edited on its own would lose everything undoable rather than gain a step.
+            (_session ??= new TextEditorSession(_document)).ReplaceRange(offset, length, text);
         }
+        _undoStack?.NotifyHistoryChanged();
     }
+
+    /// <summary>
+    /// Tells the stack that an edit finished recording. The editor calls it after its own editing
+    /// state settled, which covers typing and everything else that never goes through
+    /// <see cref="Replace(int, int, string)"/>.
+    /// </summary>
+    internal void NotifyUndoHistoryChanged() => _undoStack?.NotifyHistoryChanged();
     public void Replace(ISegment segment, string? text)
     {
         ArgumentNullException.ThrowIfNull(segment);

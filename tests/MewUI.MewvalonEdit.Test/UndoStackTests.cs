@@ -73,6 +73,56 @@ public sealed class UndoStackTests
         Assert.IsFalse(stack.CanRedo);
     }
 
+    /// <summary>
+    /// A toolbar button follows these. The document's own change event is no substitute: it runs
+    /// while the edit is still being recorded, so the history has not changed yet when it fires.
+    /// </summary>
+    [TestMethod]
+    public void TheStackReportsWhenUndoBecomesAvailable()
+    {
+        var document = new TextDocument("abc");
+        var stack = document.UndoStack;
+        int undoChanges = 0;
+        int redoChanges = 0;
+        stack.CanUndoChanged += (_, _) => undoChanges++;
+        stack.CanRedoChanged += (_, _) => redoChanges++;
+
+        document.Insert(0, "x");
+        Assert.AreEqual(1, undoChanges);
+        Assert.AreEqual(0, redoChanges);
+
+        stack.Undo();
+        Assert.AreEqual(2, undoChanges, "Undo emptied the undo stack.");
+        Assert.AreEqual(1, redoChanges);
+    }
+
+    [TestMethod]
+    public void TheStackReportsNothingWhenAvailabilityDidNotChange()
+    {
+        var document = new TextDocument("abc");
+        var stack = document.UndoStack;
+        document.Insert(0, "x");
+        int undoChanges = 0;
+        stack.CanUndoChanged += (_, _) => undoChanges++;
+
+        document.Insert(0, "y");
+
+        Assert.AreEqual(0, undoChanges, "Undo was already available.");
+    }
+
+    [TestMethod]
+    public void TypingReportsThroughTheEditor()
+    {
+        var editor = new TextEditor { Text = "abc" };
+        int undoChanges = 0;
+        editor.Document.UndoStack.CanUndoChanged += (_, _) => undoChanges++;
+
+        editor.Document.Insert(0, "x");
+
+        Assert.AreEqual(1, undoChanges);
+        Assert.IsTrue(editor.Document.UndoStack.CanUndo);
+    }
+
     [TestMethod]
     public void EndingAGroupThatWasNeverStartedThrows()
     {
@@ -139,7 +189,7 @@ public sealed class UndoStackTests
     [TestMethod]
     public void RunUpdateGroupsWhatItRuns()
     {
-        var document = new TextEditor { Text = string.Empty }.Document;
+        var document = new TextDocument(string.Empty);
 
         document.RunUpdate(() =>
         {
@@ -158,7 +208,7 @@ public sealed class UndoStackTests
     [TestMethod]
     public void IndentingABlockUndoesAsOneStep()
     {
-        var document = new TextEditor { Text = "a\n    b\nc\nd" }.Document;
+        var document = new TextDocument("a\n    b\nc\nd");
         var strategy = new DefaultIndentationStrategy();
 
         strategy.IndentLines(document, 2, 4);
