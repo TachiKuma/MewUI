@@ -23,6 +23,23 @@ public sealed class HighlightingTests
         Assert.IsTrue(elements.Any(element => element.RelativeTextOffset == 7 && element.DocumentLength == 6));
         Assert.IsTrue(elements.Any(element => element.DocumentLength == 6 && element.RelativeTextOffset > 7));
     }
+
+    /// <summary>
+    /// Most definitions write fontWeight without naming a family. Writing an empty family in its
+    /// place leaves the run with no font, and the text engine rejects the style outright.
+    /// </summary>
+    [TestMethod]
+    public void ABoldScopeWithNoFontFamilyLeavesTheFamilyInherited()
+    {
+        var definition = HighlightingManager.Instance.GetDefinition("C#");
+        Assert.IsNotNull(definition);
+
+        var elements = HighlightingTestHost.Colorize(definition, "public");
+
+        var keyword = elements.First(element => element.RelativeTextOffset == 0);
+        Assert.AreEqual(FontWeight.Bold, keyword.TextRunProperties.FontWeight);
+        Assert.IsNull(keyword.TextRunProperties.FontFamily);
+    }
 }
 
 /// <summary>

@@ -15,23 +15,24 @@ public sealed class DocumentHighlighterTests
     }
 
     /// <summary>
-    /// Rules are tried in registration order and the first one to match a position keeps it, so a
-    /// JSON key stays a key even though the plain string rule registered after it matches the same
-    /// text. Only one scan path may exist, or the two disagree on exactly this.
+    /// A span carries its own rule set, so the same quoted text is a field name inside an object
+    /// and a plain string inside an expression. Flattening the sets into one would make both the
+    /// same colour.
     /// </summary>
     [TestMethod]
-    public void EarlierRulesWinWhereTheyOverlapLaterOnes()
+    public void NestedRuleSetsTellAJsonKeyFromAStringValue()
     {
-        var definition = HighlightingManager.Instance.GetDefinition("JSON");
+        var definition = HighlightingManager.Instance.GetDefinition("Json");
         Assert.IsNotNull(definition);
-        Assert.IsEmpty(definition.MainRuleSet.Spans, "This guards the definition shape the case relies on.");
         var document = new TextDocument("""{ "name": "value" }""");
         using var highlighter = new DocumentHighlighter(document, definition);
 
         var line = highlighter.HighlightLine(1);
 
-        var key = line.Sections.Single(section => section.Offset == 2);
-        var value = line.Sections.Single(section => section.Offset == 10);
+        var key = line.Sections.First(section => section.Color.Name == "FieldName");
+        var value = line.Sections.First(section => section.Color.Name == "String");
+        Assert.AreEqual(2, key.Offset);
+        Assert.AreEqual(10, value.Offset);
         Assert.AreNotEqual(key.Color.Foreground, value.Color.Foreground);
     }
 
@@ -44,9 +45,9 @@ public sealed class DocumentHighlighterTests
         var middle = highlighter.HighlightLine(2);
 
         var section = middle.Sections.Single();
-        Assert.AreEqual(0, section.Offset);
+        Assert.AreEqual(document.GetLineByNumber(2).Offset, section.Offset);
         Assert.AreEqual("still comment".Length, section.Length);
-        Assert.AreEqual(Color.FromRgb(106, 153, 85), section.Color.Foreground);
+        Assert.AreEqual("Comment", section.Color.Name);
     }
 
     [TestMethod]
@@ -58,7 +59,7 @@ public sealed class DocumentHighlighterTests
         var second = highlighter.HighlightLine(2);
 
         Assert.IsTrue(second.Sections.Any(section =>
-            section.Color.Foreground == Color.FromRgb(78, 201, 176) && section.Length == 3),
+            section.Color.Name == "ValueTypeKeywords" && section.Length == 3),
             "The type keyword after the closing delimiter should be colored by the main rule set.");
     }
 
@@ -70,7 +71,8 @@ public sealed class DocumentHighlighterTests
 
         var second = highlighter.HighlightLine(2);
 
-        Assert.IsTrue(second.Sections.Any(section => section.Offset == 0),
+        int lineStart = document.GetLineByNumber(2).Offset;
+        Assert.IsTrue(second.Sections.Any(section => section.Offset == lineStart),
             "The continuation line of a verbatim string must be colored.");
     }
 

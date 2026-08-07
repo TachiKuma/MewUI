@@ -14,7 +14,22 @@ public sealed class QueryCursorEventArgs(Point position, ModifierKeys modifiers)
 }
 
 /// <summary>Font selection of a text run. Replaces WPF's Typeface.</summary>
-public sealed record Typeface(string FontFamily, FontWeight Weight = FontWeight.Normal, bool Italic = false);
+public sealed record Typeface
+{
+    public Typeface(string fontFamily, FontWeight weight = FontWeight.Normal, bool italic = false)
+    {
+        // A run with no family cannot be measured, and the failure surfaces a frame later in the
+        // text engine rather than at whoever asked for it.
+        ArgumentException.ThrowIfNullOrWhiteSpace(fontFamily);
+        FontFamily = fontFamily;
+        Weight = weight;
+        Italic = italic;
+    }
+
+    public string FontFamily { get; }
+    public FontWeight Weight { get; }
+    public bool Italic { get; }
+}
 
 /// <summary>
 /// Paint and font overrides a transformer applies to a range. Mirrors AvalonEdit's type of the same
@@ -45,6 +60,19 @@ public sealed class VisualLineElementTextRunProperties
         FontWeight = value.Weight;
         Italic = value.Italic;
     }
+
+    /// <summary>Overrides the family alone, leaving weight and slant inherited.</summary>
+    public void SetFontFamily(string value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(value);
+        FontFamily = value;
+    }
+
+    /// <inheritdoc cref="SetFontFamily"/>
+    public void SetFontWeight(FontWeight value) => FontWeight = value;
+
+    /// <inheritdoc cref="SetFontFamily"/>
+    public void SetItalic(bool value) => Italic = value;
 
     internal bool HasFont => FontFamily is not null || FontRenderingEmSize.HasValue || FontWeight.HasValue || Italic.HasValue;
 }

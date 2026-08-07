@@ -1,108 +1,193 @@
-using Aprillz.MewUI;
+using System.Xml;
+using Aprillz.MewUI.MewvalonEdit.Highlighting.Xshd;
 
 namespace Aprillz.MewUI.MewvalonEdit.Highlighting;
 
-public sealed class HighlightingManager
+/// <summary>
+/// A list of syntax definitions, and the resolver a definition's cross-references go through.
+/// </summary>
+/// <remarks>All members, instance members included, are thread-safe.</remarks>
+public class HighlightingManager : IHighlightingDefinitionReferenceResolver
 {
-    private readonly Dictionary<string, IHighlightingDefinition> _byName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _lock = new();
+    private readonly Dictionary<string, IHighlightingDefinition> _byName = new(StringComparer.Ordinal);
     private readonly Dictionary<string, IHighlightingDefinition> _byExtension = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<IHighlightingDefinition> _all = [];
 
-    private HighlightingManager()
+    /// <summary>The shared manager, carrying the definitions this assembly ships.</summary>
+    public static HighlightingManager Instance => DefaultHighlightingManager.Default;
+
+    /// <summary>A snapshot of every registered definition.</summary>
+    public IReadOnlyList<IHighlightingDefinition> HighlightingDefinitions
     {
-        RegisterBuiltIns();
-    }
-
-    public static HighlightingManager Instance { get; } = new();
-    public IReadOnlyCollection<IHighlightingDefinition> HighlightingDefinitions => _byName.Values;
-
-    public IHighlightingDefinition? GetDefinition(string name)
-        => string.IsNullOrWhiteSpace(name) ? null : _byName.GetValueOrDefault(name);
-
-    public IHighlightingDefinition? GetDefinitionByExtension(string extension)
-    {
-        if (string.IsNullOrWhiteSpace(extension)) return null;
-        if (!extension.StartsWith('.')) extension = "." + extension;
-        return _byExtension.GetValueOrDefault(extension);
-    }
-
-    public void RegisterHighlighting(string name, IEnumerable<string> extensions, IHighlightingDefinition highlighting)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentNullException.ThrowIfNull(extensions);
-        ArgumentNullException.ThrowIfNull(highlighting);
-        _byName[name] = highlighting;
-        foreach (string extension in extensions)
+        get
         {
-            string normalized = extension.StartsWith('.') ? extension : "." + extension;
-            _byExtension[normalized] = highlighting;
+            lock (_lock)
+            {
+                return _all.ToArray();
+            }
         }
     }
 
-    private void RegisterBuiltIns()
+    /// <inheritdoc/>
+    public IHighlightingDefinition? GetDefinition(string name)
     {
-        // Dark values are the VS dark palette; light values its light counterpart, picked per theme.
-        var keyword = new HighlightingColor
+        if (string.IsNullOrEmpty(name))
         {
-            Foreground = Color.FromRgb(86, 156, 214),
-            LightForeground = Color.FromRgb(0, 0, 255)
-        };
-        var type = new HighlightingColor
+            return null;
+        }
+        lock (_lock)
         {
-            Foreground = Color.FromRgb(78, 201, 176),
-            LightForeground = Color.FromRgb(38, 127, 153)
-        };
-        var text = new HighlightingColor
-        {
-            Foreground = Color.FromRgb(214, 157, 133),
-            LightForeground = Color.FromRgb(163, 21, 21)
-        };
-        var comment = new HighlightingColor
-        {
-            Foreground = Color.FromRgb(106, 153, 85),
-            LightForeground = Color.FromRgb(0, 128, 0)
-        };
-        var number = new HighlightingColor
-        {
-            Foreground = Color.FromRgb(181, 206, 168),
-            LightForeground = Color.FromRgb(9, 134, 88)
-        };
-        var csharp = new HighlightingDefinition("C#")
-            .AddSpan(@"/\*", @"\*/", comment)
-            .AddSpan(@"@""", @"""(?!"")", text)
-            .AddColor("Keyword", keyword)
-            .AddColor("Type", type)
-            .AddColor("String", text)
-            .AddColor("Comment", comment)
-            .AddColor("Number", number)
-            .AddRule(@"//.*$", comment)
-            .AddRule(@"""(?:\\.|[^""\\])*""", text)
-            .AddRule(@"\b(?:class|struct|interface|enum|record|namespace|using|public|private|protected|internal|static|sealed|abstract|partial|void|return|new|if|else|switch|case|for|foreach|while|do|try|catch|finally|throw|async|await|true|false|null)\b", keyword)
-            .AddRule(@"\b(?:string|char|bool|byte|short|int|long|float|double|decimal|object|var)\b", type)
-            .AddRule(@"\b\d+(?:\.\d+)?\b", number);
-        RegisterHighlighting("C#", [".cs", ".csx"], csharp);
+            return _byName.GetValueOrDefault(name);
+        }
+    }
 
-        var tag = new HighlightingColor
+    /// <summary>The definition registered for <paramref name="extension"/>, dot included.</summary>
+    public IHighlightingDefinition? GetDefinitionByExtension(string extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension))
         {
-            Foreground = Color.FromRgb(86, 156, 214),
-            LightForeground = Color.FromRgb(128, 0, 0)
-        };
-        var attribute = new HighlightingColor
+            return null;
+        }
+        lock (_lock)
         {
-            Foreground = Color.FromRgb(156, 220, 254),
-            LightForeground = Color.FromRgb(4, 81, 165)
-        };
-        var xml = new HighlightingDefinition("XML")
-            .AddSpan("<!--", "-->", comment)
-            .AddRule(@"</?[A-Za-z_][\w:.-]*", tag)
-            .AddRule(@"\b[A-Za-z_][\w:.-]*(?=\s*=)", attribute)
-            .AddRule(@"""(?:\\.|[^""\\])*""", text);
-        RegisterHighlighting("XML", [".xml", ".xaml", ".xshd"], xml);
+            return _byExtension.GetValueOrDefault(extension);
+        }
+    }
 
-        var json = new HighlightingDefinition("JSON")
-            .AddRule(@"""(?:\\.|[^""\\])*""(?=\s*:)", attribute)
-            .AddRule(@"""(?:\\.|[^""\\])*""", text)
-            .AddRule(@"\b(?:true|false|null)\b", keyword)
-            .AddRule(@"-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b", number);
-        RegisterHighlighting("JSON", [".json"], json);
+    public void RegisterHighlighting(
+        string? name,
+        IEnumerable<string>? extensions,
+        IHighlightingDefinition highlighting)
+    {
+        ArgumentNullException.ThrowIfNull(highlighting);
+        lock (_lock)
+        {
+            if (name is not null)
+            {
+                if (_byName.TryGetValue(name, out var existing))
+                {
+                    _all.Remove(existing);
+                }
+                _byName[name] = highlighting;
+            }
+            if (extensions is not null)
+            {
+                foreach (string extension in extensions)
+                {
+                    _byExtension[extension] = highlighting;
+                }
+            }
+            _all.Add(highlighting);
+        }
+    }
+
+    /// <summary>
+    /// Registers a definition parsed on first read, so it may reference definitions registered
+    /// after it.
+    /// </summary>
+    public void RegisterHighlighting(
+        string? name,
+        IEnumerable<string>? extensions,
+        Func<IHighlightingDefinition> lazyLoadedHighlighting)
+    {
+        ArgumentNullException.ThrowIfNull(lazyLoadedHighlighting);
+        RegisterHighlighting(name, extensions, new DelayLoadedHighlightingDefinition(name, lazyLoadedHighlighting));
+    }
+
+    /// <summary>Registers one of the .xshd files shipped in this assembly.</summary>
+    internal void RegisterBuiltIn(string name, string[]? extensions, string resourceName)
+        => RegisterHighlighting(name, extensions, () =>
+        {
+            XshdSyntaxDefinition xshd;
+            using (var stream = HighlightingResources.OpenStream(resourceName))
+            using (var reader = XmlReader.Create(stream))
+            {
+                // The shipped definitions are known to match the schema, so validating them on
+                // every start would only cost time.
+                xshd = HighlightingLoader.LoadXshd(reader, skipValidation: true);
+            }
+            return HighlightingLoader.Load(xshd, this);
+        });
+
+    private sealed class DefaultHighlightingManager : HighlightingManager
+    {
+        public static readonly DefaultHighlightingManager Default = new();
+
+        private DefaultHighlightingManager() => HighlightingResources.RegisterBuiltInHighlightings(this);
+    }
+
+    /// <summary>A definition that parses itself the first time one of its members is read.</summary>
+    private sealed class DelayLoadedHighlightingDefinition(string? name, Func<IHighlightingDefinition> load)
+        : IHighlightingDefinition
+    {
+        private readonly object _lock = new();
+        private Func<IHighlightingDefinition>? _load = load;
+        private IHighlightingDefinition? _definition;
+        private Exception? _storedException;
+        private bool _isLoading;
+
+        public string Name => name ?? GetDefinition().Name;
+
+        public HighlightingRuleSet MainRuleSet => GetDefinition().MainRuleSet;
+
+        public IEnumerable<HighlightingColor> NamedHighlightingColors => GetDefinition().NamedHighlightingColors;
+
+        public IDictionary<string, string> Properties => GetDefinition().Properties;
+
+        public HighlightingRuleSet? GetNamedRuleSet(string ruleSetName) => GetDefinition().GetNamedRuleSet(ruleSetName);
+
+        public HighlightingColor? GetNamedColor(string colorName) => GetDefinition().GetNamedColor(colorName);
+
+        public override string ToString() => Name;
+
+        private IHighlightingDefinition GetDefinition()
+        {
+            Func<IHighlightingDefinition> load;
+            lock (_lock)
+            {
+                if (_definition is not null)
+                {
+                    return _definition;
+                }
+                if (_storedException is not null)
+                {
+                    throw new HighlightingDefinitionInvalidException(
+                        "Error delay-loading highlighting definition", _storedException);
+                }
+                if (_isLoading)
+                {
+                    throw new InvalidOperationException(
+                        "Tried to create delay-loaded highlighting definition recursively. Make sure there are no cyclic references between the highlighting definitions.");
+                }
+                _isLoading = true;
+                load = _load!;
+            }
+
+            IHighlightingDefinition? loaded = null;
+            Exception? failure = null;
+            try
+            {
+                loaded = load();
+            }
+            catch (Exception error)
+            {
+                failure = error;
+            }
+
+            lock (_lock)
+            {
+                _isLoading = false;
+                _load = null;
+                _definition ??= loaded;
+                _storedException ??= failure;
+                if (_storedException is not null)
+                {
+                    throw new HighlightingDefinitionInvalidException(
+                        "Error delay-loading highlighting definition", _storedException);
+                }
+                return _definition!;
+            }
+        }
     }
 }

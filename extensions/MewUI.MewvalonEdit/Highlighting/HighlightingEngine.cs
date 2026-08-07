@@ -1,173 +1,305 @@
+using System.Collections.Immutable;
 using System.Text.RegularExpressions;
+using Aprillz.MewUI.MewvalonEdit.Document;
 
 namespace Aprillz.MewUI.MewvalonEdit.Highlighting;
 
 /// <summary>
-/// Scans one line at a time, carrying a span stack across lines so regions such as block comments
-/// and verbatim strings keep their color past a line break.
+/// Regex-based highlighting engine. It scans one line at a time and carries a stack of open spans
+/// across lines, so a region such as a block comment keeps its colour past a line break.
 /// </summary>
-public sealed class HighlightingEngine(HighlightingRuleSet mainRuleSet)
+public class HighlightingEngine
 {
-    private static readonly HighlightingRuleSet EmptyRuleSet = new() { Name = "EmptyRuleSet" };
+    private static readonly HighlightingRuleSet _emptyRuleSet = new() { Name = "EmptyRuleSet" };
+    private static readonly Match?[] _noMatches = [];
 
-    private readonly HighlightingRuleSet _mainRuleSet = mainRuleSet ?? throw new ArgumentNullException(nameof(mainRuleSet));
-    private readonly List<HighlightingSpan> _spanStack = [];
+    private readonly HighlightingRuleSet _mainRuleSet;
+    private ImmutableStack<HighlightingSpan> _spanStack = ImmutableStack<HighlightingSpan>.Empty;
+
     private string _lineText = string.Empty;
+    private int _lineStartOffset;
     private int _position;
-    private HighlightedLine? _line;
 
-    /// <summary>Span stack the scanner starts the next line with.</summary>
-    public IReadOnlyList<HighlightingSpan> SpanStack => _spanStack;
+    // Where highlighting output goes. Null means only the span state is being updated.
+    private HighlightedLine? _highlightedLine;
 
-    public void SetSpanStack(IReadOnlyList<HighlightingSpan> stack)
+    private Stack<HighlightedSection?>? _highlightedSectionStack;
+    private HighlightedSection? _lastPoppedSection;
+
+    public HighlightingEngine(HighlightingRuleSet mainRuleSet)
+        => _mainRuleSet = mainRuleSet ?? throw new ArgumentNullException(nameof(mainRuleSet));
+
+    /// <summary>
+    /// Spans open at the current scan position. Set it to the state at the start of a line before
+    /// scanning it; afterwards it holds the state at the end of that line.
+    /// </summary>
+    public ImmutableStack<HighlightingSpan> CurrentSpanStack
     {
-        ArgumentNullException.ThrowIfNull(stack);
-        _spanStack.Clear();
-        _spanStack.AddRange(stack);
+        get => _spanStack;
+        set => _spanStack = value ?? ImmutableStack<HighlightingSpan>.Empty;
+    }
+
+    /// <summary>Highlights one line and advances <see cref="CurrentSpanStack"/> past it.</summary>
+    public HighlightedLine HighlightLine(TextDocument document, DocumentLine line)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(line);
+        _lineStartOffset = line.Offset;
+        _lineText = document.GetText(line.Offset, line.Length);
+        try
+        {
+            _highlightedLine = new HighlightedLine(document, line);
+            HighlightLineInternal();
+            return _highlightedLine;
+        }
+        finally
+        {
+            _highlightedLine = null;
+            _lineText = string.Empty;
+            _lineStartOffset = 0;
+        }
+    }
+
+    /// <summary>
+    /// Advances <see cref="CurrentSpanStack"/> past one line without producing any sections.
+    /// </summary>
+    public void ScanLine(TextDocument document, DocumentLine line)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(line);
+        _lineText = document.GetText(line.Offset, line.Length);
+        try
+        {
+            HighlightLineInternal();
+        }
+        finally
+        {
+            _lineText = string.Empty;
+        }
     }
 
     private HighlightingRuleSet CurrentRuleSet
-        => _spanStack.Count == 0 ? _mainRuleSet : _spanStack[^1].RuleSet ?? EmptyRuleSet;
+        => _spanStack.IsEmpty ? _mainRuleSet : _spanStack.Peek().RuleSet ?? _emptyRuleSet;
 
-    /// <summary>Highlights one line and advances the span stack to the state that follows it.</summary>
-    public HighlightedLine HighlightLine(string text)
-    {
-        ArgumentNullException.ThrowIfNull(text);
-        _lineText = text;
-        _line = new HighlightedLine();
-        ScanLine();
-        var result = _line;
-        _line = null;
-        return result;
-    }
-
-    private void ScanLine()
+    private void HighlightLineInternal()
     {
         _position = 0;
+        ResetColorStack();
+        var currentRuleSet = CurrentRuleSet;
+        var storedMatchArrays = new Stack<Match?[]>();
+        var matches = AllocateMatchArray(currentRuleSet.Spans.Count);
+        Match? endSpanMatch = null;
+
         while (true)
         {
-            var ruleSet = CurrentRuleSet;
-            Match? endMatch = _spanStack.Count > 0
-                ? MatchOrNull(_spanStack[^1].EndExpression, _position)
-                : null;
-            Match? startMatch = null;
-            HighlightingSpan? startSpan = null;
-            foreach (var span in ruleSet.Spans)
+            for (int i = 0; i < matches.Length; i++)
             {
-                var candidate = MatchOrNull(span.StartExpression, _position);
-                if (candidate is not null && (startMatch is null || candidate.Index < startMatch.Index))
+                if (matches[i] is not Match previous || (previous.Success && previous.Index < _position))
                 {
-                    startMatch = candidate;
-                    startSpan = span;
+                    matches[i] = currentRuleSet.Spans[i].StartExpression.Match(_lineText, _position);
                 }
             }
+            if (endSpanMatch is null && !_spanStack.IsEmpty)
+            {
+                endSpanMatch = _spanStack.Peek().EndExpression.Match(_lineText, _position);
+            }
 
-            var first = Earlier(endMatch, startMatch);
-            if (first is null)
+            var firstMatch = Minimum(matches, endSpanMatch);
+            if (firstMatch is null)
             {
                 break;
             }
 
-            HighlightRules(first.Index);
-            if (ReferenceEquals(first, endMatch))
+            HighlightNonSpans(firstMatch.Index);
+
+            if (ReferenceEquals(firstMatch, endSpanMatch))
             {
-                var popped = _spanStack[^1];
-                _spanStack.RemoveAt(_spanStack.Count - 1);
-                AddSection(first.Index, first.Length, popped.EndColor
-                    ?? (popped.SpanColorIncludesEnd ? popped.SpanColor : null));
+                var poppedSpan = _spanStack.Peek();
+                if (!poppedSpan.SpanColorIncludesEnd) PopColor();
+                PushColor(poppedSpan.EndColor);
+                _position = firstMatch.Index + firstMatch.Length;
+                PopColor();
+                if (poppedSpan.SpanColorIncludesEnd) PopColor();
+                _spanStack = _spanStack.Pop();
+                currentRuleSet = CurrentRuleSet;
+                if (storedMatchArrays.Count > 0)
+                {
+                    matches = storedMatchArrays.Pop();
+                    int index = currentRuleSet.Spans.IndexOf(poppedSpan);
+                    if (index >= 0 && index < matches.Length && matches[index] is Match reopened && reopened.Index == _position)
+                    {
+                        throw new InvalidOperationException(
+                            "A highlighting span matched 0 characters, which would cause an endless loop.\n"
+                            + "Change the highlighting definition so that either the start or the end regex matches at least one character.\n"
+                            + "Start regex: " + poppedSpan.StartExpression + "\n"
+                            + "End regex: " + poppedSpan.EndExpression);
+                    }
+                }
+                else
+                {
+                    matches = AllocateMatchArray(currentRuleSet.Spans.Count);
+                }
             }
             else
             {
-                AddSection(first.Index, first.Length, startSpan!.StartColor
-                    ?? (startSpan.SpanColorIncludesStart ? startSpan.SpanColor : null));
-                _spanStack.Add(startSpan);
+                var newSpan = currentRuleSet.Spans[Array.IndexOf(matches, firstMatch)];
+                _spanStack = _spanStack.Push(newSpan);
+                currentRuleSet = CurrentRuleSet;
+                storedMatchArrays.Push(matches);
+                matches = AllocateMatchArray(currentRuleSet.Spans.Count);
+                if (newSpan.SpanColorIncludesStart) PushColor(newSpan.SpanColor);
+                PushColor(newSpan.StartColor);
+                _position = firstMatch.Index + firstMatch.Length;
+                PopColor();
+                if (!newSpan.SpanColorIncludesStart) PushColor(newSpan.SpanColor);
             }
-            _position = first.Index + first.Length;
+            endSpanMatch = null;
         }
 
-        HighlightRules(_lineText.Length);
+        HighlightNonSpans(_lineText.Length);
+        PopAllColors();
     }
 
-    /// <summary>Colors the run up to <paramref name="until"/> with the current rule set, or the open span's color.</summary>
-    private void HighlightRules(int until)
+    /// <summary>Applies the current rule set to the text between the scan position and <paramref name="until"/>.</summary>
+    private void HighlightNonSpans(int until)
     {
-        if (_position >= until)
+        if (_position == until)
         {
-            _position = Math.Max(_position, until);
             return;
         }
-
-        if (_spanStack.Count > 0)
+        if (_highlightedLine is not null)
         {
-            var span = _spanStack[^1];
-            // The span colors the whole run first; its own rules then paint over what they match,
-            // which is how a nested set (escapes inside a string, say) stays confined to the span.
-            AddSection(_position, until - _position, span.SpanColor);
-            ApplyRules(span.RuleSet?.Rules, until);
-        }
-        else
-        {
-            ApplyRules(CurrentRuleSet.Rules, until);
+            var rules = CurrentRuleSet.Rules;
+            var matches = AllocateMatchArray(rules.Count);
+            while (true)
+            {
+                for (int i = 0; i < matches.Length; i++)
+                {
+                    if (matches[i] is not Match previous || (previous.Success && previous.Index < _position))
+                    {
+                        matches[i] = rules[i].Regex.Match(_lineText, _position, until - _position);
+                    }
+                }
+                var firstMatch = Minimum(matches, null);
+                if (firstMatch is null)
+                {
+                    break;
+                }
+                _position = firstMatch.Index;
+                int ruleIndex = Array.IndexOf(matches, firstMatch);
+                if (firstMatch.Length == 0)
+                {
+                    throw new InvalidOperationException(
+                        "A highlighting rule matched 0 characters, which would cause an endless loop.\n"
+                        + "Change the highlighting definition so that the rule matches at least one character.\n"
+                        + "Regex: " + rules[ruleIndex].Regex);
+                }
+                PushColor(rules[ruleIndex].Color);
+                _position = firstMatch.Index + firstMatch.Length;
+                PopColor();
+            }
         }
         _position = until;
     }
 
-    private void ApplyRules(IList<HighlightingRule>? rules, int until)
+    /// <summary>
+    /// Opens the sections for the spans already on the stack, so a line inside a multi-line span
+    /// starts out wearing that span's colour.
+    /// </summary>
+    private void ResetColorStack()
     {
-        if (rules is null || rules.Count == 0)
+        _lastPoppedSection = null;
+        if (_highlightedLine is null)
+        {
+            _highlightedSectionStack = null;
+        }
+        else
+        {
+            _highlightedSectionStack = new Stack<HighlightedSection?>();
+            foreach (var span in _spanStack.Reverse())
+            {
+                PushColor(span.SpanColor);
+            }
+        }
+    }
+
+    private void PushColor(HighlightingColor? color)
+    {
+        if (_highlightedLine is null || _highlightedSectionStack is null)
         {
             return;
         }
-        int scan = _position;
-        while (scan < until)
+        if (color is null)
         {
-            Match? best = null;
-            HighlightingRule? bestRule = null;
-            foreach (var rule in rules)
+            _highlightedSectionStack.Push(null);
+        }
+        else if (_lastPoppedSection is HighlightedSection last
+            && last.Color == color
+            && last.EndOffset == _position + _lineStartOffset)
+        {
+            // Reopen the section that just closed here rather than starting an identical one, so
+            // the same colour applied twice in a row stays a single run.
+            _highlightedSectionStack.Push(last);
+            _lastPoppedSection = null;
+        }
+        else
+        {
+            var section = new HighlightedSection
             {
-                var candidate = rule.Regex.Match(_lineText, scan, until - scan);
-                if (!candidate.Success || candidate.Length == 0)
-                {
-                    continue;
-                }
-                if (best is null || candidate.Index < best.Index)
-                {
-                    best = candidate;
-                    bestRule = rule;
-                }
-            }
-            if (best is null)
-            {
-                break;
-            }
-            AddSection(best.Index, best.Length, bestRule!.Color);
-            scan = best.Index + best.Length;
+                Offset = _position + _lineStartOffset,
+                Color = color
+            };
+            _highlightedLine.Sections.Add(section);
+            _highlightedSectionStack.Push(section);
+            _lastPoppedSection = null;
         }
     }
 
-    private Match? MatchOrNull(Regex? expression, int start)
+    private void PopColor()
     {
-        if (expression is null || start > _lineText.Length)
-        {
-            return null;
-        }
-        var match = expression.Match(_lineText, start);
-        return match.Success ? match : null;
-    }
-
-    private static Match? Earlier(Match? left, Match? right)
-    {
-        if (left is null) return right;
-        if (right is null) return left;
-        return right.Index < left.Index ? right : left;
-    }
-
-    private void AddSection(int offset, int length, HighlightingColor? color)
-    {
-        if (color is null || length <= 0 || _line is null)
+        if (_highlightedLine is null || _highlightedSectionStack is null)
         {
             return;
         }
-        _line.Sections.Add(new HighlightedSection(offset, length, color));
+        if (_highlightedSectionStack.Pop() is HighlightedSection section)
+        {
+            section.Length = _position + _lineStartOffset - section.Offset;
+            if (section.Length == 0)
+            {
+                _highlightedLine.Sections.Remove(section);
+            }
+            else
+            {
+                _lastPoppedSection = section;
+            }
+        }
     }
+
+    private void PopAllColors()
+    {
+        while (_highlightedSectionStack is not null && _highlightedSectionStack.Count > 0)
+        {
+            PopColor();
+        }
+    }
+
+    /// <summary>The earliest successful match in <paramref name="candidates"/> or <paramref name="endSpanMatch"/>.</summary>
+    private static Match? Minimum(Match?[] candidates, Match? endSpanMatch)
+    {
+        Match? min = null;
+        foreach (var candidate in candidates)
+        {
+            if (candidate is not null && candidate.Success && (min is null || candidate.Index < min.Index))
+            {
+                min = candidate;
+            }
+        }
+        if (endSpanMatch is not null && endSpanMatch.Success && (min is null || endSpanMatch.Index < min.Index))
+        {
+            return endSpanMatch;
+        }
+        return min;
+    }
+
+    private static Match?[] AllocateMatchArray(int count) => count == 0 ? _noMatches : new Match?[count];
 }

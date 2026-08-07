@@ -22,12 +22,11 @@ public class HighlightingColorizer(IHighlightingDefinition definition) : Documen
 
         // From the view per line, so a theme switch repaints in the other palette without rebuild.
         bool isDark = context.TextView.IsDarkTheme;
-        // Every definition goes through the stateful highlighter, spans or not. A second, span-less
-        // path would resolve overlaps the other way round: last rule wins instead of first, which
-        // repaints a JSON key as a plain string.
+        // Sections carry document offsets and are ordered outermost first, so applying them in
+        // order lets an inner section paint over the one enclosing it.
         foreach (var section in GetHighlighter(context.Document).HighlightLine(line.LineNumber).Sections)
         {
-            ApplyColorToElement(line.Offset + section.Offset, section.Length, section.Color, isDark);
+            ApplyColorToElement(section.Offset, section.Length, section.Color, isDark);
         }
     }
 
@@ -69,11 +68,22 @@ public class HighlightingColorizer(IHighlightingDefinition definition) : Documen
             {
                 properties.SetTextDecorations(decoration);
             }
+            // One facet at a time: a definition writes fontWeight="bold" with no family far more
+            // often than it names one, and setting the family to nothing leaves the run with no
+            // font at all.
+            if (color.FontFamily is string fontFamily)
+            {
+                properties.SetFontFamily(fontFamily);
+            }
             if (color.FontWeight is FontWeight weight)
             {
-                properties.SetTypeface(new Typeface(color.FontFamily ?? string.Empty, weight));
+                properties.SetFontWeight(weight);
             }
-            if (color.FontSize is double fontSize)
+            if (color.Italic is bool italic)
+            {
+                properties.SetItalic(italic);
+            }
+            if (color.FontSize is int fontSize)
             {
                 properties.SetFontRenderingEmSize(fontSize);
             }

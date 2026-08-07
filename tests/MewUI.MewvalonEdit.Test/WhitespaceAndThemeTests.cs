@@ -102,20 +102,27 @@ public sealed class WhitespaceAndThemeTests
         public TextRunStyle DefaultStyle => new(editor.FontFamily, editor.FontSize, editor.FontWeight);
     }
 
+    /// <summary>
+    /// The shipped definitions carry one colour per scope. A palette entry for that scope decides
+    /// the colour instead, per theme, without the definition being edited.
+    /// </summary>
     [TestMethod]
-    public void HighlightingPicksThemeVariantColors()
+    public void ThePaletteOverridesADefinitionsOwnColorPerTheme()
     {
         var definition = HighlightingManager.Instance.GetDefinition("C#");
         Assert.IsNotNull(definition);
         const string SOURCE = "public int Value = 3;";
 
-        var dark = HighlightingTestHost.Colorize(definition, SOURCE, isDarkTheme: true);
-        var light = HighlightingTestHost.Colorize(definition, SOURCE, isDarkTheme: false);
+        using (WithPalette())
+        {
+            var dark = HighlightingTestHost.Colorize(definition, SOURCE, isDarkTheme: true);
+            var light = HighlightingTestHost.Colorize(definition, SOURCE, isDarkTheme: false);
 
-        var darkKeyword = dark.First(element => element.RelativeTextOffset == 0);
-        var lightKeyword = light.First(element => element.RelativeTextOffset == 0);
-        Assert.AreEqual(Color.FromRgb(86, 156, 214), darkKeyword.TextRunProperties.ForegroundBrush);
-        Assert.AreEqual(Color.FromRgb(0, 0, 255), lightKeyword.TextRunProperties.ForegroundBrush);
+            var darkKeyword = dark.First(element => element.RelativeTextOffset == 0);
+            var lightKeyword = light.First(element => element.RelativeTextOffset == 0);
+            Assert.AreEqual(Color.FromRgb(86, 156, 214), darkKeyword.TextRunProperties.ForegroundBrush);
+            Assert.AreEqual(Color.FromRgb(220, 220, 170), lightKeyword.TextRunProperties.ForegroundBrush);
+        }
     }
 
     [TestMethod]
@@ -125,12 +132,31 @@ public sealed class WhitespaceAndThemeTests
         Assert.IsNotNull(definition);
         var colorizer = new HighlightingColorizer(definition);
 
-        // The same instance across the switch: the colorizer reads the theme per line, so nothing
-        // has to be rebuilt when it changes.
-        var dark = HighlightingTestHost.Colorize(colorizer, "public", isDarkTheme: true);
-        var light = HighlightingTestHost.Colorize(colorizer, "public", isDarkTheme: false);
+        using (WithPalette())
+        {
+            // The same instance across the switch: the colorizer reads the theme per line, so
+            // nothing has to be rebuilt when it changes.
+            var dark = HighlightingTestHost.Colorize(colorizer, "public", isDarkTheme: true);
+            var light = HighlightingTestHost.Colorize(colorizer, "public", isDarkTheme: false);
 
-        Assert.AreEqual(Color.FromRgb(86, 156, 214), dark[0].TextRunProperties.ForegroundBrush);
-        Assert.AreEqual(Color.FromRgb(0, 0, 255), light[0].TextRunProperties.ForegroundBrush);
+            Assert.AreEqual(Color.FromRgb(86, 156, 214), dark[0].TextRunProperties.ForegroundBrush);
+            Assert.AreEqual(Color.FromRgb(220, 220, 170), light[0].TextRunProperties.ForegroundBrush);
+        }
+    }
+
+    /// <summary>Installs a palette that colours the scope 'public' carries, and restores it after.</summary>
+    private static IDisposable WithPalette()
+    {
+        var previous = HighlightingPalette.Current;
+        var palette = new HighlightingPalette();
+        palette.Set("Visibility", new PaletteEntry(
+            Color.FromRgb(86, 156, 214), Color.FromRgb(220, 220, 170)));
+        HighlightingPalette.Current = palette;
+        return new PaletteScope(previous);
+    }
+
+    private sealed class PaletteScope(HighlightingPalette previous) : IDisposable
+    {
+        public void Dispose() => HighlightingPalette.Current = previous;
     }
 }

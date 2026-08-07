@@ -1,6 +1,7 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Highlighting;
+using Aprillz.MewUI.MewvalonEdit.Highlighting.Xshd;
 
 namespace MewUI.MewvalonEdit.Test;
 
@@ -37,8 +38,9 @@ public sealed class HighlightingLoaderTests
         Assert.AreEqual("Mini", definition.Name);
         Assert.AreEqual(Color.FromRgb(0, 128, 0), definition.GetNamedColor("Comment")?.Foreground);
         Assert.AreEqual(Color.FromHex("#A31515"), definition.GetNamedColor("String")?.Foreground);
-        Assert.ContainsSingle(definition.MainRuleSet.Spans);
-        Assert.IsGreaterThanOrEqualTo(3, definition.MainRuleSet.Rules.Count);
+        // Two spans: the block comment, and the line comment, whose missing End becomes "$".
+        Assert.HasCount(2, definition.MainRuleSet.Spans);
+        Assert.HasCount(2, definition.MainRuleSet.Rules);
     }
 
     [TestMethod]
@@ -51,7 +53,7 @@ public sealed class HighlightingLoaderTests
         var second = highlighter.HighlightLine(2);
 
         var section = second.Sections.Single();
-        Assert.AreEqual(0, section.Offset);
+        Assert.AreEqual(document.GetLineByNumber(2).Offset, section.Offset);
         Assert.AreEqual("inside".Length, section.Length);
         Assert.AreEqual(Color.FromRgb(0, 128, 0), section.Color.Foreground);
     }
@@ -148,6 +150,19 @@ public sealed class HighlightingLoaderTests
     public void InvalidXmlIsReportedAsADefinitionError()
         => Assert.ThrowsExactly<HighlightingDefinitionInvalidException>(
             () => HighlightingLoader.Load("<SyntaxDefinition"));
+
+    /// <summary>
+    /// The shipped definitions are parsed on first use, so nothing else would notice a file that
+    /// fails to load or a cross-definition reference that cannot be resolved.
+    /// </summary>
+    [TestMethod]
+    public void EveryBuiltInDefinitionLoadsAndResolvesItsReferences()
+    {
+        foreach (var definition in HighlightingManager.Instance.HighlightingDefinitions)
+        {
+            Assert.IsNotNull(definition.MainRuleSet, definition.Name);
+        }
+    }
 
     [TestMethod]
     public void RegisteredDefinitionsResolveByExtension()
