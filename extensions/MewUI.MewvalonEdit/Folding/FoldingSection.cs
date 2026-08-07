@@ -2,10 +2,7 @@ using Aprillz.MewUI.MewvalonEdit.Document;
 
 namespace Aprillz.MewUI.MewvalonEdit.Folding;
 
-/// <summary>
-/// A section that can be folded. Its offsets follow document edits for as long as it belongs to a
-/// <see cref="FoldingManager"/>.
-/// </summary>
+/// <summary>A section that can be folded.</summary>
 public sealed class FoldingSection : TextSegment
 {
     private readonly FoldingManager _manager;
@@ -19,6 +16,7 @@ public sealed class FoldingSection : TextSegment
         Length = endOffset - startOffset;
     }
 
+    /// <summary>Whether the section is folded.</summary>
     public bool IsFolded
     {
         get => _isFolded;
@@ -47,9 +45,6 @@ public sealed class FoldingSection : TextSegment
 
     /// <summary>The text this section covers.</summary>
     public string TextContent => _manager.Document.GetText(StartOffset, EndOffset - StartOffset);
-
-    /// <summary>Whether this section is a definition rather than a plain block, as the strategy classified it.</summary>
-    public bool IsDefinition { get; set; }
 
     /// <summary>Caller-owned object associated with this section.</summary>
     public object? Tag { get; set; }

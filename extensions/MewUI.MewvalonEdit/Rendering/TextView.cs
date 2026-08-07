@@ -77,6 +77,17 @@ public sealed class TextView : MewObject, ITextEditorComponent
         set => SetValue(NonPrintableCharacterBrushProperty, value);
     }
 
+    public static readonly MewProperty<Color?> FoldingMarkerBrushProperty =
+        MewProperty<Color?>.Register<TextView>(nameof(FoldingMarkerBrush), null,
+            MewPropertyOptions.AffectsRender);
+
+    /// <summary>Colour of the placeholder a folded section leaves behind. Null follows the theme.</summary>
+    public Color? FoldingMarkerBrush
+    {
+        get => GetValue(FoldingMarkerBrushProperty);
+        set => SetValue(FoldingMarkerBrushProperty, value);
+    }
+
     public static readonly MewProperty<ColorPen?> ColumnRulerPenProperty =
         MewProperty<ColorPen?>.Register<TextView>(nameof(ColumnRulerPen), null,
             MewPropertyOptions.AffectsRender);
@@ -125,6 +136,9 @@ public sealed class TextView : MewObject, ITextEditorComponent
 
     internal Color ResolvedNonPrintableCharacter
         => NonPrintableCharacterBrush ?? textArea.Editor.PlaceholderColor;
+
+    internal Color ResolvedFoldingMarker
+        => FoldingMarkerBrush ?? textArea.Editor.PlaceholderColor;
 
     protected override void OnMewPropertyChanged(MewProperty property)
     {

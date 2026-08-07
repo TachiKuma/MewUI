@@ -5,11 +5,12 @@ using Aprillz.MewUI.Text;
 namespace Aprillz.MewUI.MewvalonEdit.Folding;
 
 /// <summary>
-/// Produces the line element that stands in for a folded <see cref="FoldingSection"/>.
+/// A <see cref="VisualLineElementGenerator"/> that produces line elements for folded
+/// <see cref="FoldingSection"/>s.
 /// </summary>
-public sealed class FoldingElementGenerator(TextEditor editor) : VisualLineElementGenerator
+public sealed class FoldingElementGenerator : VisualLineElementGenerator
 {
-    /// <summary>Manager whose foldings are shown, or null to show none.</summary>
+    /// <summary>The folding manager whose foldings are shown.</summary>
     public FoldingManager? FoldingManager { get; set; }
 
     /// <inheritdoc/>
@@ -19,52 +20,57 @@ public sealed class FoldingElementGenerator(TextEditor editor) : VisualLineEleme
     /// <inheritdoc/>
     public override VisualLineElement? ConstructElement(int offset)
     {
-        var manager = FoldingManager;
-        if (manager is null)
+        var foldingManager = FoldingManager;
+        if (foldingManager is null)
         {
             return null;
         }
-
         int foldedUntil = -1;
         FoldingSection? foldingSection = null;
-        foreach (var section in manager.GetFoldingsContaining(offset))
+        foreach (var section in foldingManager.GetFoldingsContaining(offset))
         {
-            if (section.IsFolded && section.EndOffset > foldedUntil)
+            if (section.IsFolded)
             {
-                foldedUntil = section.EndOffset;
-                foldingSection = section;
+                if (section.EndOffset > foldedUntil)
+                {
+                    foldedUntil = section.EndOffset;
+                    foldingSection = section;
+                }
             }
         }
-        if (foldedUntil <= offset || foldingSection is null)
+        if (foldedUntil > offset && foldingSection is not null)
+        {
+            // Handle overlapping foldings: if there's another folded folding
+            // (starting within the foldingSection) that continues after the end of the folded section,
+            // then we'll extend our fold element to cover that overlapping folding.
+            bool foundOverlappingFolding;
+            do
+            {
+                foundOverlappingFolding = false;
+                foreach (var section in foldingManager.GetFoldingsContaining(foldedUntil))
+                {
+                    if (section.IsFolded && section.EndOffset > foldedUntil)
+                    {
+                        foldedUntil = section.EndOffset;
+                        foundOverlappingFolding = true;
+                    }
+                }
+            } while (foundOverlappingFolding);
+
+            string title = foldingSection.Title ?? string.Empty;
+            if (string.IsNullOrEmpty(title))
+            {
+                title = "…";
+            }
+            return new FoldingLineElement(
+                foldingSection, title, foldedUntil - offset, CurrentContext!.DefaultStyle);
+        }
+        else
         {
             return null;
         }
-
-        // A folded section starting inside this one can end after it, and the element has to reach
-        // that far too or the text between the two ends would be left with no line holding it.
-        bool foundOverlappingFolding;
-        do
-        {
-            foundOverlappingFolding = false;
-            foreach (var section in manager.GetFoldingsContaining(foldedUntil))
-            {
-                if (section.IsFolded && section.EndOffset > foldedUntil)
-                {
-                    foldedUntil = section.EndOffset;
-                    foundOverlappingFolding = true;
-                }
-            }
-        } while (foundOverlappingFolding);
-
-        string title = string.IsNullOrEmpty(foldingSection.Title) ? "…" : foldingSection.Title!;
-        var style = new TextRunStyle(editor.FontFamily, editor.FontSize, editor.FontWeight);
-        return new FoldingLineElement(foldingSection, title, foldedUntil - offset, style)
-        {
-            Foreground = editor.FoldingMarkerColor
-        };
     }
 
-    /// <summary>The folded section's title, outlined so it does not read as ordinary text.</summary>
     private sealed class FoldingLineElement(
         FoldingSection section,
         string title,
@@ -73,6 +79,14 @@ public sealed class FoldingElementGenerator(TextEditor editor) : VisualLineEleme
         : TextReplacementElement(title, documentLength, style)
     {
         private const double CORNER_RADIUS = 2;
+
+        protected internal override void PrepareForPaint(TextView textView)
+        {
+            ArgumentNullException.ThrowIfNull(textView);
+            // Assigned every paint: the scan cache outlives a theme change, so a colour kept from
+            // the last paint would never be replaced.
+            Foreground = textView.ResolvedFoldingMarker;
+        }
 
         public override void Draw(ITextRenderContext context, Point origin, uint dpi)
         {
