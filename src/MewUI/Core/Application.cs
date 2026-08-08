@@ -196,6 +196,41 @@ public sealed class Application
     /// </summary>
     public IReadOnlyList<Window> AllWindows => _runtime?.Windows ?? (IReadOnlyList<Window>)Array.Empty<Window>();
 
+    private CommandScope? _commands;
+    private InputMap? _inputMap;
+
+    /// <summary>
+    /// Gets the application-level command scope, the last stage of command routing.
+    /// </summary>
+    public CommandScope Commands => _commands ??= new CommandScope();
+
+    /// <summary>
+    /// Gets the application-level input map, pre-populated with the standard edit gestures.
+    /// </summary>
+    public InputMap InputMap => _inputMap ??= CreateDefaultInputMap();
+
+    internal static CommandScope? CurrentCommandScopeOrNull => _current?._commands;
+
+    internal static InputMap? CurrentInputMapOrNull => _current != null ? _current.InputMap : null;
+
+    internal Window[] SnapshotWindows() => _runtime?.SnapshotWindows() ?? Array.Empty<Window>();
+
+    private static InputMap CreateDefaultInputMap()
+    {
+        // Redo has no single cross-platform gesture; Primary+Y covers Windows/Linux convention and
+        // Primary+Shift+Z covers the macOS convention, both routed to the same command.
+        var map = new InputMap();
+        map.Bind(StandardCommands.Cut, new KeyGesture(Key.X, ModifierKeys.Primary));
+        map.Bind(StandardCommands.Copy, new KeyGesture(Key.C, ModifierKeys.Primary));
+        map.Bind(StandardCommands.Paste, new KeyGesture(Key.V, ModifierKeys.Primary));
+        map.Bind(StandardCommands.SelectAll, new KeyGesture(Key.A, ModifierKeys.Primary));
+        map.Bind(StandardCommands.Undo, new KeyGesture(Key.Z, ModifierKeys.Primary));
+        map.Bind(StandardCommands.Redo,
+            new KeyGesture(Key.Y, ModifierKeys.Primary),
+            new KeyGesture(Key.Z, ModifierKeys.Primary | ModifierKeys.Shift));
+        return map;
+    }
+
     /// <summary>
     /// Gets the selected graphics backend used by windows/controls.
     /// This is derived from <see cref="DefaultGraphicsFactory"/> and exists mainly for diagnostics.

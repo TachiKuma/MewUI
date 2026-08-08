@@ -9,7 +9,7 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// Base class for all UI elements. Provides the core Measure/Arrange layout system.
 /// </summary>
-public abstract class Element : MewObject
+public abstract partial class Element : MewObject
 {
     private Element? _cachedVisualRoot;
     private int _visualRootCacheVersion = -1;

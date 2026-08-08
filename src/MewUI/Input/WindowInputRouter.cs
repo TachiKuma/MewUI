@@ -254,6 +254,13 @@ internal static class WindowInputRouter
         {
             current.RaiseKeyDown(args);
         }
+
+        // Input-map dispatch runs after bubbling so a focused control's own key handling keeps
+        // priority over shortcuts (same principle as Window.KeyBindings).
+        if (!args.Handled)
+        {
+            InputMapResolver.TryDispatchKeyDown(window, args);
+        }
     }
 
     /// <summary>
