@@ -39,9 +39,6 @@ public sealed class MainWindow : Window
             WordWrap = false
         };
         _search = SearchPanel.Install(_editor.TextArea);
-        // Ctrl+Space opens the completion window at the current word, VS-style.
-        _editor.InputMap.Bind(
-            new KeyGesture(Key.Space, ModifierKeys.Control), CompleteCurrentWord);
         // Installing the manager attaches the folding margin beside the line numbers; its boxes
         // toggle a section on click.
         _foldingManager = FoldingManager.Install(_editor.TextArea);
@@ -355,9 +352,6 @@ public sealed class MainWindow : Window
 
     private void CompleteCurrentWord()
     {
-        // The toolbar button steals the focus on click; the completion keys ride the editor's
-        // input, so the editor must have it back before the window opens.
-        _editor.Focus();
         int end = _editor.CaretOffset;
         int start = end;
         while (start > 0 && char.IsLetterOrDigit(_editor.Document.GetCharAt(start - 1))) start--;
