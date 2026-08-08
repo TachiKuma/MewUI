@@ -18,6 +18,7 @@ public sealed class SearchPanel : ITextClassifier
     private ISearchStrategy? _strategy;
     private bool _strategyIsExplicit;
     private SearchPanelView? _view;
+    private SearchInputHandler? _inputHandler;
     private bool _uninstalled;
     private bool _suspendDocumentRefresh;
 
@@ -33,7 +34,12 @@ public sealed class SearchPanel : ITextClassifier
     public static SearchPanel Install(TextEditor editor)
     {
         ArgumentNullException.ThrowIfNull(editor);
-        return new SearchPanel(editor);
+        var panel = new SearchPanel(editor);
+        // Installed with its keys, as the original does: a caller that only asks for a search panel
+        // still expects Ctrl+F to reach it.
+        panel._inputHandler = new SearchInputHandler(editor.TextArea, panel);
+        editor.TextArea.PushStackedInputHandler(panel._inputHandler);
+        return panel;
     }
 
     public static SearchPanel Install(Aprillz.MewUI.MewvalonEdit.Editing.TextArea textArea)
@@ -95,6 +101,11 @@ public sealed class SearchPanel : ITextClassifier
         }
         Close();
         _uninstalled = true;
+        if (_inputHandler is SearchInputHandler handler)
+        {
+            _editor.TextArea.PopStackedInputHandler(handler);
+            _inputHandler = null;
+        }
         _editor.Surface.Extensions.Classifiers.Remove(this);
         _document.Changed -= OnDocumentChanged;
         _editor.DocumentChanged -= OnEditorDocumentChanged;

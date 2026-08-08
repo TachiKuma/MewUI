@@ -153,11 +153,10 @@ public class TextEditor : Control, ITextEditorComponent
     {
         var host = new Grid();
         context.Register(PART_MARGIN_HOST, host);
-        // Its own layer, because the margin host is cleared and rebuilt whenever a margin joins or
-        // leaves, which would take an overlay with it.
-        var overlay = new Grid();
-        context.Register(PART_OVERLAY_HOST, overlay);
-        var layers = new Grid().Children(host, overlay);
+        // The overlay sits beside the margin host rather than inside it, because that host is
+        // cleared and rebuilt whenever a margin joins or leaves and would take the overlay with it.
+        var layers = new Grid().Children(host);
+        context.Register(PART_OVERLAY_HOST, layers);
         // A templated control suppresses its own chrome, so the border has to draw it.
         var chrome = new Border { Child = layers, ClipToBounds = true };
         context.BindChrome(chrome);

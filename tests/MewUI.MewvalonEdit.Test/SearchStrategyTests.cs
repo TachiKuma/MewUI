@@ -140,7 +140,7 @@ public sealed class SearchStrategyTests
     {
         var editor = new TextEditor { Text = TEXT };
         var panel = SearchPanel.Install(editor);
-        using var handler = new SearchInputHandler(editor, panel);
+        var handler = new SearchInputHandler(editor.TextArea, panel);
 
         Assert.IsTrue(handler.Execute(Key.Escape, ModifierKeys.None));
         Assert.IsTrue(panel.IsClosed, "Escape did not close the panel.");
