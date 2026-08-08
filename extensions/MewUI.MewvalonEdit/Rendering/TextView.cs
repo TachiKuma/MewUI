@@ -1,4 +1,5 @@
 using Aprillz.MewUI.Controls;
+using Aprillz.MewUI.Input;
 using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Editing;
 using Aprillz.MewUI.Text;
@@ -20,6 +21,7 @@ public sealed class TextView : MewObject, ITextEditorComponent
     private Action<int>? _constructionStarting;
     private Action? _linesChanged;
     private Action? _scrollOffsetChanged;
+    private MouseHoverLogic? _hoverLogic;
 
     internal TextView(TextArea textArea)
     {
@@ -279,6 +281,27 @@ public sealed class TextView : MewObject, ITextEditorComponent
         add => _linesChanged += value;
         remove => _linesChanged -= value;
     }
+
+    /// <summary>
+    /// Raised when the pointer has rested over the text. AvalonEdit pairs this with a preview event
+    /// because its events are routed; MewUI has no such route, so there is one of each.
+    /// </summary>
+    public event EventHandler<MouseEventArgs>? MouseHover
+    {
+        add => EnsureHoverLogic().MouseHover += value;
+        remove { if (_hoverLogic is not null) _hoverLogic.MouseHover -= value; }
+    }
+
+    /// <summary>Raised when the pointer moved on or left the text after <see cref="MouseHover"/>.</summary>
+    public event EventHandler<MouseEventArgs>? MouseHoverStopped
+    {
+        add => EnsureHoverLogic().MouseHoverStopped += value;
+        remove { if (_hoverLogic is not null) _hoverLogic.MouseHoverStopped -= value; }
+    }
+
+    /// <summary>Built on the first subscription: an editor nobody watches runs no hover timer.</summary>
+    private MouseHoverLogic EnsureHoverLogic()
+        => _hoverLogic ??= new MouseHoverLogic(textArea.Editor.Surface);
 
     /// <summary>Height of the whole document in view coordinates.</summary>
     public double DocumentHeight => Host.ExtentHeight;
