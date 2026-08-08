@@ -620,7 +620,7 @@ public sealed class TextViewLayout : ITextViewLayout
             int length = Math.Min(projectedEnd - position, element.VisualLength);
             if (position >= 0 && length > 0)
             {
-                inlines.Add(new InlineRun(position, length, element.Object));
+                inlines.Add(new InlineRun(position, length, element.Object, element.BreaksLine));
             }
         }
         var transformContext = new TextLineTransformContext(logical, text.AsMemory(), _defaultStyle, offsetMap);

@@ -36,12 +36,14 @@ public readonly record struct TextElementScanContext(IReadOnlyTextDocument Docum
 /// <summary>
 /// An element standing in for a document range. <see cref="VisualLength"/> is how many columns it
 /// occupies on the visual surface; <see cref="Object"/> paints them, or null to leave the range as
-/// ordinary text that the element only decorates.
+/// ordinary text that the element only decorates. <see cref="BreaksLine"/> declares that a line may
+/// break after it, which an element standing in for whitespace has to say.
 /// </summary>
 public readonly record struct GeneratedTextElement(
     int DocumentLength,
     int VisualLength,
-    IInlineTextObject? Object);
+    IInlineTextObject? Object,
+    bool BreaksLine = false);
 
 public interface ITextElementGenerator
 {

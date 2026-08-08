@@ -228,7 +228,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                     style,
                     font,
                     inline.Object,
-                    ManagedTextClusterKind.Inline));
+                    ManagedTextClusterKind.Inline,
+                    inline.BreaksLine));
                 int inlineEnd = checked(inline.Position + inline.Length);
                 while (i + 1 < boundaries.Count && boundaries[i + 1] < inlineEnd)
                 {
@@ -1012,7 +1013,8 @@ internal sealed class ManagedTextCluster(
     TextRunStyle style,
     IFont font,
     IInlineTextObject? inline,
-    ManagedTextClusterKind kind)
+    ManagedTextClusterKind kind,
+    bool breaksLine = false)
 {
     public int Start { get; } = start;
     public int Length { get; } = length;
@@ -1026,10 +1028,14 @@ internal sealed class ManagedTextCluster(
     public IInlineTextObject? Inline { get; } = inline;
     public ManagedTextClusterKind Kind { get; } = kind;
 
+    /// <summary>Set by an inline run that stands in for text a line may break after.</summary>
+    public bool BreaksLine { get; } = breaksLine;
+
     public bool IsBreakOpportunity(string text)
-        => Kind == ManagedTextClusterKind.Text &&
-           Length > 0 &&
-           char.IsWhiteSpace(text, Start);
+        => BreaksLine ||
+           (Kind == ManagedTextClusterKind.Text &&
+            Length > 0 &&
+            char.IsWhiteSpace(text, Start));
 }
 
 internal readonly record struct ManagedTextSegment(int Start, int Length, double X, double Width)

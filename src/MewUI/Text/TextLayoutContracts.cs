@@ -77,7 +77,16 @@ public interface IInlineTextObject
     void Draw(ITextRenderContext context, Point origin);
 }
 
-public readonly record struct InlineRun(int Position, int Length, IInlineTextObject Object);
+/// <summary>
+/// An object occupying columns of the laid-out text. <see cref="BreaksLine"/> declares that a line
+/// may break after it, which an object standing in for whitespace has to say: the columns it covers
+/// are no longer text, so the breaker cannot see the space it replaced.
+/// </summary>
+public readonly record struct InlineRun(
+    int Position,
+    int Length,
+    IInlineTextObject Object,
+    bool BreaksLine = false);
 
 public sealed record TextLayoutRequest
 {
