@@ -67,6 +67,24 @@ public sealed class VisualLine
         return row.LogicalStart;
     }
 
+    /// <summary>
+    /// The row a visual column falls on. At a wrap seam the column ends one row and starts the
+    /// next; <paramref name="isAtEndOfLine"/> picks the earlier row, as a caret at a row end does.
+    /// </summary>
+    public VisualTextLine GetTextLine(int visualColumn, bool isAtEndOfLine = false)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(visualColumn);
+        int lookupColumn = isAtEndOfLine && visualColumn > 0 ? visualColumn - 1 : visualColumn;
+        foreach (var row in TextLines)
+        {
+            if (lookupColumn < row.LogicalStart + row.LogicalLength)
+            {
+                return row;
+            }
+        }
+        return TextLines[^1];
+    }
+
     /// <summary>Metrics the engine measured for <paramref name="row"/>.</summary>
     public TextLayoutLineMetrics GetTextLineMetrics(VisualTextLine row)
     {

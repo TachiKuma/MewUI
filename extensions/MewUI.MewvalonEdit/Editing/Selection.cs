@@ -60,6 +60,52 @@ public abstract class Selection
     /// <summary>Replaces the selected text, leaving the caret where the replacement ends.</summary>
     public abstract void ReplaceSelectionWithText(string newText);
 
+    /// <summary>
+    /// Prefixes the text with the spaces a virtual-space position implies: writing at a column past
+    /// the line end first has to create the columns in between. Tabs fill first on a line that is
+    /// tabs only and keeps them.
+    /// </summary>
+    internal string AddSpacesIfRequired(string newText, TextViewPosition start, TextViewPosition end)
+    {
+        if (EnableVirtualSpace && InsertVirtualSpaces(newText, start, end))
+        {
+            var line = TextArea.Document.GetLineByNumber(start.Line);
+            string lineText = TextArea.Document.GetText(line.Offset, line.Length);
+            var visualLine = TextArea.TextView.GetOrConstructVisualLine(line);
+            if (visualLine is null)
+            {
+                return newText;
+            }
+            int columnDiff = start.VisualColumn - visualLine.VisualLengthWithEndOfLineMarker;
+            if (columnDiff > 0)
+            {
+                string additionalSpaces = string.Empty;
+                if (!TextArea.Options.ConvertTabsToSpaces && lineText.Trim('\t').Length == 0)
+                {
+                    int tabCount = columnDiff / TextArea.Options.IndentationSize;
+                    additionalSpaces = new string('\t', tabCount);
+                    columnDiff -= tabCount * TextArea.Options.IndentationSize;
+                }
+                additionalSpaces += new string(' ', columnDiff);
+                return additionalSpaces + newText;
+            }
+        }
+        return newText;
+    }
+
+    private bool InsertVirtualSpaces(string newText, TextViewPosition start, TextViewPosition end)
+        => (!string.IsNullOrEmpty(newText) || !(IsInVirtualSpace(start) && IsInVirtualSpace(end)))
+            && newText != "\r\n"
+            && newText != "\n"
+            && newText != "\r";
+
+    private bool IsInVirtualSpace(TextViewPosition position)
+    {
+        var visualLine = TextArea.TextView.GetOrConstructVisualLine(
+            TextArea.Document.GetLineByNumber(position.Line));
+        return visualLine is not null && position.VisualColumn > visualLine.VisualLength;
+    }
+
     /// <summary>The selection this one becomes after the change, with its ends carried across it.</summary>
     public abstract Selection UpdateOnDocumentChange(DocumentChangeEventArgs e);
 
