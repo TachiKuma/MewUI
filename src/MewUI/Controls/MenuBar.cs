@@ -19,6 +19,10 @@ public sealed class MenuBar : Control, IPopupOwner
     private int _openIndex = -1;
     private ContextMenu? _openPopup;
 
+    // Focused context captured before the menu bar takes focus, so command items in the opened
+    // menus resolve against the content that was active when the interaction started.
+    private CommandTarget? _preMenuTarget;
+
     /// <summary>
     /// Gets the menu items collection.
     /// </summary>
@@ -264,11 +268,17 @@ public sealed class MenuBar : Control, IPopupOwner
             return;
         }
 
+        if (_openIndex == -1 && FindVisualRoot() is Window window)
+        {
+            _preMenuTarget = window.CommandRouter.CaptureTarget();
+        }
+
         Focus();
 
         if (_openIndex == index)
         {
             CloseOpenMenu();
+            _preMenuTarget = null;
         }
         else
         {
@@ -298,7 +308,11 @@ public sealed class MenuBar : Control, IPopupOwner
             return;
         }
 
+        // Read the pre-menu target before CloseOpenMenu (a hover switch closes the previous popup,
+        // which clears the pending capture) and restore it for the next switch.
+        var target = _preMenuTarget ?? window.CommandRouter.CaptureTarget();
         CloseOpenMenu();
+        _preMenuTarget = target;
 
         _openIndex = index;
         InvalidateVisual();
@@ -307,6 +321,7 @@ public sealed class MenuBar : Control, IPopupOwner
         popup.FontFamily = FontFamily;
         popup.FontSize = FontSize;
         popup.FontWeight = FontWeight;
+        popup.SetCapturedCommandTarget(target);
 
         _openPopup = popup;
 
@@ -338,6 +353,7 @@ public sealed class MenuBar : Control, IPopupOwner
         {
             _openPopup = null;
             _openIndex = -1;
+            _preMenuTarget = null;
             InvalidateVisual();
         }
     }

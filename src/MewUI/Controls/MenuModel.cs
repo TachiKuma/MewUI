@@ -22,11 +22,41 @@ public sealed class MenuItem : MenuEntry
     private int _cachedUnderlineIndex = -1;
     private KeyGesture? _shortcut;
     private string? _cachedShortcutDisplayText;
+    private Command? _command;
+    private string? _commandShortcutDisplayText;
 
     public MenuItem() { }
 
     public MenuItem(string text) => Text = text ?? string.Empty;
 
+    public MenuItem(Command command) => Command = command ?? throw new ArgumentNullException(nameof(command));
+
+    public MenuItem(string text, Command command)
+    {
+        Text = text ?? string.Empty;
+        Command = command ?? throw new ArgumentNullException(nameof(command));
+    }
+
+    /// <summary>
+    /// The semantic command this item invokes. A command item takes execution, enabled state and
+    /// shortcut display from the command system; <see cref="Click"/> and <see cref="Shortcut"/>
+    /// are ignored while a command is set.
+    /// </summary>
+    public Command? Command
+    {
+        get => _command;
+        set
+        {
+            if (_command == value) return;
+            _command = value;
+            _cachedDisplayText = null;
+            _commandShortcutDisplayText = null;
+        }
+    }
+
+    /// <summary>
+    /// Presentation text override; when empty, <see cref="MewUI.Command.Text"/> supplies the label.
+    /// </summary>
     public string Text
     {
         get => _text;
@@ -39,22 +69,26 @@ public sealed class MenuItem : MenuEntry
         }
     }
 
+    private string ResolveRawText()
+        => _text.Length > 0 ? _text : _command?.Text ?? string.Empty;
+
     /// <summary>
-    /// Returns cached access key parse results. Parsed once per Text change.
+    /// Returns cached access key parse results. Parsed once per Text/Command change.
     /// </summary>
     internal (string displayText, char accessKey, int underlineIndex) GetParsedText()
     {
         if (_cachedDisplayText != null)
             return (_cachedDisplayText, _cachedAccessKey, _cachedUnderlineIndex);
 
-        if (AccessKeyHelper.TryParse(_text, out var key, out var display))
+        var rawText = ResolveRawText();
+        if (AccessKeyHelper.TryParse(rawText, out var key, out var display))
         {
             _cachedAccessKey = key;
-            _cachedUnderlineIndex = AccessKeyHelper.GetUnderlineIndex(_text);
+            _cachedUnderlineIndex = AccessKeyHelper.GetUnderlineIndex(rawText);
         }
         else
         {
-            display = _text;
+            display = rawText;
             _cachedAccessKey = default;
             _cachedUnderlineIndex = -1;
         }
@@ -86,15 +120,30 @@ public sealed class MenuItem : MenuEntry
     }
 
     /// <summary>
-    /// Returns the cached shortcut display string (e.g. "Ctrl+S"), or null if no shortcut is set.
-    /// Computed once per <see cref="Shortcut"/> change.
+    /// Returns the cached shortcut display string (e.g. "Ctrl+S"), or null if no shortcut applies.
+    /// Command items show the effective input-map gesture resolved when the menu opened.
     /// </summary>
     internal string? GetShortcutDisplayText()
     {
+        if (_command != null)
+            return _commandShortcutDisplayText;
+
         if (_shortcut == null)
             return null;
 
         return _cachedShortcutDisplayText ??= _shortcut.Value.ToDisplayString();
+    }
+
+    /// <summary>
+    /// Applies the enabled state and effective shortcut label queried for the presenting menu's
+    /// captured target; returns whether either changed.
+    /// </summary>
+    internal bool ApplyCommandPresentation(bool isEnabled, string? shortcutDisplayText)
+    {
+        bool changed = IsEnabled != isEnabled || _commandShortcutDisplayText != shortcutDisplayText;
+        IsEnabled = isEnabled;
+        _commandShortcutDisplayText = shortcutDisplayText;
+        return changed;
     }
 
     public Action? Click { get; set; }

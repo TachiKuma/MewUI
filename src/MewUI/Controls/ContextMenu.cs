@@ -1,3 +1,4 @@
+using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Controls.Text;
 
@@ -6,8 +7,14 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// A context menu popup control for displaying menu items.
 /// </summary>
-public sealed class ContextMenu : Control, IPopupOwner
+public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
 {
+    // Owner context captured at ShowAt (or inherited from the parent menu / preset by MenuBar):
+    // command items resolve CanExecute, execution and shortcut labels against it so popup focus
+    // never changes the semantic target.
+    private CommandTarget _capturedCommandTarget;
+    private CommandTarget? _presetCommandTarget;
+
     private const double SubMenuGlyphAreaWidth = 14;
     private const double ShortcutColumnGap = 12;
     private readonly ScrollBar _vBar;
@@ -163,6 +170,39 @@ public sealed class ContextMenu : Control, IPopupOwner
         }
     }
 
+    /// <summary>
+    /// Presets the command target snapshot the next ShowAt resolves against; used by presenters
+    /// (e.g. MenuBar) whose semantic target is not the ShowAt owner.
+    /// </summary>
+    internal void SetCapturedCommandTarget(CommandTarget target) => _presetCommandTarget = target;
+
+    private void UpdateCommandPresentation(Window window)
+    {
+        foreach (var entry in Menu.Items)
+        {
+            if (entry is MenuItem item && item.Command is Command command)
+            {
+                bool enabled = window.CommandRouter.CanExecute(command, _capturedCommandTarget);
+                string? shortcutText =
+                    InputMapResolver.TryGetEffectiveGesture(window, command, _capturedCommandTarget.OriginElement, out var gesture)
+                        ? gesture.ToDisplayString()
+                        : null;
+                item.ApplyCommandPresentation(enabled, shortcutText);
+            }
+        }
+    }
+
+    private bool HasCommandItems()
+    {
+        foreach (var entry in Menu.Items)
+        {
+            if (entry is MenuItem item && item.Command != null)
+                return true;
+        }
+
+        return false;
+    }
+
     public void ShowAt(UIElement owner, Point positionInWindow, double? anchorTopY = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
@@ -173,7 +213,10 @@ public sealed class ContextMenu : Control, IPopupOwner
             return;
         }
 
+        _capturedCommandTarget = _presetCommandTarget ?? CommandTarget.From(owner);
+
         ReevaluateCanClick();
+        UpdateCommandPresentation(window);
         CloseDescendants(window);
         _parentMenu = null;
 
@@ -217,6 +260,46 @@ public sealed class ContextMenu : Control, IPopupOwner
 
         double dpiScale = GetDpi() / 96.0;
         return Math.Max(1, LayoutRounding.RoundToPixelInt(height, dpiScale)) / dpiScale;
+    }
+
+    protected override void OnVisualRootChanged(Element? oldRoot, Element? newRoot)
+    {
+        base.OnVisualRootChanged(oldRoot, newRoot);
+
+        // While shown (attached to a window's popup layer), an open menu with command items is a
+        // tracked command source so state changes refresh its enabled visuals.
+        (oldRoot as Window)?.UnregisterCommandSource(this);
+        if (newRoot is Window window && HasCommandItems())
+        {
+            window.RegisterCommandSource(this);
+        }
+    }
+
+    void ICommandSource.EvaluateCommandState()
+    {
+        if (FindVisualRoot() is not Window window)
+        {
+            return;
+        }
+
+        bool changed = false;
+        foreach (var entry in Menu.Items)
+        {
+            if (entry is MenuItem item && item.Command is Command command)
+            {
+                bool enabled = window.CommandRouter.CanExecute(command, _capturedCommandTarget);
+                string? shortcutText =
+                    InputMapResolver.TryGetEffectiveGesture(window, command, _capturedCommandTarget.OriginElement, out var gesture)
+                        ? gesture.ToDisplayString()
+                        : null;
+                changed |= item.ApplyCommandPresentation(enabled, shortcutText);
+            }
+        }
+
+        if (changed)
+        {
+            InvalidateVisual();
+        }
     }
 
     protected override void OnThemeChanged(Theme oldTheme, Theme newTheme)
@@ -515,7 +598,7 @@ public sealed class ContextMenu : Control, IPopupOwner
                 return;
             }
 
-            item.Click?.Invoke();
+            InvokeItem(item);
 
             var root = FindVisualRoot();
             if (root is Window window)
@@ -525,6 +608,23 @@ public sealed class ContextMenu : Control, IPopupOwner
 
             e.Handled = true;
         }
+    }
+
+    private void InvokeItem(MenuItem item)
+    {
+        // A command item routes through the command system with the captured owner target;
+        // the legacy Click callback applies only to non-command items.
+        if (item.Command is Command command)
+        {
+            if (FindVisualRoot() is Window window)
+            {
+                window.CommandRouter.TryExecuteFromInput(command, _capturedCommandTarget, this);
+            }
+
+            return;
+        }
+
+        item.Click?.Invoke();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -592,7 +692,7 @@ public sealed class ContextMenu : Control, IPopupOwner
             }
             else
             {
-                item.Click?.Invoke();
+                InvokeItem(item);
                 var root = FindVisualRoot();
                 if (root is Window window)
                     CloseHierarchy(window);
@@ -641,6 +741,11 @@ public sealed class ContextMenu : Control, IPopupOwner
             subMenuPopup.ItemPadding = subPadding;
         }
         subMenuPopup._parentMenu = this;
+
+        // Sub-menus inherit the same target snapshot so nesting never re-targets commands.
+        subMenuPopup._capturedCommandTarget = _capturedCommandTarget;
+        subMenuPopup.ReevaluateCanClick();
+        subMenuPopup.UpdateCommandPresentation(window);
 
         var region = window.GetPopupPlacementRegion(ownerRowBounds);
         subMenuPopup.Measure(new Size(Math.Max(0, region.Width), Math.Max(0, region.Height)));
