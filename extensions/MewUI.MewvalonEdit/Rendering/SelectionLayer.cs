@@ -21,10 +21,18 @@ internal sealed class SelectionLayer(TextArea textArea) : ITextViewLayer
             return;
         }
 
+        // A hairline at every scale. A one-DIP stroke is 1.25 device pixels at 125% and lands on no
+        // pixel boundary; rounding it up instead gives two pixels at 150%, and half of that reaches
+        // past the top of the viewport on the first row and is clipped. One device pixel does
+        // neither, and the builder insets by half the same value so the stroke stays centred.
+        double dpiScale = textArea.TextView.DpiScale;
+        var pen = Border is Color color
+            ? new ColorPen(color, 1 / dpiScale).SnapThickness(dpiScale)
+            : default;
         var builder = new BackgroundGeometryBuilder
         {
             AlignToWholePixels = true,
-            BorderThickness = Border.HasValue ? 1 : 0
+            BorderThickness = pen.Thickness
         };
         foreach (var segment in selection.Segments)
         {
@@ -40,9 +48,9 @@ internal sealed class SelectionLayer(TextArea textArea) : ITextViewLayer
         // Falls back to the theme so a layer left installed with its colors cleared paints what the
         // host would have. Without this, clearing SelectionBrush would erase the selection.
         graphics.FillPath(geometry, Background ?? textArea.Editor.ThemeSelectionBackground);
-        if (Border is Color border)
+        if (Border.HasValue)
         {
-            graphics.DrawPath(geometry, border, 1);
+            graphics.DrawPath(geometry, pen.Color, pen.Thickness);
         }
     }
 }

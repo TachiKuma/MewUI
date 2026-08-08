@@ -77,7 +77,17 @@ public sealed class BackgroundGeometryBuilder
     /// </summary>
     public void AddRectangle(double left, double top, double right, double bottom)
     {
-        if (!IsClose(top, _lastBottom))
+        // Two rows share a boundary, but each edge is snapped after being pushed out by half the
+        // border, and those two roundings only land on the same value where half a border is half a
+        // pixel. Off 100% they differ by up to a border, which is the distance that still counts as
+        // the same boundary. Sharing no column ends the outline even so: a selection that starts
+        // late on one line and continues onto a short one leaves two rows with nothing above each
+        // other, and one outline through both would fold over itself.
+        // The slack is compared with a tolerance of its own: the gap comes out at exactly one border
+        // where the two roundings disagree, and neither side of that comparison is exact in binary.
+        bool continues = Math.Abs(top - _lastBottom) <= Math.Max(0.01, BorderThickness) + 1e-6 &&
+                         left < _lastRight && right > _lastLeft;
+        if (!continues)
         {
             CloseFigure();
         }
@@ -248,12 +258,10 @@ public sealed class BackgroundGeometryBuilder
             var metrics = visualLine.GetTextLineMetrics(row);
             double y = visualLine.GetTextLineVisualYPosition(row, VisualYPosition.LineTop);
             int visualStartCol = visualLine.GetTextLineVisualStartColumn(row);
+            // AvalonEdit takes one off the last row for the column its rows carry for the end of the
+            // paragraph. Ours carry text only, so the row ends where its text does.
             int visualEndCol = visualStartCol + row.LogicalLength;
-            if (ReferenceEquals(row, lastRow))
-            {
-                visualEndCol -= 1; // one position for the end of the paragraph
-            }
-            else
+            if (!ReferenceEquals(row, lastRow))
             {
                 visualEndCol -= metrics.TrailingWhitespaceLength;
             }
@@ -336,7 +344,7 @@ public sealed class BackgroundGeometryBuilder
                 {
                     yield return extendSelection;
                 }
-                else if (extendSelection.IntersectsWith(lastRect))
+                else if (Touches(extendSelection, lastRect))
                 {
                     yield return lastRect.Union(extendSelection);
                 }
@@ -355,6 +363,15 @@ public sealed class BackgroundGeometryBuilder
     }
 
     private static bool IsClose(double left, double right) => Math.Abs(left - right) < 0.01;
+
+    /// <summary>
+    /// Whether the two overlap or merely meet. <see cref="Rect.IntersectsWith"/> is strict, and the
+    /// end-of-line extension starts exactly where the text rectangle ends, so a strict test would
+    /// leave the two apart and break the run of rectangles the outline is built from.
+    /// </summary>
+    private static bool Touches(Rect left, Rect right)
+        => left.X <= right.Right && left.Right >= right.X &&
+           left.Y <= right.Bottom && left.Bottom >= right.Y;
 
     private readonly record struct Segment(bool IsArc, double X, double Y, bool Clockwise)
     {
