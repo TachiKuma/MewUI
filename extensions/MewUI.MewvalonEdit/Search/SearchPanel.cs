@@ -36,9 +36,10 @@ public sealed class SearchPanel : ITextClassifier
         ArgumentNullException.ThrowIfNull(editor);
         var panel = new SearchPanel(editor);
         // Installed with its keys, as the original does: a caller that only asks for a search panel
-        // still expects Ctrl+F to reach it.
+        // still expects Ctrl+F to reach it. Nested in the default handler, which is where the
+        // original puts it, rather than on the stack that exists to take the keyboard away.
         panel._inputHandler = new SearchInputHandler(editor.TextArea, panel);
-        editor.TextArea.PushStackedInputHandler(panel._inputHandler);
+        editor.TextArea.DefaultInputHandler.AddNestedInputHandler(panel._inputHandler);
         return panel;
     }
 
@@ -105,7 +106,7 @@ public sealed class SearchPanel : ITextClassifier
         _uninstalled = true;
         if (_inputHandler is SearchInputHandler handler)
         {
-            _editor.TextArea.PopStackedInputHandler(handler);
+            _editor.TextArea.DefaultInputHandler.RemoveNestedInputHandler(handler);
             _inputHandler = null;
         }
         _editor.Surface.Extensions.Classifiers.Remove(this);
