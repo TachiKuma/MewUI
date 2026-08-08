@@ -23,6 +23,9 @@ public class TextEditor : Control, ITextEditorComponent
     private readonly EndOfLineMarkerLayer _endOfLineMarkers;
     private readonly LineTransformerAdapter _lineTransformers;
     private readonly ElementGeneratorAdapter _elementGenerators;
+    // Where the pointer last was, so the cursor can be re-asked for without it moving again.
+    private Point? _lastCursorProbe;
+    private ModifierKeys _lastCursorModifiers;
     private SingleCharacterElementGenerator? _singleCharacterGenerator;
     private LinkElementGenerator? _linkGenerator;
     private MailLinkElementGenerator? _mailLinkGenerator;
@@ -60,6 +63,9 @@ public class TextEditor : Control, ITextEditorComponent
         _surface.TextInput += OnSurfaceTextInput;
         _surface.MouseDown += OnSurfaceMouseDown;
         _surface.MouseMove += OnSurfaceMouseMove;
+        // The element under a stationary pointer changes when the lines are rebuilt, which is where
+        // the original re-asks for the cursor as well.
+        _surface.LinesChanged += _ => InvalidateCursorIfMouseWithinTextView();
         // The generator projection runs first so it scans raw document text; the space markers
         // then restyle whatever survives, including projected replacement text.
         _surface.Extensions.Projections.Add(_elementGenerators);
@@ -708,13 +714,36 @@ public class TextEditor : Control, ITextEditorComponent
 
     private void OnSurfaceMouseMove(MouseEventArgs e)
     {
-        var position = ToWindowPoint(e);
+        _lastCursorProbe = ToWindowPoint(e);
+        _lastCursorModifiers = e.Modifiers;
+        UpdateCursor();
+    }
+
+    /// <summary>
+    /// Re-asks the element under the pointer which cursor to show, for when the lines were rebuilt
+    /// beneath a pointer that did not move. Does nothing while the pointer is elsewhere, since
+    /// updating the cursor from outside the view makes it flicker over a window border.
+    /// </summary>
+    internal void InvalidateCursorIfMouseWithinTextView()
+    {
+        if (_surface.IsMouseOver)
+        {
+            UpdateCursor();
+        }
+    }
+
+    private void UpdateCursor()
+    {
+        if (_lastCursorProbe is not Point position)
+        {
+            return;
+        }
         if (FindElementAtPoint(position) is not VisualLineElement element)
         {
             _surface.Cursor = CursorType.IBeam;
             return;
         }
-        var query = new QueryCursorEventArgs(position, e.Modifiers);
+        var query = new QueryCursorEventArgs(position, _lastCursorModifiers);
         element.OnQueryCursor(query);
         _surface.Cursor = query.Cursor ?? CursorType.IBeam;
     }
