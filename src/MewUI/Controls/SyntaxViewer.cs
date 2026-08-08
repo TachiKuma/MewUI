@@ -338,6 +338,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
                 break;
             }
         }
+        UpdateScrollBarRanges();
     }
 
     /// <summary>Applies the pixel offset derived from the anchor; true when it did not move.</summary>
@@ -350,7 +351,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             return true;
         }
         _verticalOffset = value;
-        if (_verticalScrollBar.IsVisible) _verticalScrollBar.Value = value;
+        UpdateScrollBarRanges();
         ScrollOffsetChanged?.Invoke(this);
         return false;
     }
@@ -409,12 +410,9 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         _verticalScrollBar.IsVisible = vertical;
         _horizontalScrollBar.IsVisible = horizontal;
 
+        UpdateScrollBarRanges();
         if (vertical)
         {
-            _verticalScrollBar.Minimum = 0;
-            _verticalScrollBar.Maximum = Math.Max(0, extentHeight - _contentBounds.Height);
-            _verticalScrollBar.ViewportSize = _contentBounds.Height;
-            _verticalScrollBar.Value = _verticalOffset;
             _verticalScrollBar.Arrange(new Rect(Bounds.Right - thickness, Bounds.Y, thickness, Bounds.Height));
         }
         else
@@ -424,15 +422,38 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
 
         if (horizontal)
         {
-            _horizontalScrollBar.Minimum = 0;
-            _horizontalScrollBar.Maximum = Math.Max(0, extentWidth - _contentBounds.Width);
-            _horizontalScrollBar.ViewportSize = _contentBounds.Width;
-            _horizontalScrollBar.Value = _horizontalOffset;
             _horizontalScrollBar.Arrange(new Rect(Bounds.X, Bounds.Bottom - thickness, Bounds.Width, thickness));
         }
         else
         {
             _horizontalScrollBar.Arrange(Rect.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Aligns the scroll bars with the current extent. Separate from arranging them because
+    /// materializing lines replaces estimated heights with measured ones between arranges, and a
+    /// thumb ranged against the estimate sits away from where the viewport actually is.
+    /// </summary>
+    private void UpdateScrollBarRanges()
+    {
+        if (_view is null)
+        {
+            return;
+        }
+        if (_verticalScrollBar.IsVisible)
+        {
+            _verticalScrollBar.Minimum = 0;
+            _verticalScrollBar.Maximum = Math.Max(0, _view.ExtentHeight - _contentBounds.Height);
+            _verticalScrollBar.ViewportSize = _contentBounds.Height;
+            _verticalScrollBar.Value = _verticalOffset;
+        }
+        if (_horizontalScrollBar.IsVisible)
+        {
+            _horizontalScrollBar.Minimum = 0;
+            _horizontalScrollBar.Maximum = Math.Max(0, _view.ExtentWidth - _contentBounds.Width);
+            _horizontalScrollBar.ViewportSize = _contentBounds.Width;
+            _horizontalScrollBar.Value = _horizontalOffset;
         }
     }
 
@@ -448,10 +469,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         }
         _verticalOffset = value;
         CaptureScrollAnchor();
-        if (_verticalScrollBar.IsVisible)
-        {
-            _verticalScrollBar.Value = _verticalOffset;
-        }
+        UpdateScrollBarRanges();
         ScrollOffsetChanged?.Invoke(this);
         if (invalidate)
         {
@@ -498,10 +516,7 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             return;
         }
         _horizontalOffset = value;
-        if (_horizontalScrollBar.IsVisible)
-        {
-            _horizontalScrollBar.Value = value;
-        }
+        UpdateScrollBarRanges();
         ScrollOffsetChanged?.Invoke(this);
         if (invalidate)
         {
