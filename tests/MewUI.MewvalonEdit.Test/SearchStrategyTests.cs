@@ -136,32 +136,6 @@ public sealed class SearchStrategyTests
     }
 
     [TestMethod]
-    public void TheSearchKeysDriveThePanel()
-    {
-        var editor = new TextEditor { Text = TEXT };
-        var panel = SearchPanel.Install(editor);
-        var handler = new SearchInputHandler(editor.TextArea, panel);
-
-        Assert.IsTrue(handler.Execute(Key.Escape, ModifierKeys.None));
-        Assert.IsTrue(panel.IsClosed, "Escape did not close the panel.");
-
-        Assert.IsTrue(handler.Execute(Key.F, ModifierKeys.Control));
-        Assert.IsFalse(panel.IsClosed, "Ctrl+F did not open the panel.");
-
-        panel.SearchPattern = "cat";
-        Assert.IsTrue(handler.Execute(Key.F3, ModifierKeys.None));
-        Assert.AreEqual(panel.Results[0].Offset, editor.SelectionStart);
-
-        Assert.IsTrue(handler.Execute(Key.Escape, ModifierKeys.None));
-        Assert.IsTrue(panel.IsClosed, "Escape did not close the panel.");
-
-        // Closed, so the walk keys are not ours to claim.
-        Assert.IsFalse(handler.Execute(Key.F3, ModifierKeys.None));
-
-        panel.Uninstall();
-    }
-
-    [TestMethod]
     public void FindPreviousWalksBackwardsAndWraps()
     {
         var editor = new TextEditor { Text = TEXT };

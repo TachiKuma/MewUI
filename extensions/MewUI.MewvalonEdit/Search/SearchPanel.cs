@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
+using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Text;
 using Aprillz.MewUI.MewvalonEdit.Document;
 
@@ -18,7 +19,6 @@ public sealed class SearchPanel : ITextClassifier
     private ISearchStrategy? _strategy;
     private bool _strategyIsExplicit;
     private SearchPanelView? _view;
-    private SearchInputHandler? _inputHandler;
     private bool _uninstalled;
     private bool _suspendDocumentRefresh;
 
@@ -36,10 +36,17 @@ public sealed class SearchPanel : ITextClassifier
         ArgumentNullException.ThrowIfNull(editor);
         var panel = new SearchPanel(editor);
         // Installed with its keys, as the original does: a caller that only asks for a search panel
-        // still expects Ctrl+F to reach it. Nested in the default handler, which is where the
-        // original puts it, rather than on the stack that exists to take the keyboard away.
-        panel._inputHandler = new SearchInputHandler(editor.TextArea, panel);
-        editor.TextArea.DefaultInputHandler.AddNestedInputHandler(panel._inputHandler);
+        // still expects Ctrl+F to reach it. The editor's scope and map cover the whole subtree, so
+        // the keys work from the surface, the search box and the margins alike - the area the
+        // original's routed commands covered.
+        editor.Commands.Bind(SearchCommands.Find, panel, static panel => panel.Open());
+        editor.Commands.Bind(SearchCommands.FindNext, panel,
+            static panel => panel.FindNext(), static panel => !panel.IsClosed);
+        editor.Commands.Bind(SearchCommands.FindPrevious, panel,
+            static panel => panel.FindPrevious(), static panel => !panel.IsClosed);
+        editor.InputMap.Bind(SearchCommands.Find, new KeyGesture(Key.F, ModifierKeys.Primary));
+        // An installed panel starts open, so the walk keys start bound as well.
+        panel.BindOpenGestures();
         return panel;
     }
 
@@ -69,9 +76,29 @@ public sealed class SearchPanel : ITextClassifier
         _editor.ShowOverlay(_view.Root);
         if (wasClosed)
         {
+            BindOpenGestures();
             Refresh();
         }
         Reactivate();
+    }
+
+    /// <summary>
+    /// The walk and close keys are bound only while the panel is open, so a closed panel does not
+    /// claim F3 or Escape away from the window: the nearest input map shadows farther ones even
+    /// when its command is unavailable, and a closed panel has no business shadowing anything.
+    /// </summary>
+    private void BindOpenGestures()
+    {
+        _editor.InputMap.Bind(SearchCommands.FindNext, new KeyGesture(Key.F3));
+        _editor.InputMap.Bind(SearchCommands.FindPrevious, new KeyGesture(Key.F3, ModifierKeys.Shift));
+        _editor.InputMap.Bind(new KeyGesture(Key.Escape), Close);
+    }
+
+    private void UnbindOpenGestures()
+    {
+        _editor.InputMap.Unbind(SearchCommands.FindNext);
+        _editor.InputMap.Unbind(SearchCommands.FindPrevious);
+        _editor.InputMap.Unbind(new KeyGesture(Key.Escape));
     }
 
     /// <summary>Hides the panel and drops its results, so nothing stays highlighted.</summary>
@@ -82,6 +109,7 @@ public sealed class SearchPanel : ITextClassifier
             return;
         }
         IsClosed = true;
+        UnbindOpenGestures();
         if (_view is SearchPanelView view)
         {
             _editor.HideOverlay(view.Root);
@@ -104,11 +132,10 @@ public sealed class SearchPanel : ITextClassifier
         }
         Close();
         _uninstalled = true;
-        if (_inputHandler is SearchInputHandler handler)
-        {
-            _editor.TextArea.DefaultInputHandler.RemoveNestedInputHandler(handler);
-            _inputHandler = null;
-        }
+        _editor.InputMap.Unbind(SearchCommands.Find);
+        _editor.Commands.Unbind(SearchCommands.Find);
+        _editor.Commands.Unbind(SearchCommands.FindNext);
+        _editor.Commands.Unbind(SearchCommands.FindPrevious);
         _editor.Surface.Extensions.Classifiers.Remove(this);
         _document.Changed -= OnDocumentChanged;
         _editor.DocumentChanged -= OnEditorDocumentChanged;
