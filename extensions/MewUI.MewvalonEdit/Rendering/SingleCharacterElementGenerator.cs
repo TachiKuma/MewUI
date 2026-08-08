@@ -86,6 +86,9 @@ internal sealed class WhitespaceMarkerElement(string glyph, string replaced, Tex
 {
     protected internal override string GetVisualText() => glyph;
 
+    /// <summary>The space it stands in for is where a line breaks, and it still is.</summary>
+    protected internal override bool BreaksLine => replaced == " ";
+
     public override InlineMetrics Measure(uint dpi)
     {
         var layout = MarkerLayout.For(glyph, style, dpi);

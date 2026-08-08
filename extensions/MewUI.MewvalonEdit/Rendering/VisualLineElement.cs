@@ -123,6 +123,13 @@ public class VisualLineElement
     protected internal virtual int PaintedVisualLength => VisualLength;
 
     /// <summary>
+    /// Whether a line may break after this element. An element that stands in for whitespace has to
+    /// say so: it paints its own columns, and the breaker no longer sees the space it replaced.
+    /// AvalonEdit says the same through the break conditions of its text run.
+    /// </summary>
+    protected internal virtual bool BreaksLine => false;
+
+    /// <summary>
     /// Called before the element is painted, for appearance the view owns rather than the element.
     /// </summary>
     protected internal virtual void PrepareForPaint(TextView textView)

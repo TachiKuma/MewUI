@@ -55,7 +55,7 @@ public class TextEditor : Control, ITextEditorComponent
             CornerRadius = 0
         };
         _surface.KeyDown += OnSurfaceKeyDown;
-        _surface.KeyUp += e => TextArea.HandleKeyUp(e);
+        _surface.KeyUp += e => TextArea!.HandleKeyUp(e);
         _surface.TextCommitted += OnTextCommitted;
         _surface.TextInput += OnSurfaceTextInput;
         _surface.MouseDown += OnSurfaceMouseDown;

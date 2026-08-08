@@ -262,7 +262,8 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
         return new GeneratedTextElement(
             built.DocumentLength,
             built.ReplacesText ? built.PaintedVisualLength : 0,
-            built.ReplacesText ? new ElementInline(editor, built) : null);
+            built.ReplacesText ? new ElementInline(editor, built) : null,
+            built.BreaksLine);
     }
 
     private void BeginLine(int lineStart)
