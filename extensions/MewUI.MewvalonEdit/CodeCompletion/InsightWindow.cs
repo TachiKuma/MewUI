@@ -14,10 +14,10 @@ public class InsightWindow : CompletionWindowBase
     {
         // The tooltip look is this window's own, as its template is in the original; the base
         // host carries no frame.
-        Root.BorderThickness = 1;
         Root.Padding = new Thickness(1, 1, 3, 1);
         Root.WithTheme(static (theme, root) =>
         {
+            root.BorderThickness = theme.Metrics.ControlBorderThickness;
             root.CornerRadius = theme.Metrics.ControlCornerRadius;
             root.Background = theme.Palette.ContainerBackground;
             root.BorderBrush = theme.Palette.ControlBorder;
