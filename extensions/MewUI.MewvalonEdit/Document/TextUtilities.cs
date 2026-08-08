@@ -109,6 +109,25 @@ public static class TextUtilities
         return document.GetText(line.Offset + line.Length, line.DelimiterLength);
     }
 
+    /// <summary>
+    /// All whitespace (' ' and '\t', but no newlines) after <paramref name="offset"/>, as the
+    /// segment containing it.
+    /// </summary>
+    public static ISegment GetWhitespaceAfter(ITextSource textSource, int offset)
+    {
+        ArgumentNullException.ThrowIfNull(textSource);
+        int position;
+        for (position = offset; position < textSource.TextLength; position++)
+        {
+            char character = textSource.GetCharAt(position);
+            if (character != ' ' && character != '\t')
+            {
+                break;
+            }
+        }
+        return new SimpleSegment(offset, position - offset);
+    }
+
     /// <summary>Whether the character is whitespace, part of an identifier, or a line terminator.</summary>
     public static CharacterClass GetCharacterClass(char character)
     {

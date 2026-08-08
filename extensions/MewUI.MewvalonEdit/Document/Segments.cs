@@ -28,7 +28,76 @@ public interface ISegment
 
 public readonly record struct SimpleSegment(int Offset, int Length) : ISegment
 {
+    /// <summary>The segment no range can be, used where a range is missing.</summary>
+    public static readonly SimpleSegment Invalid = new(-1, -1);
+
     public int EndOffset => Offset + Length;
+
+    /// <summary>
+    /// The overlapping portion of the segments, or <see cref="Invalid"/> when they do not overlap.
+    /// </summary>
+    public static SimpleSegment GetOverlap(ISegment segment1, ISegment segment2)
+    {
+        int start = Math.Max(segment1.Offset, segment2.Offset);
+        int end = Math.Min(segment1.EndOffset, segment2.EndOffset);
+        return end < start ? Invalid : new SimpleSegment(start, end - start);
+    }
+}
+
+/// <summary>
+/// A segment using <see cref="TextAnchor"/>s as start and end positions. For the constructors
+/// creating new anchors, the start rides after insertions and the end stays before them. Should
+/// the end move before the start, the segment has length 0.
+/// </summary>
+public sealed class AnchorSegment : ISegment
+{
+    private readonly TextAnchor _start;
+    private readonly TextAnchor _end;
+
+    public int Offset => _start.Offset;
+
+    // Math.Max takes care of the fact that the end anchor might move before the start.
+    public int Length => Math.Max(0, _end.Offset - _start.Offset);
+
+    public int EndOffset => Math.Max(_start.Offset, _end.Offset);
+
+    /// <summary>
+    /// Wraps two existing anchors. Both must have <see cref="ITextAnchor.SurviveDeletion"/> set,
+    /// since a dead anchor has no offset to answer with.
+    /// </summary>
+    public AnchorSegment(TextAnchor start, TextAnchor end)
+    {
+        ArgumentNullException.ThrowIfNull(start);
+        ArgumentNullException.ThrowIfNull(end);
+        if (!start.SurviveDeletion)
+        {
+            throw new ArgumentException("Anchors for AnchorSegment must use SurviveDeletion", nameof(start));
+        }
+        if (!end.SurviveDeletion)
+        {
+            throw new ArgumentException("Anchors for AnchorSegment must use SurviveDeletion", nameof(end));
+        }
+        _start = start;
+        _end = end;
+    }
+
+    public AnchorSegment(TextDocument document, ISegment segment)
+        : this(document, (segment ?? throw new ArgumentNullException(nameof(segment))).Offset, segment.Length)
+    {
+    }
+
+    public AnchorSegment(TextDocument document, int offset, int length)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        _start = document.CreateAnchor(offset);
+        _start.SurviveDeletion = true;
+        _start.MovementType = AnchorMovementType.AfterInsertion;
+        _end = document.CreateAnchor(offset + length);
+        _end.SurviveDeletion = true;
+        _end.MovementType = AnchorMovementType.BeforeInsertion;
+    }
+
+    public override string ToString() => $"[Offset={Offset}, EndOffset={EndOffset}]";
 }
 
 /// <summary>A one-based line and column in a document. Ordered by line, then column.</summary>
