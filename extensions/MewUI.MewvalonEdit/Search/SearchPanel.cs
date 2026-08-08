@@ -13,8 +13,10 @@ public sealed class SearchPanel : ITextClassifier
     private TextDocument _document;
     private string _searchPattern = string.Empty;
     private bool _matchCase;
-    private bool _useRegex;
+    private SearchMode _searchMode;
     private bool _wholeWords;
+    private ISearchStrategy? _strategy;
+    private bool _strategyIsExplicit;
     private bool _uninstalled;
     private bool _suspendDocumentRefresh;
 
@@ -71,16 +73,34 @@ public sealed class SearchPanel : ITextClassifier
         set { if (_matchCase != value) { _matchCase = value; Refresh(); } }
     }
 
+    /// <summary>Shorthand for <see cref="SearchMode"/>, which carries the wildcard mode as well.</summary>
     public bool UseRegex
     {
-        get => _useRegex;
-        set { if (_useRegex != value) { _useRegex = value; Refresh(); } }
+        get => SearchMode == SearchMode.RegEx;
+        set => SearchMode = value ? SearchMode.RegEx : SearchMode.Normal;
+    }
+
+    /// <summary>How the pattern is read. Changing it rebuilds the strategy.</summary>
+    public SearchMode SearchMode
+    {
+        get => _searchMode;
+        set { if (_searchMode != value) { _searchMode = value; Refresh(); } }
     }
 
     public bool WholeWords
     {
         get => _wholeWords;
         set { if (_wholeWords != value) { _wholeWords = value; Refresh(); } }
+    }
+
+    /// <summary>
+    /// The algorithm behind the search. Assigning one takes the pattern and options out of play,
+    /// which is how a caller substitutes its own matching; null returns to the built-in strategy.
+    /// </summary>
+    public ISearchStrategy? SearchStrategy
+    {
+        get => _strategy;
+        set { _strategy = value; _strategyIsExplicit = value is not null; Refresh(); }
     }
 
     public Color MarkerBrush { get; set; } = Color.FromArgb(150, 255, 215, 0);
@@ -92,6 +112,20 @@ public sealed class SearchPanel : ITextClassifier
         if (startOffset < 0) startOffset = _editor.SelectionStart + _editor.SelectionLength;
         int index = LowerBoundByOffset(startOffset);
         var result = index < _results.Count ? _results[index] : _results[0];
+        _editor.Select(result.Offset, result.Length);
+        return result;
+    }
+
+    /// <summary>
+    /// Selects the match before <paramref name="startOffset"/>, wrapping to the last one. Negative
+    /// takes the start of the current selection.
+    /// </summary>
+    public SearchResult? FindPrevious(int startOffset = -1)
+    {
+        if (_results.Count == 0) return null;
+        if (startOffset < 0) startOffset = _editor.SelectionStart;
+        int index = LowerBoundByOffset(startOffset) - 1;
+        var result = index >= 0 ? _results[index] : _results[^1];
         _editor.Select(result.Offset, result.Length);
         return result;
     }
@@ -121,34 +155,31 @@ public sealed class SearchPanel : ITextClassifier
     {
         ObjectDisposedException.ThrowIf(_uninstalled, this);
         _results.Clear();
-        if (string.IsNullOrEmpty(_searchPattern))
+        if (!_strategyIsExplicit)
+        {
+            // Rebuilt from the current options; a caller-supplied one is left alone.
+            _strategy = null;
+        }
+        if (string.IsNullOrEmpty(_searchPattern) && !_strategyIsExplicit)
         {
             _editor.InvalidateTextView();
             return;
         }
 
-        if (!UseRegex)
-        {
-            FindPlainTextMatches(0, _editor.Document.TextLength, _results);
-            _editor.InvalidateTextView();
-            return;
-        }
-
-        string pattern = WholeWords ? $@"\b(?:{_searchPattern})\b" : _searchPattern;
-        RegexOptions options = RegexOptions.CultureInvariant | RegexOptions.ExplicitCapture;
-        if (!MatchCase) options |= RegexOptions.IgnoreCase;
         try
         {
-            var regex = new Regex(pattern, options, TimeSpan.FromMilliseconds(100));
-            foreach (Match match in regex.Matches(_editor.Document.Text))
+            _strategy ??= SearchStrategyFactory.Create(_searchPattern, !MatchCase, WholeWords, SearchMode);
+            foreach (var match in _strategy.FindAll(_editor.Document, 0, _editor.Document.TextLength))
             {
-                if (match.Success && match.Length > 0)
-                    _results.Add(new SearchResult(match.Index, match.Length));
+                if (match.Length > 0)
+                {
+                    _results.Add(new SearchResult(match.Offset, match.Length));
+                }
             }
         }
-        catch (ArgumentException)
+        catch (SearchPatternException)
         {
-            // An incomplete interactive regular expression has no results until it becomes valid.
+            // An incomplete interactive pattern has no results until it becomes usable.
         }
         catch (RegexMatchTimeoutException)
         {
@@ -185,7 +216,9 @@ public sealed class SearchPanel : ITextClassifier
     private void OnDocumentChanged(object? sender, DocumentChangeEventArgs e)
     {
         if (_suspendDocumentRefresh) return;
-        if (UseRegex || string.IsNullOrEmpty(_searchPattern))
+        // Only a literal pattern can be rescanned around the edit; every other mode, and any
+        // strategy the caller supplied, has to see the whole document again.
+        if (SearchMode != SearchMode.Normal || _strategyIsExplicit || string.IsNullOrEmpty(_searchPattern))
         {
             Refresh();
             return;
