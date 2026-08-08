@@ -32,9 +32,23 @@ public class VisualLineLinkText : VisualLineText
             textView.LinkTextUnderline ? TextDecoration.Underline : TextDecoration.None);
     }
 
+    /// <summary>
+    /// Whether the link can be followed right now: true while Control is held, or whenever
+    /// <see cref="RequireControlModifierForClick"/> is off. Override to add a condition.
+    /// </summary>
+    protected virtual bool LinkIsClickable(ModifierKeys modifiers)
+    {
+        if (NavigateUri.Length == 0)
+        {
+            return false;
+        }
+        return !RequireControlModifierForClick || (modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+    }
+
     protected internal override void OnQueryCursor(QueryCursorEventArgs e)
     {
-        if (!RequireControlModifierForClick || (e.Modifiers & ModifierKeys.Control) != 0)
+        ArgumentNullException.ThrowIfNull(e);
+        if (LinkIsClickable(e.Modifiers))
         {
             e.Cursor = CursorType.Hand;
         }
@@ -42,11 +56,8 @@ public class VisualLineLinkText : VisualLineText
 
     protected internal override void OnMouseDown(MouseEventArgs e)
     {
-        if (e.Button != MouseButton.Left || NavigateUri.Length == 0)
-        {
-            return;
-        }
-        if (RequireControlModifierForClick && (e.Modifiers & ModifierKeys.Control) == 0)
+        ArgumentNullException.ThrowIfNull(e);
+        if (e.Button != MouseButton.Left || e.Handled || !LinkIsClickable(e.Modifiers))
         {
             return;
         }
@@ -93,9 +104,35 @@ public class LinkElementGenerator : VisualLineElementGenerator
     protected virtual VisualLineLinkText CreateLinkElement(string text, int documentLength)
         => new(documentLength);
 
-    /// <summary>Target for a matched text. The default treats the match itself as the URI.</summary>
-    protected virtual string GetUriFromMatch(Match match)
-        => match.Value.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "http://" + match.Value : match.Value;
+    /// <summary>
+    /// Target of a matched text, or null when the match is not a well-formed URI and no element
+    /// should stand in for it.
+    /// </summary>
+    protected virtual string? GetUriFromMatch(Match match)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        string target = match.Value.StartsWith("www.", StringComparison.Ordinal)
+            ? "http://" + match.Value
+            : match.Value;
+        return Uri.IsWellFormedUriString(target, UriKind.Absolute) ? target : null;
+    }
+
+    /// <summary>
+    /// The element standing in for the match, or null to leave the text alone. The default builds a
+    /// <see cref="VisualLineLinkText"/> around the target <see cref="GetUriFromMatch"/> resolved.
+    /// </summary>
+    protected virtual VisualLineElement? ConstructElementFromMatch(Match match)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        if (GetUriFromMatch(match) is not string uri)
+        {
+            return null;
+        }
+        var element = CreateLinkElement(match.Value, match.Length);
+        element.NavigateUri = uri;
+        element.RequireControlModifierForClick = RequireControlModifierForClick;
+        return element;
+    }
 
     public override int GetFirstInterestedOffset(int startOffset)
         => Match(startOffset, out int matchOffset).Success ? matchOffset : -1;
@@ -103,14 +140,7 @@ public class LinkElementGenerator : VisualLineElementGenerator
     public override VisualLineElement? ConstructElement(int offset)
     {
         var match = Match(offset, out int matchOffset);
-        if (!match.Success || matchOffset != offset)
-        {
-            return null;
-        }
-        var element = CreateLinkElement(match.Value, match.Length);
-        element.NavigateUri = GetUriFromMatch(match);
-        element.RequireControlModifierForClick = RequireControlModifierForClick;
-        return element;
+        return match.Success && matchOffset == offset ? ConstructElementFromMatch(match) : null;
     }
 
     private Match Match(int startOffset, out int matchOffset)
@@ -145,5 +175,10 @@ public class MailLinkElementGenerator : LinkElementGenerator
     {
     }
 
-    protected override string GetUriFromMatch(Match match) => "mailto:" + match.Value;
+    protected override string? GetUriFromMatch(Match match)
+    {
+        ArgumentNullException.ThrowIfNull(match);
+        string target = "mailto:" + match.Value;
+        return Uri.IsWellFormedUriString(target, UriKind.Absolute) ? target : null;
+    }
 }
