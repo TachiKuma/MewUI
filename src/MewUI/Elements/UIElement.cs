@@ -421,31 +421,6 @@ public abstract partial class UIElement : Element
     /// </summary>
     public event Action<KeyEventArgs>? KeyDown;
 
-    private List<KeyBinding>? _keyBindings;
-
-    /// <summary>
-    /// Keyboard shortcuts scoped to this element's subtree. A binding is checked while a key
-    /// bubbles through this element, after the element's own handling, so a shortcut never takes a
-    /// key the focused control uses. <see cref="Window.KeyBindings"/> is the window-wide variant,
-    /// checked after bubbling ends.
-    /// </summary>
-    public IList<KeyBinding> KeyBindings => _keyBindings ??= [];
-
-    internal void TryHandleKeyBindings(KeyEventArgs e)
-    {
-        if (_keyBindings is not List<KeyBinding> bindings)
-        {
-            return;
-        }
-        foreach (var binding in bindings)
-        {
-            if (binding.TryHandle(e))
-            {
-                return;
-            }
-        }
-    }
-
     /// <summary>
     /// Occurs when a key is released while the element has focus.
     /// </summary>
