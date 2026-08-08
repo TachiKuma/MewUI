@@ -219,4 +219,27 @@ public sealed class InputHandlerStackTests
 
         CollectionAssert.AreEqual(new[] { "first:up" }, log);
     }
+
+    /// <summary>
+    /// The predefined bindings sit in the groups the original exposes, so a caller can take one
+    /// group out or add to it without touching the others.
+    /// </summary>
+    [TestMethod]
+    public void UndoLivesInTheEditingGroupAndLeavesWithIt()
+    {
+        var editor = new TextEditor { Text = "abc" };
+        var handler = editor.TextArea.DefaultInputHandler;
+        editor.Document.Insert(3, "d");
+
+        // The gesture is declared with the Primary alias; the event carries what the platform sends.
+        var undo = new KeyEventArgs(Key.Z, 0, ModifierKeys.Control);
+        editor.TextArea.HandleKeyDown(undo);
+        Assert.IsTrue(undo.Handled);
+        Assert.AreEqual("abc", editor.Text);
+
+        handler.RemoveNestedInputHandler(handler.Editing);
+        editor.Document.Insert(3, "d");
+        Assert.IsFalse(handler.TryHandleKey(new KeyEventArgs(Key.Z, 0, ModifierKeys.Control)),
+            "The handler still answers undo after its editing group was taken out.");
+    }
 }

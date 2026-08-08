@@ -31,16 +31,7 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         TextView.InsertLayer(new CaretLayer(this), KnownLayer.Caret, LayerInsertionPosition.Replace);
         editor.Surface.EditingStateChanged += OnEditingStateChanged;
         editor.Surface.TextInput += OnTextInput;
-        DefaultInputHandler = new TextAreaInputHandler(this);
-        // Claimed here rather than left to the editing surface, which has the same shortcuts: the
-        // original-file marker counts undo steps, and a step taken behind the stack's back would
-        // leave the count pointing at a state the document is no longer in.
-        DefaultInputHandler.AddBinding(
-            new KeyGesture(Key.Z, ModifierKeys.Primary), () => Document.UndoStack.Undo());
-        DefaultInputHandler.AddBinding(
-            new KeyGesture(Key.Z, ModifierKeys.Primary | ModifierKeys.Shift), () => Document.UndoStack.Redo());
-        DefaultInputHandler.AddBinding(
-            new KeyGesture(Key.Y, ModifierKeys.Primary), () => Document.UndoStack.Redo());
+        DefaultInputHandler = new TextAreaDefaultInputHandler(this);
         ActiveInputHandler = DefaultInputHandler;
     }
 
@@ -280,7 +271,7 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     /// Handler the editor starts with. It stays reachable after <see cref="ActiveInputHandler"/> is
     /// replaced, so a caller can put the ordinary keyboard back.
     /// </summary>
-    public TextAreaInputHandler DefaultInputHandler { get; }
+    public TextAreaDefaultInputHandler DefaultInputHandler { get; }
 
     /// <summary>
     /// The one handler whose bindings answer keys. Assigning detaches the previous handler and

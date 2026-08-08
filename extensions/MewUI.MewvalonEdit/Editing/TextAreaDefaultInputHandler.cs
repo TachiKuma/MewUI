@@ -1,0 +1,45 @@
+using Aprillz.MewUI.Input;
+
+namespace Aprillz.MewUI.MewvalonEdit.Editing;
+
+/// <summary>
+/// The handler a text area starts with, holding the predefined bindings in the groups the original
+/// exposes. Caret movement, typing and mouse selection are behaviors of the editing surface here
+/// rather than command tables, so the groups carry what the extension layers on top of them and are
+/// where a caller adds or replaces bindings of that kind.
+/// </summary>
+public sealed class TextAreaDefaultInputHandler : TextAreaInputHandler
+{
+    public TextAreaDefaultInputHandler(TextArea textArea) : base(textArea)
+    {
+        ArgumentNullException.ThrowIfNull(textArea);
+        AddNestedInputHandler(CaretNavigation = new TextAreaInputHandler(textArea));
+        AddNestedInputHandler(Editing = new TextAreaInputHandler(textArea));
+        AddNestedInputHandler(MouseSelection = new TextAreaInputHandler(textArea));
+
+        // Claimed here rather than left to the editing surface, which has the same shortcuts: the
+        // original-file marker counts undo steps, and a step taken behind the stack's back would
+        // leave the count pointing at a state the document is no longer in.
+        Editing.AddBinding(new KeyBinding(
+            new KeyGesture(Key.Z, ModifierKeys.Primary),
+            () => textArea.Document.UndoStack.Undo(),
+            () => textArea.Document.UndoStack.CanUndo));
+        Editing.AddBinding(new KeyBinding(
+            new KeyGesture(Key.Z, ModifierKeys.Primary | ModifierKeys.Shift),
+            () => textArea.Document.UndoStack.Redo(),
+            () => textArea.Document.UndoStack.CanRedo));
+        Editing.AddBinding(new KeyBinding(
+            new KeyGesture(Key.Y, ModifierKeys.Primary),
+            () => textArea.Document.UndoStack.Redo(),
+            () => textArea.Document.UndoStack.CanRedo));
+    }
+
+    /// <summary>Bindings that move the caret. The ordinary movement keys live in the surface.</summary>
+    public TextAreaInputHandler CaretNavigation { get; }
+
+    /// <summary>Bindings that change the document, undo and redo among them.</summary>
+    public TextAreaInputHandler Editing { get; }
+
+    /// <summary>Bindings for selecting with the mouse. The ordinary drag lives in the surface.</summary>
+    public TextAreaInputHandler MouseSelection { get; }
+}
