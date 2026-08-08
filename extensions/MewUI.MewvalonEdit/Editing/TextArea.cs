@@ -14,6 +14,8 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     private SelectionLayer? _selectionLayer;
     private Selection _selection;
     private bool _applyingSelection;
+    private TextDocument _observedDocument;
+    private List<DocumentChangeEventArgs>? _pendingSelectionUpdates;
     private readonly List<TextAreaStackedInputHandler> _stackedInputHandlers = [];
     private ITextAreaInputHandler? _activeInputHandler;
 
@@ -23,6 +25,11 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         Caret = new Caret(this);
         EmptySelection = new EmptySelection(this);
         _selection = EmptySelection;
+        // A rectangular selection is the extension's own state, so unlike the simple selection it
+        // is not re-derived from the surface and has to ride document changes itself.
+        _observedDocument = editor.Document;
+        _observedDocument.Changed += OnDocumentChangedForSelection;
+        editor.DocumentChanged += OnEditorDocumentChanged;
         TextView = new TextView(this);
         TextView.Services.AddService(this);
         // Taken unconditionally: the caret's colour, its visibility and its overstrike width all
@@ -54,15 +61,28 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     /// </remarks>
     public Selection Selection
     {
-        get => _selection;
+        get
+        {
+            FlushPendingSelectionUpdates();
+            return _selection;
+        }
         set
         {
             ArgumentNullException.ThrowIfNull(value);
+            // A newly assigned selection was built against the current document, so changes that
+            // predate it must not be replayed onto it.
+            _pendingSelectionUpdates = null;
             if (_selection.Equals(value))
             {
                 return;
             }
             _selection = value;
+            if (value is RectangleSelection)
+            {
+                // The surface holds no range while a rectangle is active, so the host paints no
+                // selection; the segment layer must exist even when no appearance was ever set.
+                ResolveSelectionLayer(install: true);
+            }
             ApplyToSurface(value);
             SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -73,7 +93,16 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         _applyingSelection = true;
         try
         {
-            if (selection.SurroundingSegment is ISegment segment)
+            if (selection is RectangleSelection rectangle)
+            {
+                // The surface cannot represent a column block. It keeps an empty selection with
+                // the caret on the rectangle's active corner, and the rectangle itself stays the
+                // extension's own state.
+                _editor.MoveCaret(
+                    Document.GetOffset(rectangle.EndPosition.Line, rectangle.EndPosition.Column),
+                    extendSelection: false);
+            }
+            else if (selection.SurroundingSegment is ISegment segment)
             {
                 // Anchored at the start position and extended to the end, rather than selected as a
                 // range: a range leaves the caret at the higher offset, which would drop the
@@ -243,7 +272,7 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     public void PerformTextInput(string text) => _editor.InsertTextInput(text ?? string.Empty);
 
     /// <summary>Collapses the selection to the caret.</summary>
-    public void ClearSelection() => _editor.Select(_editor.CaretOffset, 0);
+    public void ClearSelection() => Selection = EmptySelection;
 
     private void OnEditingStateChanged()
     {
@@ -252,17 +281,80 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         Caret.RaisePositionChanged();
         if (!_applyingSelection)
         {
+            FlushPendingSelectionUpdates();
             int start = _editor.SelectionStart;
             int end = start + _editor.SelectionLength;
-            // Which end the caret sits at is which way the selection was made. The surface reports
-            // the range with the smaller offset first, so reading it straight would turn every
-            // backwards drag into a forwards selection, and replacing one would leave the caret at
-            // the wrong end of the new text.
-            _selection = end > start && _editor.CaretOffset == start
-                ? Selection.Create(this, end, start)
-                : Selection.Create(this, start, end);
+            if (_selection is RectangleSelection rectangle
+                && end == start && CaretSitsOnCorner(rectangle))
+            {
+                // The caret resting on the rectangle's active corner is the rectangle's own
+                // bookkeeping; anything else the surface did (a click, a plain caret move, a
+                // drag) dissolves the rectangle into what the surface holds.
+            }
+            else
+            {
+                // Which end the caret sits at is which way the selection was made. The surface
+                // reports the range with the smaller offset first, so reading it straight would
+                // turn every backwards drag into a forwards selection, and replacing one would
+                // leave the caret at the wrong end of the new text.
+                _selection = end > start && _editor.CaretOffset == start
+                    ? Selection.Create(this, end, start)
+                    : Selection.Create(this, start, end);
+            }
         }
         SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The rectangle cannot be rebuilt inside the change notification: the surface's layout has
+    /// not seen the change yet and constructing a visual line against it reads stale line states.
+    /// The changes queue up and replay when the selection is next read or the surface settles.
+    /// </summary>
+    private void OnDocumentChangedForSelection(object? sender, DocumentChangeEventArgs e)
+    {
+        if (_selection is RectangleSelection)
+        {
+            (_pendingSelectionUpdates ??= []).Add(e);
+        }
+    }
+
+    private void FlushPendingSelectionUpdates()
+    {
+        if (_pendingSelectionUpdates is null || _pendingSelectionUpdates.Count == 0)
+        {
+            return;
+        }
+        var pending = _pendingSelectionUpdates;
+        _pendingSelectionUpdates = null;
+        foreach (var change in pending)
+        {
+            if (_selection is RectangleSelection rectangle)
+            {
+                _selection = rectangle.UpdateOnDocumentChange(change);
+            }
+        }
+    }
+
+    private void OnEditorDocumentChanged(object? sender, EventArgs e)
+    {
+        _observedDocument.Changed -= OnDocumentChangedForSelection;
+        _observedDocument = _editor.Document;
+        _observedDocument.Changed += OnDocumentChangedForSelection;
+    }
+
+    private bool CaretSitsOnCorner(RectangleSelection rectangle)
+    {
+        var corner = rectangle.EndPosition;
+        if (corner.Line < 1 || corner.Line > Document.LineCount)
+        {
+            return false;
+        }
+        var line = Document.GetLineByNumber(corner.Line);
+        if (corner.Column < 1 || corner.Column > line.Length + 1)
+        {
+            return false;
+        }
+        return _editor.CaretOffset == Document.GetOffset(corner.Line, corner.Column);
     }
 
     private void OnTextInput(TextInputEventArgs args) => TextEntering?.Invoke(args);
@@ -369,11 +461,17 @@ public sealed class Caret(TextArea textArea)
 
     private Color? _caretBrush;
     private bool _isVisible = true;
+    private int _visualColumnOverride = -1;
+    private int _visualColumnOverrideOffset = -1;
 
     public int Offset
     {
         get => textArea.Editor.CaretOffset;
-        set => textArea.Editor.CaretOffset = value;
+        set
+        {
+            _visualColumnOverride = -1;
+            textArea.Editor.CaretOffset = value;
+        }
     }
 
     public int Line => textArea.Document.GetLocation(Offset).Line;
@@ -381,13 +479,20 @@ public sealed class Caret(TextArea textArea)
     public TextLocation Location => textArea.Document.GetLocation(Offset);
 
     /// <summary>
-    /// Where the caret is, including the visual column it lands on. Assigning takes the location
-    /// and leaves the visual column to be worked out from it.
+    /// Where the caret is, including the visual column it lands on. An assigned visual column is
+    /// kept while the caret stays on that offset, which is how a caret in virtual space remembers
+    /// the column the clamped surface offset cannot carry.
     /// </summary>
     public TextViewPosition Position
     {
         get => new(Location, VisualColumn);
-        set => Offset = textArea.Document.GetOffset(value.Line, value.Column);
+        set
+        {
+            int offset = textArea.Document.GetOffset(value.Line, value.Column);
+            _visualColumnOverride = value.VisualColumn;
+            _visualColumnOverrideOffset = value.VisualColumn >= 0 ? offset : -1;
+            textArea.Editor.CaretOffset = offset;
+        }
     }
 
     /// <summary>Visual column of the caret, which a projection moves away from the column.</summary>
@@ -395,8 +500,13 @@ public sealed class Caret(TextArea textArea)
     {
         get
         {
-            var line = textArea.TextView.GetOrConstructVisualLine(textArea.Document.GetLineByOffset(Offset));
-            return line is null ? Column - 1 : line.GetVisualColumn(Offset - line.StartOffset);
+            int offset = Offset;
+            if (_visualColumnOverride >= 0 && offset == _visualColumnOverrideOffset)
+            {
+                return _visualColumnOverride;
+            }
+            var line = textArea.TextView.GetOrConstructVisualLine(textArea.Document.GetLineByOffset(offset));
+            return line is null ? Column - 1 : line.GetVisualColumn(offset - line.StartOffset);
         }
     }
 
@@ -426,7 +536,16 @@ public sealed class Caret(TextArea textArea)
 
     public event EventHandler? PositionChanged;
 
-    internal void RaisePositionChanged() => PositionChanged?.Invoke(this, EventArgs.Empty);
+    internal void RaisePositionChanged()
+    {
+        // The remembered virtual column belongs to one offset; once the caret leaves it, the
+        // column is derived again.
+        if (_visualColumnOverride >= 0 && _visualColumnOverrideOffset != Offset)
+        {
+            _visualColumnOverride = -1;
+        }
+        PositionChanged?.Invoke(this, EventArgs.Empty);
+    }
 
     private void SetVisible(bool value)
     {
