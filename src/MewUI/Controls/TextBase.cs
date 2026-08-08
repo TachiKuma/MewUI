@@ -86,6 +86,7 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         Cursor = CursorType.IBeam;
         _document.Changed += OnDocumentTextChanged;
         _editor.StateChanged += SyncSelectionMirrors;
+        BindStandardEditCommands();
 
         if (_document.TextLength > 0 && TextSyncProperty is MewProperty<string> mirror)
         {
@@ -206,6 +207,30 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     public bool CanUndo => _editor.CanUndo;
     public bool CanRedo => _editor.CanRedo;
+
+    private void BindStandardEditCommands()
+    {
+        // One shared handler set for keyboard defaults, menus and toolbars (doc: standard control
+        // migration). Direct key handling in OnKeyDown still runs first and shadows the input map.
+        Commands.Bind(StandardCommands.Copy, this,
+            static textBase => textBase.Copy(),
+            static textBase => textBase._editor.Selection.Length > 0);
+        Commands.Bind(StandardCommands.Cut, this,
+            static textBase => textBase.Cut(),
+            static textBase => !textBase.IsReadOnly && textBase._editor.Selection.Length > 0);
+        Commands.Bind(StandardCommands.Paste, this,
+            static textBase => textBase.Paste(),
+            static textBase => !textBase.IsReadOnly);
+        Commands.Bind(StandardCommands.SelectAll, this,
+            static textBase => textBase.SelectAll(),
+            static textBase => textBase._document.TextLength > 0);
+        Commands.Bind(StandardCommands.Undo, this,
+            static textBase => textBase.Undo(),
+            static textBase => !textBase.IsReadOnly && textBase.CanUndo);
+        Commands.Bind(StandardCommands.Redo, this,
+            static textBase => textBase.Redo(),
+            static textBase => !textBase.IsReadOnly && textBase.CanRedo);
+    }
 
     public void Select(int start, int length) => _editor.SetSelection(start, length);
 
