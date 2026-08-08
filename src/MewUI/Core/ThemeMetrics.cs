@@ -34,7 +34,9 @@ public sealed record class ThemeMetrics
         ItemPadding = new Thickness(8, 2, 8, 2),
         ContainerPadding = new Thickness(8),
         FontFamily = SystemFontFamily,
+        FontSizeSmall = 11,
         FontSize = 12,
+        FontSizeLarge = 14,
         FontWeight = FontWeight.Normal,
         ScrollBarThickness = 4,
         ScrollBarHitThickness = 10,
@@ -88,6 +90,17 @@ public sealed record class ThemeMetrics
     /// Gets the default font size (in DIPs).
     /// </summary>
     public required double FontSize { get; init; }
+
+    /// <summary>
+    /// Gets the default small font size (in DIPs).
+    /// </summary>
+    public required double FontSizeSmall { get; init; }
+
+    /// <summary>
+    /// Gets the default large font size (in DIPs).
+    /// </summary>
+    /// </summary>
+    public required double FontSizeLarge { get; init; }
 
     /// <summary>
     /// Gets the default font weight.
