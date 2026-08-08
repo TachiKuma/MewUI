@@ -253,6 +253,12 @@ internal static class WindowInputRouter
         for (var current = ResolveKeyRoutingStart(window); current != null && !args.Handled; current = GetInputBubbleParent(window, current))
         {
             current.RaiseKeyDown(args);
+            if (!args.Handled)
+            {
+                // The element's own handling first, so a subtree shortcut never takes a key the
+                // focused control uses; the deepest element holding a matching binding wins.
+                current.TryHandleKeyBindings(args);
+            }
         }
     }
 
