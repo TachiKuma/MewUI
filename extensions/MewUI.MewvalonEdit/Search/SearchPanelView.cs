@@ -43,25 +43,12 @@ internal sealed class SearchPanelView
             _panel.SearchPattern = value;
             UpdateStatus();
         };
-        // F3 and Escape bubble on to the editor, where the search handler answers them wherever
-        // the focus is. Enter is the box's own key: it walks the matches while typing.
-        Root.KeyDown += e =>
-        {
-            if (e.Handled || e.Key != Key.Enter)
-            {
-                return;
-            }
-            if ((e.Modifiers & ModifierKeys.Shift) != 0)
-            {
-                _panel.FindPrevious();
-            }
-            else
-            {
-                _panel.FindNext();
-            }
-            UpdateStatus();
-            e.Handled = true;
-        };
+        // F3 and Escape bubble on to the editor, where the search handler's bindings answer them
+        // wherever the focus is. Enter is the panel's own key: it walks the matches while typing.
+        Root.KeyBindings.Add(new KeyBinding(
+            new KeyGesture(Key.Enter), () => { _panel.FindNext(); UpdateStatus(); }));
+        Root.KeyBindings.Add(new KeyBinding(
+            new KeyGesture(Key.Enter, ModifierKeys.Shift), () => { _panel.FindPrevious(); UpdateStatus(); }));
 
         new TextBlock()
             .Ref(out _status)
