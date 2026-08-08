@@ -12,8 +12,16 @@ public class InsightWindow : CompletionWindowBase
 {
     public InsightWindow(TextArea textArea) : base(textArea)
     {
-        // The original renders like a tooltip; the shared themed border stands in for that here.
+        // The tooltip look is this window's own, as its template is in the original; the base
+        // host carries no frame.
+        Root.BorderThickness = 1;
         Root.Padding = new Thickness(1, 1, 3, 1);
+        Root.WithTheme(static (theme, root) =>
+        {
+            root.CornerRadius = theme.Metrics.ControlCornerRadius;
+            root.Background = theme.Palette.ContainerBackground;
+            root.BorderBrush = theme.Palette.ControlBorder;
+        });
     }
 
     /// <summary>Whether the window closes when the caret leaves the segment. The default is true.</summary>

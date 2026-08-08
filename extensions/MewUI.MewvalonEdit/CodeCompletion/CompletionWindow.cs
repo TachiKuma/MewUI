@@ -11,7 +11,8 @@ public class CompletionWindow : CompletionWindowBase
     {
         CompletionList = new CompletionList();
         Root.Child = CompletionList.Root;
-        // The original's shape: fixed width, automatic height up to a cap.
+        // The original's shape: fixed width, automatic height up to a cap. The frame is the
+        // list's own, as in the original.
         Root.Width = 175;
         Root.MaxHeight = 300;
         Root.MinHeight = 15;

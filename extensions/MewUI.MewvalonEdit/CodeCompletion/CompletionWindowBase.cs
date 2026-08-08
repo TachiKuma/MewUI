@@ -24,17 +24,15 @@ public class CompletionWindowBase
         _document = textArea.Document;
         StartOffset = EndOffset = textArea.Caret.Offset;
         _inputHandler = new InputHandler(this);
+        // A bare positioning host: the original base window is styleless and each window carries
+        // its own frame - the completion list its list frame, the insight window its tooltip look.
         Root = new Border
         {
             HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-            BorderThickness = 1
+            VerticalAlignment = VerticalAlignment.Top
         };
         Root.WithTheme(static (theme, root) =>
         {
-            root.CornerRadius = theme.Metrics.ControlCornerRadius;
-            root.Background = theme.Palette.ContainerBackground;
-            root.BorderBrush = theme.Palette.ControlBorder;
             // The panel hangs inside the editor, whose monospace font would otherwise inherit.
             root.FontFamily(theme.Metrics.FontFamily).FontSize(theme.Metrics.FontSize);
         });
