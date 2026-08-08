@@ -274,6 +274,25 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     /// <summary>Collapses the selection to the caret.</summary>
     public void ClearSelection() => Selection = EmptySelection;
 
+    /// <summary>
+    /// Marks the surface changes inside <paramref name="action"/> as the extension's own, so the
+    /// selection is not re-derived from them. A box-selection step moves the caret before it moves
+    /// the rectangle's corner, and re-deriving in between would dissolve the rectangle mid-step.
+    /// </summary>
+    internal void RunOwningSurface(Action action)
+    {
+        bool previous = _applyingSelection;
+        _applyingSelection = true;
+        try
+        {
+            action();
+        }
+        finally
+        {
+            _applyingSelection = previous;
+        }
+    }
+
     private void OnEditingStateChanged()
     {
         // After the edit finished recording, which is the first moment the history answers for it.
@@ -533,6 +552,12 @@ public sealed class Caret(TextArea textArea)
 
     /// <summary>Scrolls the smallest amount that brings the caret into view.</summary>
     public void BringCaretToView() => textArea.Editor.Surface.ScrollToCaret();
+
+    /// <summary>
+    /// The x the caret wants to stay at while moving up and down, or NaN when the next vertical
+    /// move should take the x from the caret's current position.
+    /// </summary>
+    public double DesiredXPos { get; set; } = double.NaN;
 
     public event EventHandler? PositionChanged;
 

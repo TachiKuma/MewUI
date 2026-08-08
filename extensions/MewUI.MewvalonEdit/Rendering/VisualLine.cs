@@ -68,6 +68,62 @@ public sealed class VisualLine
     }
 
     /// <summary>
+    /// Next caret stop after <paramref name="visualColumn"/> in <paramref name="direction"/>, or -1
+    /// when this line has none. Stops follow the document text of the line rather than projected
+    /// elements; virtual-space columns step one by one where <paramref name="allowVirtualSpace"/>
+    /// permits, which only the grapheme modes do.
+    /// </summary>
+    public int GetNextCaretPosition(
+        int visualColumn, LogicalDirection direction, CaretPositioningMode mode, bool allowVirtualSpace)
+    {
+        if (mode is not CaretPositioningMode.Normal and not CaretPositioningMode.EveryCodepoint)
+        {
+            allowVirtualSpace = false;
+        }
+        int lineStart = StartOffset;
+        int lineEnd = StartOffset + FirstDocumentLine.Length;
+        if (direction == LogicalDirection.Backward)
+        {
+            if (visualColumn > VisualLength)
+            {
+                return allowVirtualSpace ? visualColumn - 1 : VisualLength;
+            }
+            int offset = lineStart + GetRelativeOffset(Math.Clamp(visualColumn, 0, VisualLength));
+            int next = TextUtilities.GetNextCaretPosition(Document, offset, direction, mode);
+            if (next >= lineStart && next <= lineEnd)
+            {
+                return GetVisualColumn(next - lineStart);
+            }
+            // The scan left the line; the line start is still an implicit stop in grapheme modes.
+            if (visualColumn > 0 &&
+                mode is CaretPositioningMode.Normal or CaretPositioningMode.EveryCodepoint)
+            {
+                return 0;
+            }
+            return -1;
+        }
+        else
+        {
+            if (visualColumn >= VisualLength)
+            {
+                return allowVirtualSpace ? visualColumn + 1 : -1;
+            }
+            int offset = lineStart + GetRelativeOffset(Math.Max(visualColumn, 0));
+            int next = TextUtilities.GetNextCaretPosition(Document, offset, direction, mode);
+            if (next >= lineStart && next <= lineEnd)
+            {
+                return GetVisualColumn(next - lineStart);
+            }
+            // The scan left the line; the line end is always an implicit stop.
+            if (visualColumn < VisualLength)
+            {
+                return VisualLength;
+            }
+            return -1;
+        }
+    }
+
+    /// <summary>
     /// The row a visual column falls on. At a wrap seam the column ends one row and starts the
     /// next; <paramref name="isAtEndOfLine"/> picks the earlier row, as a caret at a row end does.
     /// </summary>

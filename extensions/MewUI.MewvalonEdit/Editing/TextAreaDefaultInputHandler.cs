@@ -32,6 +32,21 @@ public sealed class TextAreaDefaultInputHandler : TextAreaInputHandler
             new KeyGesture(Key.Y, ModifierKeys.Primary),
             () => textArea.Document.UndoStack.Redo(),
             () => textArea.Document.UndoStack.CanRedo));
+
+        // The box-selection keys, as the original binds them on the caret-navigation handler.
+        void AddBoxBinding(Key key, ModifierKeys modifiers, CaretMovementType direction)
+            => CaretNavigation.AddBinding(new KeyBinding(
+                new KeyGesture(key, modifiers),
+                () => CaretNavigationCommandHandler.MoveCaretBoxSelection(textArea, direction)));
+        const ModifierKeys ALT_SHIFT = ModifierKeys.Alt | ModifierKeys.Shift;
+        AddBoxBinding(Key.Left, ALT_SHIFT, CaretMovementType.CharLeft);
+        AddBoxBinding(Key.Right, ALT_SHIFT, CaretMovementType.CharRight);
+        AddBoxBinding(Key.Left, ModifierKeys.Control | ALT_SHIFT, CaretMovementType.WordLeft);
+        AddBoxBinding(Key.Right, ModifierKeys.Control | ALT_SHIFT, CaretMovementType.WordRight);
+        AddBoxBinding(Key.Up, ALT_SHIFT, CaretMovementType.LineUp);
+        AddBoxBinding(Key.Down, ALT_SHIFT, CaretMovementType.LineDown);
+        AddBoxBinding(Key.Home, ALT_SHIFT, CaretMovementType.LineStart);
+        AddBoxBinding(Key.End, ALT_SHIFT, CaretMovementType.LineEnd);
     }
 
     /// <summary>Bindings that move the caret. The ordinary movement keys live in the surface.</summary>

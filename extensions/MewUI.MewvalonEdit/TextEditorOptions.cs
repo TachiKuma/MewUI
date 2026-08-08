@@ -17,6 +17,9 @@ public class TextEditorOptions : MewObject
     public static readonly MewProperty<bool> EnableVirtualSpaceProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(EnableVirtualSpace), false);
 
+    public static readonly MewProperty<bool> EnableRectangularSelectionProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(EnableRectangularSelection), true);
+
     public static readonly MewProperty<bool> ShowSpacesProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowSpaces), false);
 
@@ -95,6 +98,13 @@ public class TextEditorOptions : MewObject
     {
         get => GetValue(EnableVirtualSpaceProperty);
         set => SetValue(EnableVirtualSpaceProperty, value);
+    }
+
+    /// <summary>Whether the box-selection keys and Alt+drag may start a rectangular selection.</summary>
+    public virtual bool EnableRectangularSelection
+    {
+        get => GetValue(EnableRectangularSelectionProperty);
+        set => SetValue(EnableRectangularSelectionProperty, value);
     }
 
     public virtual bool ShowSpaces
