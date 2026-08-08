@@ -66,6 +66,8 @@ public class DocumentHighlighter : IHighlighter
     private ImmutableStack<HighlightingSpan> _initialSpanStack = ImmutableStack<HighlightingSpan>.Empty;
     private int _firstInvalidLine;
     private bool _isHighlighting;
+    private int _pendingStateChangeFrom;
+    private int _pendingStateChangeTo;
     private bool _isInHighlightingGroup;
     private bool _isDisposed;
 
@@ -114,7 +116,42 @@ public class DocumentHighlighter : IHighlighter
     public void InvalidateHighlighting()
     {
         InvalidateSpanStacks();
-        HighlightingStateChanged?.Invoke(1, _document.LineCount);
+        RaiseHighlightingStateChanged(1, _document.LineCount);
+    }
+
+    /// <summary>
+    /// Raises <see cref="HighlightingStateChanged"/>, holding it back while a highlighting
+    /// operation runs: a listener's repaint rebuilds lines synchronously, and rebuilding would
+    /// re-enter the highlighter. Held notifications merge and fire when the operation completes.
+    /// </summary>
+    private void RaiseHighlightingStateChanged(int fromLineNumber, int toLineNumber)
+    {
+        if (_isHighlighting)
+        {
+            if (_pendingStateChangeTo == 0)
+            {
+                _pendingStateChangeFrom = fromLineNumber;
+                _pendingStateChangeTo = toLineNumber;
+            }
+            else
+            {
+                _pendingStateChangeFrom = Math.Min(_pendingStateChangeFrom, fromLineNumber);
+                _pendingStateChangeTo = Math.Max(_pendingStateChangeTo, toLineNumber);
+            }
+            return;
+        }
+        HighlightingStateChanged?.Invoke(fromLineNumber, toLineNumber);
+    }
+
+    private void FlushPendingStateChanged()
+    {
+        while (_pendingStateChangeTo != 0 && !_isHighlighting)
+        {
+            int fromLineNumber = _pendingStateChangeFrom;
+            int toLineNumber = _pendingStateChangeTo;
+            _pendingStateChangeTo = 0;
+            HighlightingStateChanged?.Invoke(fromLineNumber, toLineNumber);
+        }
     }
 
     /// <inheritdoc/>
@@ -135,6 +172,7 @@ public class DocumentHighlighter : IHighlighter
         finally
         {
             _isHighlighting = false;
+            FlushPendingStateChanged();
         }
     }
 
@@ -169,6 +207,7 @@ public class DocumentHighlighter : IHighlighter
         finally
         {
             _isHighlighting = false;
+            FlushPendingStateChanged();
         }
     }
 
@@ -260,7 +299,7 @@ public class DocumentHighlighter : IHighlighter
             }
             if (lineNumber + 1 <= _document.LineCount)
             {
-                HighlightingStateChanged?.Invoke(lineNumber + 1, lineNumber + 1);
+                RaiseHighlightingStateChanged(lineNumber + 1, lineNumber + 1);
             }
         }
         else if (_firstInvalidLine == lineNumber)

@@ -30,6 +30,31 @@ public sealed class HighlightingStateScanTests
     }
 
     [TestMethod]
+    public void StateNotificationsArriveAfterTheHighlighterIsIdle()
+    {
+        var definition = HighlightingManager.Instance.GetDefinition("C#");
+        Assert.IsNotNull(definition);
+        var document = new TextDocument(
+            string.Join("\n", Enumerable.Range(1, 40).Select(n => $"int value{n} = {n};")));
+        var colorizer = new HighlightingColorizer(definition);
+        var highlighter = colorizer.GetHighlighter(document);
+        int forwarded = 0;
+        // A consumer's repaint rebuilds lines synchronously, which re-enters the highlighter;
+        // that call throws unless the notification waits for the highlighter to go idle.
+        colorizer.HighlightingStateChanged += (_, toLine) =>
+        {
+            highlighter.HighlightLine(Math.Min(toLine, document.LineCount));
+            forwarded++;
+        };
+
+        colorizer.OnVisualLineConstructionStarting(document, 30);
+        colorizer.OnVisualLinesChanged();
+
+        Assert.IsGreaterThanOrEqualTo(1, forwarded,
+            "The boundary notification must still reach the consumer.");
+    }
+
+    [TestMethod]
     public void AStateChangeBelowTheColorizedLineStillRepaints()
     {
         var definition = HighlightingManager.Instance.GetDefinition("C#");
