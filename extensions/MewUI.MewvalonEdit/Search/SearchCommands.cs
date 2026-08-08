@@ -49,4 +49,29 @@ public sealed class SearchInputHandler(TextArea textArea, SearchPanel panel)
             e.Handled = true;
         }
     }
+
+    /// <summary>
+    /// The stacked path only sees keys while the editing surface has the focus. Keys bubble from
+    /// the focused control to the root, so listening on the editor as well is what lets Ctrl+F
+    /// work from the search box or a margin - the place AvalonEdit's routed commands cover.
+    /// </summary>
+    public override void Attach()
+    {
+        base.Attach();
+        TextArea.Editor.KeyDown += OnEditorKeyDown;
+    }
+
+    public override void Detach()
+    {
+        TextArea.Editor.KeyDown -= OnEditorKeyDown;
+        base.Detach();
+    }
+
+    private void OnEditorKeyDown(KeyEventArgs e)
+    {
+        if (!e.Handled && Execute(e.Key, e.Modifiers))
+        {
+            e.Handled = true;
+        }
+    }
 }
