@@ -17,6 +17,7 @@ public sealed class SearchPanel : ITextClassifier
     private bool _wholeWords;
     private ISearchStrategy? _strategy;
     private bool _strategyIsExplicit;
+    private SearchPanelView? _view;
     private bool _uninstalled;
     private bool _suspendDocumentRefresh;
 
@@ -41,6 +42,50 @@ public sealed class SearchPanel : ITextClassifier
         return Install(textArea.Editor);
     }
 
+    /// <summary>Strings the panel shows. Assign a subclass to translate them.</summary>
+    public Localization Localization { get; set; } = new();
+
+    /// <summary>
+    /// Whether the panel is closed. A closed panel searches nothing and highlights nothing, which
+    /// is why closing clears the results rather than only hiding the controls. An installed panel
+    /// starts open, so a caller that drives the search from its own interface needs no Open call.
+    /// </summary>
+    public bool IsClosed { get; private set; }
+
+    /// <summary>Shows the panel's controls, or puts the caret back in them when already shown.</summary>
+    public void Open()
+    {
+        ObjectDisposedException.ThrowIf(_uninstalled, this);
+        bool wasClosed = IsClosed;
+        IsClosed = false;
+        _view ??= new SearchPanelView(this);
+        _editor.ShowOverlay(_view.Root);
+        if (wasClosed)
+        {
+            Refresh();
+        }
+        Reactivate();
+    }
+
+    /// <summary>Hides the panel and drops its results, so nothing stays highlighted.</summary>
+    public void Close()
+    {
+        if (IsClosed)
+        {
+            return;
+        }
+        IsClosed = true;
+        if (_view is SearchPanelView view)
+        {
+            _editor.HideOverlay(view.Root);
+        }
+        _results.Clear();
+        _editor.InvalidateTextView();
+    }
+
+    /// <summary>Puts the caret in the search box and selects what is there.</summary>
+    public void Reactivate() => _view?.Reactivate();
+
     /// <summary>Detaches the panel from the editor. Calling it twice is harmless.</summary>
     public void Uninstall()
     {
@@ -48,6 +93,7 @@ public sealed class SearchPanel : ITextClassifier
         {
             return;
         }
+        Close();
         _uninstalled = true;
         _editor.Surface.Extensions.Classifiers.Remove(this);
         _document.Changed -= OnDocumentChanged;
@@ -155,6 +201,12 @@ public sealed class SearchPanel : ITextClassifier
     {
         ObjectDisposedException.ThrowIf(_uninstalled, this);
         _results.Clear();
+        if (IsClosed)
+        {
+            // A closed panel highlights nothing, so there is nothing to look for.
+            _editor.InvalidateTextView();
+            return;
+        }
         if (!_strategyIsExplicit)
         {
             // Rebuilt from the current options; a caller-supplied one is left alone.

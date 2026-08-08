@@ -107,6 +107,60 @@ public sealed class SearchStrategyTests
         panel.Uninstall();
     }
 
+    /// <summary>
+    /// A closed panel highlights nothing, so it must find nothing either; the results are what the
+    /// classifier paints from.
+    /// </summary>
+    [TestMethod]
+    public void AClosedPanelFindsNothing()
+    {
+        var editor = new TextEditor { Text = TEXT };
+        var panel = SearchPanel.Install(editor);
+
+        Assert.IsFalse(panel.IsClosed, "An installed panel starts open, so a host driving it needs no Open call.");
+        panel.SearchPattern = "cat";
+        Assert.IsNotEmpty(panel.Results);
+
+        panel.Close();
+        Assert.IsTrue(panel.IsClosed);
+        Assert.IsEmpty(panel.Results, "Closing left results behind to highlight.");
+
+        panel.SearchPattern = "category";
+        Assert.IsEmpty(panel.Results, "A closed panel searched anyway.");
+
+        panel.Open();
+        Assert.IsFalse(panel.IsClosed);
+        Assert.IsNotEmpty(panel.Results, "Opening did not run the search that was waiting.");
+
+        panel.Uninstall();
+    }
+
+    [TestMethod]
+    public void TheSearchKeysDriveThePanel()
+    {
+        var editor = new TextEditor { Text = TEXT };
+        var panel = SearchPanel.Install(editor);
+        using var handler = new SearchInputHandler(editor, panel);
+
+        Assert.IsTrue(handler.Execute(Key.Escape, ModifierKeys.None));
+        Assert.IsTrue(panel.IsClosed, "Escape did not close the panel.");
+
+        Assert.IsTrue(handler.Execute(Key.F, ModifierKeys.Control));
+        Assert.IsFalse(panel.IsClosed, "Ctrl+F did not open the panel.");
+
+        panel.SearchPattern = "cat";
+        Assert.IsTrue(handler.Execute(Key.F3, ModifierKeys.None));
+        Assert.AreEqual(panel.Results[0].Offset, editor.SelectionStart);
+
+        Assert.IsTrue(handler.Execute(Key.Escape, ModifierKeys.None));
+        Assert.IsTrue(panel.IsClosed, "Escape did not close the panel.");
+
+        // Closed, so the walk keys are not ours to claim.
+        Assert.IsFalse(handler.Execute(Key.F3, ModifierKeys.None));
+
+        panel.Uninstall();
+    }
+
     [TestMethod]
     public void FindPreviousWalksBackwardsAndWraps()
     {

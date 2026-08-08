@@ -14,11 +14,14 @@ namespace Aprillz.MewUI.MewvalonEdit;
 public class TextEditor : Control, ITextEditorComponent
 {
     private const string PART_MARGIN_HOST = "PART_MarginHost";
+    private const string PART_OVERLAY_HOST = "PART_OverlayHost";
 
     private readonly MultiLineTextBox _surface;
     private readonly LineNumberMargin _lineNumberMargin;
     private readonly System.Collections.ObjectModel.ObservableCollection<AbstractMargin> _leftMargins = [];
     private Grid? _marginHost;
+    private Grid? _overlayHost;
+    private FrameworkElement? _pendingOverlay;
     private HighlightingColorizer? _colorizer;
     private readonly EndOfLineMarkerLayer _endOfLineMarkers;
     private readonly LineTransformerAdapter _lineTransformers;
@@ -150,8 +153,13 @@ public class TextEditor : Control, ITextEditorComponent
     {
         var host = new Grid();
         context.Register(PART_MARGIN_HOST, host);
+        // Its own layer, because the margin host is cleared and rebuilt whenever a margin joins or
+        // leaves, which would take an overlay with it.
+        var overlay = new Grid();
+        context.Register(PART_OVERLAY_HOST, overlay);
+        var layers = new Grid().Children(host, overlay);
         // A templated control suppresses its own chrome, so the border has to draw it.
-        var chrome = new Border { Child = host, ClipToBounds = true };
+        var chrome = new Border { Child = layers, ClipToBounds = true };
         context.BindChrome(chrome);
         return chrome;
     }
@@ -160,7 +168,36 @@ public class TextEditor : Control, ITextEditorComponent
     {
         base.OnApplyTemplate();
         _marginHost = GetTemplateChild<Grid>(PART_MARGIN_HOST);
+        _overlayHost = GetTemplateChild<Grid>(PART_OVERLAY_HOST);
         OnLeftMarginsChanged();
+        if (_pendingOverlay is FrameworkElement pending)
+        {
+            _pendingOverlay = null;
+            ShowOverlay(pending);
+        }
+    }
+
+    /// <summary>
+    /// Puts an element over the text, such as the search panel. Held until the template is applied
+    /// when it arrives before that.
+    /// </summary>
+    internal void ShowOverlay(FrameworkElement element)
+    {
+        if (_overlayHost is not Grid overlay)
+        {
+            _pendingOverlay = element;
+            return;
+        }
+        if (!overlay.Children.Contains(element))
+        {
+            overlay.Add(element);
+        }
+    }
+
+    internal void HideOverlay(FrameworkElement element)
+    {
+        _pendingOverlay = null;
+        _overlayHost?.Remove(element);
     }
 
     private void OnLeftMarginsChanged()
