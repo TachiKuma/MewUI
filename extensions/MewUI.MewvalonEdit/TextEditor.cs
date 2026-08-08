@@ -79,6 +79,17 @@ public class TextEditor : Control, ITextEditorComponent
         _surface.Extensions.Classifiers.Add(_elementGenerators);
         _surface.Extensions.Transformers.Add(_lineTransformers);
         _surface.Extensions.ElementGenerators.Add(_elementGenerators);
+        // The surface's own scope routes undo to its TextBase history; this editor's undo truth is
+        // the document's UndoStack (the keyboard path already intercepts it before the surface),
+        // so the command path (menus, toolbars) must hit the same stack.
+        _surface.Commands.Unbind(StandardCommands.Undo);
+        _surface.Commands.Bind(StandardCommands.Undo, this,
+            static editor => editor.Document.UndoStack.Undo(),
+            static editor => !editor.IsReadOnly && editor.Document.UndoStack.CanUndo);
+        _surface.Commands.Unbind(StandardCommands.Redo);
+        _surface.Commands.Bind(StandardCommands.Redo, this,
+            static editor => editor.Document.UndoStack.Redo(),
+            static editor => !editor.IsReadOnly && editor.Document.UndoStack.CanRedo);
         UpdateBuiltInElementGenerators();
         _backgroundRenderers.RegisterInto(_surface);
         _surface.InsertLayer(_endOfLineMarkers, TextViewLayerAnchor.Text, TextLayerPosition.Below);
