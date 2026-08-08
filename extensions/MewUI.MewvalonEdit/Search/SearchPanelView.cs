@@ -1,5 +1,6 @@
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Input;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.MewvalonEdit.Search;
 
@@ -23,37 +24,97 @@ internal sealed class SearchPanelView
         {
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(0, 4, 16, 0),
-            Padding = new Thickness(6),
+            Margin = new Thickness(6),
+            Padding = new Thickness(8),
             BorderThickness = 1
         };
+        Root.WithTheme(static (theme, root) =>
+        {
+            root.CornerRadius = theme.Metrics.ControlCornerRadius;
+            root.Background = theme.Palette.ContainerBackground;
+            root.BorderBrush = theme.Palette.ControlBorder;
+            // The panel hangs inside the editor and the font properties inherit, so without these
+            // the controls come out in the document's monospace font at the document's size.
+            root.FontFamily(theme.Metrics.FontFamily).FontSize(theme.Metrics.FontSize);
+        });
         _patternBox = new TextBox().Width(160).Placeholder("Find");
         _patternBox.TextChanged += value =>
         {
             _panel.SearchPattern = value;
             UpdateStatus();
         };
-        _status = new TextBlock();
 
-        var matchCase = new CheckBox { IsChecked = panel.MatchCase }
-            .Content(panel.Localization.MatchCaseText)
-            .OnCheckedChanged(value => { _panel.MatchCase = value == true; UpdateStatus(); });
-        var wholeWords = new CheckBox { IsChecked = panel.WholeWords }
-            .Content(panel.Localization.MatchWholeWordsText)
-            .OnCheckedChanged(value => { _panel.WholeWords = value == true; UpdateStatus(); });
-        var useRegex = new CheckBox { IsChecked = panel.UseRegex }
-            .Content(panel.Localization.UseRegexText)
-            .OnCheckedChanged(value => { _panel.UseRegex = value == true; UpdateStatus(); });
+        new TextBlock()
+            .Ref(out _status)
+            .Bind(TextBlock.IsVisibleProperty, _status, TextBlock.TextProperty, x => x.Length > 0);
 
-        Root.Child = new StackPanel { Orientation = Orientation.Vertical, Spacing = 4 }.Children(
-            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 }.Children(
-                _patternBox,
-                new Button().Content("<").OnClick(() => { _panel.FindPrevious(); UpdateStatus(); }),
-                new Button().Content(">").OnClick(() => { _panel.FindNext(); UpdateStatus(); }),
-                new Button().Content("X").OnClick(_panel.Close)),
-            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }.Children(
-                matchCase, wholeWords, useRegex),
-            _status);
+        var matchCase = OptionToggle(
+            new TextBlock().Text("Aa"),
+            panel.Localization.MatchCaseText,
+            panel.MatchCase,
+            value => _panel.MatchCase = value);
+        var wholeWords = OptionToggle(
+            new TextBlock()
+                .WithTheme((t, c) => c.FontSize(t.Metrics.FontSizeSmall))
+                .Inlines(new Run().Text("abc").Decoration(TextDecoration.Underline)),
+            panel.Localization.MatchWholeWordsText,
+            panel.WholeWords,
+            value => _panel.WholeWords = value);
+        var useRegex = OptionToggle(
+            new TextBlock().Text(".*"),
+            panel.Localization.UseRegexText,
+            panel.UseRegex,
+            value => _panel.UseRegex = value);
+
+        Root.Child = new StackPanel()
+            .Vertical()
+            .Spacing(8)
+            .Children(
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(8)
+                    .Children(
+                        _patternBox,
+                        GlyphButton(GlyphKind.ChevronUp, () => { _panel.FindPrevious(); UpdateStatus(); }),
+                        GlyphButton(GlyphKind.ChevronDown, () => { _panel.FindNext(); UpdateStatus(); }),
+                        GlyphButton(GlyphKind.Cross, _panel.Close)),
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(6)
+                    .Children(
+                        matchCase, wholeWords, useRegex),
+                _status);
+    }
+
+    /// <summary>A search option as a compact toggle, its meaning carried by the tooltip.</summary>
+    private ToggleButton OptionToggle(TextBlock glyph, string tooltip, bool initial, Action<bool> apply)
+    {
+        var toggle = new ToggleButton
+        {
+            Content = glyph.Center(),
+            Padding = new Thickness(0),
+            IsChecked = initial
+        };
+        return toggle
+            .WithTheme((t, c) => c.Width(t.Metrics.BaseControlHeight))
+            .ToolTip(tooltip)
+            .OnCheckedChanged(value => { apply(value); UpdateStatus(); });
+    }
+
+    /// <summary>The walk and close buttons: a bare 20x20 square around a stroke glyph.</summary>
+    private static Button GlyphButton(GlyphKind kind, Action onClick)
+    {
+        var button = new Button
+        {
+            VerticalAlignment = VerticalAlignment.Center,
+            Content = new GlyphElement { Kind = kind },
+            Width = 20,
+            Height = 20,
+            MinHeight = 0,
+            Padding = new Thickness(0)
+        };
+        button.StyleName = BuiltInStyles.FlatButton;
+        return button.OnClick(onClick);
     }
 
     /// <summary>Puts the caret in the search box and selects what is there, as reopening should.</summary>
