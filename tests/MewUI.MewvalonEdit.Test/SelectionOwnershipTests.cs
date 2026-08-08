@@ -128,6 +128,25 @@ public sealed class SelectionOwnershipTests
     }
 
     [TestMethod]
+    public void SwitchingTheDocumentDropsTheRectangle()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("GDI backend is Windows-only."); return; }
+
+        var editor = CreateEditor("abcdef\nghijkl\nmnopqr");
+        editor.TextArea.Selection = new RectangleSelection(
+            editor.TextArea, new TextViewPosition(1, 3, 2), new TextViewPosition(3, 5, 4));
+
+        // The rectangle's offsets belong to the old document; keeping it alive would hand them to
+        // the selection layer against the new, shorter one.
+        editor.Document = new Aprillz.MewUI.MewvalonEdit.Document.TextDocument("ab");
+        editor.Measure(new Size(400, 300));
+        editor.Arrange(new Rect(0, 0, 400, 300));
+
+        Assert.IsTrue(editor.TextArea.Selection.IsEmpty);
+        Assert.IsEmpty(editor.TextArea.Selection.Segments.ToArray());
+    }
+
+    [TestMethod]
     public void TheCaretRemembersAVirtualColumnWhileOnItsOffset()
     {
         if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("GDI backend is Windows-only."); return; }

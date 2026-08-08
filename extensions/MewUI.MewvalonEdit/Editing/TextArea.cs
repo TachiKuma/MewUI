@@ -362,6 +362,15 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         _observedDocument.Changed -= OnDocumentChangedForSelection;
         _observedDocument = _editor.Document;
         _observedDocument.Changed += OnDocumentChangedForSelection;
+        // A selection holds offsets of the document it was made in, and none of them mean anything
+        // in the replacement. A surviving rectangle would hand the old offsets to the selection
+        // layer on the next render pass.
+        _pendingSelectionUpdates = null;
+        if (!ReferenceEquals(_selection, EmptySelection))
+        {
+            _selection = EmptySelection;
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private bool CaretSitsOnCorner(RectangleSelection rectangle)
