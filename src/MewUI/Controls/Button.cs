@@ -5,12 +5,56 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// A button control that responds to clicks.
 /// </summary>
-public partial class Button : Control, IVisualTreeHost
+public partial class Button : Control, IVisualTreeHost, ICommandSource
 {
     public static readonly MewProperty<Element?> ContentProperty =
         MewProperty<Element?>.Register<Button>(nameof(Content), null,
             MewPropertyOptions.AffectsLayout,
             static (self, oldValue, newValue) => self.OnContentChanged(oldValue, newValue));
+
+    public static readonly MewProperty<Command?> CommandProperty =
+        MewProperty<Command?>.Register<Button>(nameof(Command), null,
+            MewPropertyOptions.None,
+            static (self, oldValue, newValue) => self.OnCommandChanged());
+
+    /// <summary>
+    /// Gets or sets the semantic command this button invokes; its CanExecute query joins
+    /// <see cref="UIElement.IsEnabled"/> in the effective enabled state.
+    /// </summary>
+    public Command? Command
+    {
+        get => GetValue(CommandProperty);
+        set => SetValue(CommandProperty, value);
+    }
+
+    private Window? _commandSourceWindow;
+
+    private void OnCommandChanged()
+    {
+        UpdateCommandSourceRegistration();
+        ReevaluateSuggestedIsEnabled();
+    }
+
+    protected override void OnVisualRootChanged(Element? oldRoot, Element? newRoot)
+    {
+        base.OnVisualRootChanged(oldRoot, newRoot);
+        UpdateCommandSourceRegistration();
+    }
+
+    private void UpdateCommandSourceRegistration()
+    {
+        var window = Command != null ? FindVisualRoot() as Window : null;
+        if (ReferenceEquals(_commandSourceWindow, window))
+        {
+            return;
+        }
+
+        _commandSourceWindow?.UnregisterCommandSource(this);
+        _commandSourceWindow = window;
+        window?.RegisterCommandSource(this);
+    }
+
+    void ICommandSource.EvaluateCommandState() => ReevaluateSuggestedIsEnabled();
 
     /// <summary>
     /// Gets or sets the content element.
@@ -59,7 +103,20 @@ public partial class Button : Control, IVisualTreeHost
         }
     }
 
-    protected override bool ComputeIsEnabledSuggestion() => CanClick?.Invoke() ?? true;
+    protected override bool ComputeIsEnabledSuggestion()
+    {
+        if (CanClick != null && !CanClick())
+        {
+            return false;
+        }
+
+        if (GetValue(CommandProperty) is Command command && FindVisualRoot() is Window window)
+        {
+            return window.CommandRouter.CanExecute(command, CommandTarget.From(this));
+        }
+
+        return true;
+    }
 
     protected override Size MeasureContent(Size availableSize)
     {
@@ -173,7 +230,19 @@ public partial class Button : Control, IVisualTreeHost
     bool IVisualTreeHost.VisitChildren(Func<Element, bool> visitor)
         => Content == null || visitor(Content);
 
-    protected virtual void OnClick() => Click?.Invoke();
+    protected virtual void OnClick()
+    {
+        Click?.Invoke();
+        InvokeCommand();
+    }
+
+    private void InvokeCommand()
+    {
+        if (GetValue(CommandProperty) is Command command && FindVisualRoot() is Window window)
+        {
+            window.CommandRouter.TryExecuteFromInput(command, CommandTarget.From(this), this);
+        }
+    }
 
     internal void RaiseClick() => OnClick();
 }
