@@ -69,6 +69,11 @@ public class TextEditor : Control, ITextEditorComponent
         // The element under a stationary pointer changes when the lines are rebuilt, which is where
         // the original re-asks for the cursor as well.
         _surface.LinesChanged += _ => InvalidateCursorIfMouseWithinTextView();
+        // Pass boundaries for the colorizer: the state scan up to the viewport runs before lines
+        // are built, and its per-line notifications stay suppressed for the pass (core first line
+        // is 0-based, document lines 1-based).
+        _surface.LineConstructionStarting += (_, firstLine) => _colorizer?.OnVisualLineConstructionStarting(Document, firstLine + 1);
+        _surface.LinesChanged += _ => _colorizer?.OnVisualLinesChanged();
         // The generator projection runs first so it scans raw document text; the space markers
         // then restyle whatever survives, including projected replacement text.
         _surface.Extensions.Projections.Add(_elementGenerators);

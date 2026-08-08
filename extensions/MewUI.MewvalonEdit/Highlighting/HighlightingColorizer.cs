@@ -9,6 +9,8 @@ public class HighlightingColorizer(IHighlightingDefinition definition) : Documen
 {
     private DocumentHighlighter? _highlighter;
     private TextDocument? _highlighterDocument;
+    private int _lineNumberBeingColorized;
+    private bool _isInHighlightingGroup;
 
     internal IHighlightingDefinition Definition { get; } = definition ?? throw new ArgumentNullException(nameof(definition));
 
@@ -22,11 +24,41 @@ public class HighlightingColorizer(IHighlightingDefinition definition) : Documen
 
         // From the view per line, so a theme switch repaints in the other palette without rebuild.
         bool isDark = context.TextView.IsDarkTheme;
+        _lineNumberBeingColorized = line.LineNumber;
+        var highlightedLine = GetHighlighter(context.Document).HighlightLine(line.LineNumber);
+        _lineNumberBeingColorized = 0;
         // Sections carry document offsets and are ordered outermost first, so applying them in
         // order lets an inner section paint over the one enclosing it.
-        foreach (var section in GetHighlighter(context.Document).HighlightLine(line.LineNumber).Sections)
+        foreach (var section in highlightedLine.Sections)
         {
             ApplyColorToElement(section.Offset, section.Length, section.Color, isDark);
+        }
+    }
+
+    /// <summary>
+    /// Advances the highlighting state to just above the first line in view before lines are
+    /// built, so a state change above the viewport redraws before stale lines are reused.
+    /// </summary>
+    internal void OnVisualLineConstructionStarting(TextDocument document, int firstDocumentLine)
+    {
+        var highlighter = GetHighlighter(document);
+        _lineNumberBeingColorized = Math.Clamp(firstDocumentLine - 1, 0, document.LineCount);
+        if (!_isInHighlightingGroup)
+        {
+            highlighter.BeginHighlighting();
+            _isInHighlightingGroup = true;
+        }
+        highlighter.UpdateHighlightingState(_lineNumberBeingColorized);
+        _lineNumberBeingColorized = 0;
+    }
+
+    /// <summary>Closes the highlighting group opened when line construction started.</summary>
+    internal void OnVisualLinesChanged()
+    {
+        if (_isInHighlightingGroup)
+        {
+            _highlighter?.EndHighlighting();
+            _isInHighlightingGroup = false;
         }
     }
 
@@ -38,12 +70,29 @@ public class HighlightingColorizer(IHighlightingDefinition definition) : Documen
     {
         if (_highlighter is null || !ReferenceEquals(_highlighterDocument, document))
         {
-            _highlighter?.Dispose();
+            if (_highlighter is DocumentHighlighter previous)
+            {
+                previous.HighlightingStateChanged -= OnHighlightStateChanged;
+                previous.Dispose();
+            }
+            _isInHighlightingGroup = false;
             _highlighter = new DocumentHighlighter(document, Definition);
-            _highlighter.HighlightingStateChanged += (from, to) => HighlightingStateChanged?.Invoke(from, to);
+            _highlighter.HighlightingStateChanged += OnHighlightStateChanged;
             _highlighterDocument = document;
         }
         return _highlighter;
+    }
+
+    private void OnHighlightStateChanged(int fromLineNumber, int toLineNumber)
+    {
+        // Scanning the state up to the viewport raises one notification per line; lines at or
+        // above the one being colorized are rebuilt by the ongoing top-to-bottom pass anyway, so
+        // repainting them here would issue one full rebuild per scanned line (original guard).
+        if (_lineNumberBeingColorized != 0 && toLineNumber <= _lineNumberBeingColorized)
+        {
+            return;
+        }
+        HighlightingStateChanged?.Invoke(fromLineNumber, toLineNumber);
     }
 
     /// <summary>Applies one highlighting color to a document range. Override to adjust how colors reach the view.</summary>
