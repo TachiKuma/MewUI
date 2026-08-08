@@ -220,19 +220,21 @@ public sealed class EditorExtensionTests
     }
 
     [TestMethod]
-    public void CompletionSessionFiltersByTypedPrefixAndCompletesSelection()
+    public void CompletionListFiltersByTypedPrefixAndCompletesSelection()
     {
         var editor = new TextEditor { Text = "Con" };
         editor.CaretOffset = editor.Document.TextLength;
-        var session = new CompletionSession(editor, 0);
-        session.SetItems([
-            new CompletionData("Console", priority: 2),
-            new CompletionData("const"),
-            new CompletionData("string")]);
+        var list = new CompletionList();
+        list.CompletionData.Add(new CompletionData("Console", priority: 2));
+        list.CompletionData.Add(new CompletionData("const"));
+        list.CompletionData.Add(new CompletionData("string"));
 
-        Assert.HasCount(2, session.FilteredItems);
-        Assert.AreEqual("Console", session.SelectedItem?.Text);
-        Assert.IsTrue(session.Complete());
+        list.SelectItem("Con");
+
+        Assert.HasCount(2, list.VisibleItems);
+        Assert.AreEqual("Console", list.SelectedItem?.Text);
+        list.SelectedItem!.Complete(
+            editor.TextArea, new SimpleSegment(0, editor.Document.TextLength), EventArgs.Empty);
         Assert.AreEqual("Console", editor.Text);
         Assert.AreEqual(7, editor.CaretOffset);
     }

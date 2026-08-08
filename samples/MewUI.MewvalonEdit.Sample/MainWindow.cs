@@ -70,6 +70,49 @@ public sealed class MainWindow : Window
                 _editor);
     }
 
+    // Temporary automation for the Ctrl+End scroll trace: loads the long document, focuses the
+    // editing surface and sends Ctrl+End through the real key routing, so the MEWUI_SCROLL_TRACE
+    // instrumentation logs a run without needing a person at the window. Not for commit.
+    public void EnableScrollTraceRun()
+    {
+        int phase = 0;
+        _smokeTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(700));
+        _smokeTimer.Tick += () =>
+        {
+            switch (phase++)
+            {
+                case 0:
+                    LoadBuiltIn(SampleText.LongDocument(), "C#");
+                    break;
+                case 1:
+                    GetSurface().Focus();
+                    break;
+                case 2:
+                    SendCtrlEnd();
+                    break;
+                case 6:
+                    _smokeTimer!.Stop();
+                    Close();
+                    break;
+            }
+        };
+        Loaded += _smokeTimer.Start;
+    }
+
+    private Control GetSurface()
+        => (Control)typeof(TextEditor)
+            .GetProperty("Surface", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(_editor)!;
+
+    private void SendCtrlEnd()
+    {
+        // Reflection into the core router sends the key down the same bubbling path the platform
+        // uses, so the traced code path matches a real keypress.
+        var router = typeof(Window).Assembly.GetType("Aprillz.MewUI.Input.WindowInputRouter")!;
+        var keyDown = router.GetMethod("KeyDown", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
+        keyDown.Invoke(null, [this, new KeyEventArgs(Key.End, 0, ModifierKeys.Control)]);
+    }
+
     public void EnableSmokeTest()
     {
         int phase = 0;
@@ -312,9 +355,18 @@ public sealed class MainWindow : Window
         int end = _editor.CaretOffset;
         int start = end;
         while (start > 0 && char.IsLetterOrDigit(_editor.Document.GetCharAt(start - 1))) start--;
-        var session = new CompletionSession(_editor, start);
-        session.SetItems(SampleCompletionData.All);
-        session.Complete();
+        var completion = new CompletionWindow(_editor.TextArea)
+        {
+            StartOffset = start,
+            // Ctrl+Space semantics: erasing back to the word start closes the window.
+            CloseWhenCaretAtBeginning = true
+        };
+        foreach (var item in SampleCompletionData.All)
+        {
+            completion.CompletionList.CompletionData.Add(item);
+        }
+        completion.Show();
+        completion.CompletionList.SelectItem(_editor.Document.GetText(start, end - start));
     }
 
     private void InsertCodeTemplate()
