@@ -33,6 +33,38 @@ public sealed class TextAreaDefaultInputHandler : TextAreaInputHandler
             () => textArea.Document.UndoStack.Redo(),
             () => textArea.Document.UndoStack.CanRedo));
 
+        // Rectangle editing: the surface holds an empty selection while a rectangle is active, so
+        // these claim the keys ahead of it and drive the rectangle instead. With no rectangle the
+        // CanExecute declines and the surface behaves as always.
+        bool RectangleHasText() => textArea.Selection is RectangleSelection rectangle && rectangle.Length > 0;
+        void DeleteRectangle() => ((RectangleSelection)textArea.Selection).ReplaceSelectionWithText(string.Empty);
+        Editing.AddBinding(new KeyBinding(new KeyGesture(Key.Backspace), DeleteRectangle, RectangleHasText));
+        Editing.AddBinding(new KeyBinding(new KeyGesture(Key.Delete), DeleteRectangle, RectangleHasText));
+        Editing.AddBinding(new KeyBinding(
+            new KeyGesture(Key.C, ModifierKeys.Primary),
+            () => textArea.CopyRectangleSelection(),
+            RectangleHasText));
+        Editing.AddBinding(new KeyBinding(
+            new KeyGesture(Key.X, ModifierKeys.Primary),
+            () =>
+            {
+                if (textArea.CopyRectangleSelection())
+                {
+                    DeleteRectangle();
+                }
+            },
+            RectangleHasText));
+        Editing.AddBinding(new KeyBinding(
+            new KeyGesture(Key.V, ModifierKeys.Primary),
+            () =>
+            {
+                if (textArea.TryGetClipboardText(out string pasteText))
+                {
+                    ((RectangleSelection)textArea.Selection).ReplaceSelectionWithText(pasteText);
+                }
+            },
+            () => textArea.Selection is RectangleSelection));
+
         // The box-selection keys, as the original binds them on the caret-navigation handler.
         void AddBoxBinding(Key key, ModifierKeys modifiers, CaretMovementType direction)
             => CaretNavigation.AddBinding(new KeyBinding(

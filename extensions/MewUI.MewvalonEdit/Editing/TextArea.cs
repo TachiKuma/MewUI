@@ -379,7 +379,52 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         return _editor.CaretOffset == Document.GetOffset(corner.Line, corner.Column);
     }
 
-    private void OnTextInput(TextInputEventArgs args) => TextEntering?.Invoke(args);
+    private void OnTextInput(TextInputEventArgs args)
+    {
+        TextEntering?.Invoke(args);
+        if (!args.Handled && HandleRectangleTextInput(args.Text))
+        {
+            args.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Typing over a rectangle writes every line it covers; the surface, whose selection stays
+    /// empty while a rectangle is active, would insert at the caret only. Returns whether the
+    /// rectangle took the text.
+    /// </summary>
+    internal bool HandleRectangleTextInput(string? text)
+    {
+        if (string.IsNullOrEmpty(text) || Selection is not RectangleSelection rectangle)
+        {
+            return false;
+        }
+        rectangle.ReplaceSelectionWithText(text);
+        return true;
+    }
+
+    /// <summary>
+    /// Puts the rectangle's column text on the clipboard, lines joined with line breaks. False
+    /// when there is no rectangle, nothing in it, or no clipboard to write to.
+    /// </summary>
+    internal bool CopyRectangleSelection()
+    {
+        if (Selection is not RectangleSelection rectangle || rectangle.Length == 0)
+        {
+            return false;
+        }
+        var clipboard = _editor.Surface.ClipboardService
+            ?? (Application.IsRunning ? Application.Current.PlatformServices.Clipboard : null);
+        return clipboard?.TrySetText(rectangle.GetText()) == true;
+    }
+
+    internal bool TryGetClipboardText(out string text)
+    {
+        text = string.Empty;
+        var clipboard = _editor.Surface.ClipboardService
+            ?? (Application.IsRunning ? Application.Current.PlatformServices.Clipboard : null);
+        return clipboard is not null && clipboard.TryGetText(out text);
+    }
 
     /// <summary>
     /// Handler the editor starts with. It stays reachable after <see cref="ActiveInputHandler"/> is

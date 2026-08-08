@@ -97,6 +97,16 @@ public class TextEditor : Control, ITextEditorComponent
         _surface.Commands.Bind(StandardCommands.Redo, this,
             static editor => editor.Document.UndoStack.Redo(),
             static editor => !editor.IsReadOnly && editor.Document.UndoStack.CanRedo);
+        // Copy and Cut likewise: while a rectangle is active the surface selection is empty, so
+        // the command path must read the rectangle's column text instead.
+        _surface.Commands.Unbind(StandardCommands.Copy);
+        _surface.Commands.Bind(StandardCommands.Copy, this,
+            static editor => editor.CopySelectionCommand(),
+            static editor => editor.HasCopyableSelection());
+        _surface.Commands.Unbind(StandardCommands.Cut);
+        _surface.Commands.Bind(StandardCommands.Cut, this,
+            static editor => editor.CutSelectionCommand(),
+            static editor => !editor.IsReadOnly && editor.HasCopyableSelection());
         UpdateBuiltInElementGenerators();
         _backgroundRenderers.RegisterInto(_surface);
         _surface.InsertLayer(_endOfLineMarkers, TextViewLayerAnchor.Text, TextLayerPosition.Below);
@@ -754,6 +764,34 @@ public class TextEditor : Control, ITextEditorComponent
 
     private void OnDocumentTextChanged(object? sender, DocumentChangeEventArgs e)
         => TextChanged?.Invoke(this, EventArgs.Empty);
+
+    private bool HasCopyableSelection()
+        => TextArea.Selection is RectangleSelection rectangle
+            ? rectangle.Length > 0
+            : _surface.SelectionLength > 0;
+
+    private void CopySelectionCommand()
+    {
+        if (!TextArea.CopyRectangleSelection())
+        {
+            _surface.Copy();
+        }
+    }
+
+    private void CutSelectionCommand()
+    {
+        if (TextArea.CopyRectangleSelection())
+        {
+            if (TextArea.Selection is RectangleSelection rectangle)
+            {
+                rectangle.ReplaceSelectionWithText(string.Empty);
+            }
+        }
+        else
+        {
+            _surface.Cut();
+        }
+    }
 
     private void OnSurfaceMouseDown(MouseEventArgs e)
     {
