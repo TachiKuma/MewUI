@@ -101,6 +101,9 @@ public sealed class TextArea : MewObject, ITextEditorComponent
                 _editor.MoveCaret(
                     Document.GetOffset(rectangle.EndPosition.Line, rectangle.EndPosition.Column),
                     extendSelection: false);
+                // The corner may sit in virtual space; the caret keeps that column beside the
+                // clamped surface offset.
+                Caret.Position = rectangle.EndPosition;
             }
             else if (selection.SurroundingSegment is ISegment segment)
             {

@@ -29,6 +29,7 @@ public class TextEditor : Control, ITextEditorComponent
     // Where the pointer last was, so the cursor can be re-asked for without it moving again.
     private Point? _lastCursorProbe;
     private ModifierKeys _lastCursorModifiers;
+    private bool _rectangleDragging;
     private SingleCharacterElementGenerator? _singleCharacterGenerator;
     private LinkElementGenerator? _linkGenerator;
     private MailLinkElementGenerator? _mailLinkGenerator;
@@ -66,6 +67,7 @@ public class TextEditor : Control, ITextEditorComponent
         _surface.TextInput += OnSurfaceTextInput;
         _surface.MouseDown += OnSurfaceMouseDown;
         _surface.MouseMove += OnSurfaceMouseMove;
+        _surface.MouseUp += OnSurfaceMouseUp;
         // The element under a stationary pointer changes when the lines are rebuilt, which is where
         // the original re-asks for the cursor as well.
         _surface.LinesChanged += _ => InvalidateCursorIfMouseWithinTextView();
@@ -759,16 +761,87 @@ public class TextEditor : Control, ITextEditorComponent
         {
             return;
         }
+        if (e.Button == MouseButton.Left && e.AltKey && Options.EnableRectangularSelection)
+        {
+            StartRectangleDrag(e);
+            if (e.Handled)
+            {
+                return;
+            }
+        }
         // Ahead of the surface's own caret placement: its OnMouseDown raises this event first and
         // honors Handled, which is the AvalonEdit "if (!e.Handled) route to element" structure.
         FindElementAtPoint(ToWindowPoint(e))?.OnMouseDown(e);
     }
 
+    /// <summary>
+    /// Alt+drag draws a rectangular selection. Claiming the press keeps the surface's own drag
+    /// selection out of it, so the drag loop and the capture are the editor's to manage.
+    /// </summary>
+    private void StartRectangleDrag(MouseEventArgs e)
+    {
+        if (GetRectanglePosition(e) is not TextViewPosition position)
+        {
+            return;
+        }
+        _surface.Focus();
+        // Alt+Shift+click extends an existing rectangle instead of starting a new one.
+        if (e.ShiftKey && TextArea.Selection is RectangleSelection existing)
+        {
+            TextArea.Selection = existing.SetEndpoint(position);
+        }
+        else
+        {
+            TextArea.Selection = new RectangleSelection(TextArea, position, position);
+        }
+        _rectangleDragging = true;
+        if (FindVisualRoot() is Window window)
+        {
+            window.CaptureMouse(_surface);
+        }
+        e.Handled = true;
+    }
+
     private void OnSurfaceMouseMove(MouseEventArgs e)
     {
+        if (_rectangleDragging &&
+            TextArea.Selection is RectangleSelection rectangle &&
+            GetRectanglePosition(e) is TextViewPosition dragPosition)
+        {
+            TextArea.Selection = rectangle.SetEndpoint(dragPosition);
+        }
         _lastCursorProbe = ToWindowPoint(e);
         _lastCursorModifiers = e.Modifiers;
         UpdateCursor();
+    }
+
+    private void OnSurfaceMouseUp(MouseEventArgs e)
+    {
+        if (!_rectangleDragging)
+        {
+            return;
+        }
+        _rectangleDragging = false;
+        if (FindVisualRoot() is Window window)
+        {
+            window.ReleaseMouseCapture();
+        }
+    }
+
+    /// <summary>
+    /// Position under the pointer with virtual space allowed, which a rectangle needs before it
+    /// exists and so cannot leave to the view's own option-driven policy.
+    /// </summary>
+    private TextViewPosition? GetRectanglePosition(MouseEventArgs e)
+    {
+        var window = ToWindowPoint(e);
+        var viewport = _surface.TextViewportBounds;
+        ITextViewHost host = _surface;
+        var documentPoint = new Point(
+            window.X - viewport.X + host.ScrollOffset.X,
+            window.Y - viewport.Y + host.ScrollOffset.Y);
+        return TextArea.TextView.GetVisualLineFromVisualTop(documentPoint.Y)
+            ?.GetTextViewPosition(documentPoint, allowVirtualSpace: true);
     }
 
     /// <summary>
