@@ -87,6 +87,8 @@ public sealed class SearchPanel : ITextClassifier
         }
         _results.Clear();
         _editor.InvalidateTextView();
+        // The keyboard was in the panel; closing without this leaves it focused on a hidden box.
+        _editor.Focus();
     }
 
     /// <summary>Puts the caret in the search box and selects what is there.</summary>
@@ -169,7 +171,7 @@ public sealed class SearchPanel : ITextClassifier
         if (startOffset < 0) startOffset = _editor.SelectionStart + _editor.SelectionLength;
         int index = LowerBoundByOffset(startOffset);
         var result = index < _results.Count ? _results[index] : _results[0];
-        _editor.Select(result.Offset, result.Length);
+        SelectResult(result);
         return result;
     }
 
@@ -183,8 +185,15 @@ public sealed class SearchPanel : ITextClassifier
         if (startOffset < 0) startOffset = _editor.SelectionStart;
         int index = LowerBoundByOffset(startOffset) - 1;
         var result = index >= 0 ? _results[index] : _results[^1];
-        _editor.Select(result.Offset, result.Length);
+        SelectResult(result);
         return result;
+    }
+
+    /// <summary>A found match is selected and brought on screen, or finding it changed nothing.</summary>
+    private void SelectResult(SearchResult result)
+    {
+        _editor.Select(result.Offset, result.Length);
+        _editor.TextArea.Caret.BringCaretToView();
     }
 
     public int ReplaceAll(string? replacement)

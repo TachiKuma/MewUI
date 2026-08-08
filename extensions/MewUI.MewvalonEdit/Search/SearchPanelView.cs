@@ -43,6 +43,33 @@ internal sealed class SearchPanelView
             _panel.SearchPattern = value;
             UpdateStatus();
         };
+        // Keys bubble from the focused control through this panel, never through the editing
+        // surface, so the search keys have to be answered here as well or typing in the box
+        // strands them: F3 and Enter walk the matches, Escape puts the keyboard back in the text.
+        Root.KeyDown += e =>
+        {
+            if (e.Handled)
+            {
+                return;
+            }
+            switch (e.Key)
+            {
+                case Key.Enter or Key.F3 when (e.Modifiers & ModifierKeys.Shift) != 0:
+                    _panel.FindPrevious();
+                    UpdateStatus();
+                    e.Handled = true;
+                    break;
+                case Key.Enter or Key.F3:
+                    _panel.FindNext();
+                    UpdateStatus();
+                    e.Handled = true;
+                    break;
+                case Key.Escape:
+                    _panel.Close();
+                    e.Handled = true;
+                    break;
+            }
+        };
 
         new TextBlock()
             .Ref(out _status)
