@@ -6,14 +6,16 @@ using Aprillz.MewUI.MewvalonEdit.Editing;
 namespace Aprillz.MewUI.MewvalonEdit.CodeCompletion;
 
 /// <summary>
-/// Base class for completion windows. The window is a panel on the editor's overlay layer rather
-/// than an OS window: the keyboard focus stays in the editor, and a stacked input handler feeds
-/// the keys to the window - which is also what closes it when any other input handler takes over.
-/// It anchors to <see cref="StartOffset"/> and follows it across document changes and scrolling.
+/// Base class for completion windows. The window rides a <see cref="Popup"/> owned by the editor
+/// rather than an OS window of its own: the keyboard focus stays in the editor, and a stacked input
+/// handler feeds the keys to the window - which is also what closes it when any other input handler
+/// takes over. It anchors to <see cref="StartOffset"/> and follows it across document changes and
+/// scrolling.
 /// </summary>
 public class CompletionWindowBase
 {
     private readonly InputHandler _inputHandler;
+    private readonly Popup _popup;
     private TextDocument _document;
     private bool _isOpen;
 
@@ -33,9 +35,14 @@ public class CompletionWindowBase
         };
         Root.WithTheme(static (theme, root) =>
         {
-            // The panel hangs inside the editor, whose monospace font would otherwise inherit.
+            // The popup resolves inherited values through the editor, whose monospace font would
+            // otherwise reach the list.
             root.FontFamily(theme.Metrics.FontFamily).FontSize(theme.Metrics.FontSize);
         });
+        // Transient on purpose: a press outside the owner window dismisses it. A press inside the
+        // editor counts as owner-related and is left to the caret tracking below, which is what
+        // moves the caret first and only then decides the window no longer applies.
+        _popup = new Popup { Content = Root };
     }
 
     /// <summary>The text area the window belongs to.</summary>
@@ -59,12 +66,15 @@ public class CompletionWindowBase
     /// <summary>Whether the window was placed above the anchor line.</summary>
     protected bool IsUp { get; private set; }
 
+    /// <summary>Where the popup was last placed, in the owner window's coordinates.</summary>
+    internal Rect PlacedBounds { get; private set; }
+
     public bool IsOpen => _isOpen;
 
     /// <summary>Raised after the window closed, for whichever reason.</summary>
     public event EventHandler? Closed;
 
-    /// <summary>The element put on the editor's overlay layer.</summary>
+    /// <summary>The frame the derived window fills; it is the popup's content.</summary>
     protected internal Border Root { get; }
 
     protected TextEditor Editor => TextArea.Editor;
@@ -78,8 +88,8 @@ public class CompletionWindowBase
         }
         _isOpen = true;
         AttachEvents();
-        Editor.ShowOverlay(Root);
-        UpdatePosition();
+        _popup.Closed += OnPopupClosed;
+        Place();
     }
 
     /// <summary>Closes the window and detaches everything it attached. Closing twice is harmless.</summary>
@@ -90,10 +100,15 @@ public class CompletionWindowBase
             return;
         }
         _isOpen = false;
+        _popup.Closed -= OnPopupClosed;
         DetachEvents();
-        Editor.HideOverlay(Root);
+        _popup.Close();
         OnClosed(EventArgs.Empty);
     }
+
+    // The core close policy can take the popup down without going through Close (an outside press,
+    // or the owner window shutting down), so the window follows its popup rather than the reverse.
+    private void OnPopupClosed(object? sender, PopupClosedEventArgs e) => Close();
 
     protected virtual void OnClosed(EventArgs e) => Closed?.Invoke(this, e);
 
@@ -196,35 +211,23 @@ public class CompletionWindowBase
     }
 
     /// <summary>
-    /// Places the window below the anchor line, or above it when there is no room below. The
-    /// overlay is clipped at the editor's bounds, so the working area is the editor itself.
+    /// Places the window below the anchor line, or above it when there is no room below. The popup
+    /// is placed against the monitor work area, so the editor's bounds do not clip it.
     /// </summary>
     protected void UpdatePosition()
     {
-        if (Editor.OverlayHostBounds is not Rect host || host.Width <= 0)
+        if (_isOpen)
         {
-            return;
+            Place();
         }
-        var anchor = AnchorRect();
-        Root.Measure(new Size(host.Width, host.Height));
-        var desired = Root.DesiredSize;
+    }
 
-        double x = anchor.X - host.X;
-        if (x + desired.Width > host.Width)
-        {
-            x = Math.Max(0, host.Width - desired.Width);
-        }
-        double y = anchor.Y + anchor.Height - host.Y;
-        if (y + desired.Height > host.Height && anchor.Y - host.Y >= desired.Height)
-        {
-            y = anchor.Y - host.Y - desired.Height;
-            IsUp = true;
-        }
-        else
-        {
-            IsUp = false;
-        }
-        Root.Margin = new Thickness(Math.Max(0, x), Math.Max(0, y), 0, 0);
+    private void Place()
+    {
+        var anchor = AnchorRect();
+        var placed = _popup.IsOpen ? _popup.MoveTo(anchor) : _popup.ShowAt(Editor, anchor);
+        PlacedBounds = placed;
+        IsUp = placed.Height > 0 && placed.Y < anchor.Y;
     }
 
     /// <summary>

@@ -227,12 +227,6 @@ public class TextEditor : Control, ITextEditorComponent
         _overlayHost?.Remove(element);
     }
 
-    /// <summary>
-    /// Window-space bounds of the overlay layer, or null before the template produced it. Overlay
-    /// children position themselves by margin inside this rectangle.
-    /// </summary>
-    internal Rect? OverlayHostBounds => _overlayHost?.Bounds;
-
     private void OnLeftMarginsChanged()
     {
         // Attachment stays here rather than in the template, so a margin is connected the moment it

@@ -1,4 +1,5 @@
 using Aprillz.MewUI;
+using Aprillz.MewUI.Controls;
 
 namespace MewUI.MewvalonEdit.Test;
 
@@ -12,6 +13,10 @@ public static class AssemblyFixture
     [AssemblyInitialize]
     public static void Initialize(TestContext context)
     {
+        // Headless tests exercise the in-surface popup path; a native popup would try to open a real
+        // OS window, which needs a running Application.
+        PopupManager.PreferNativePopups = false;
+
         if (OperatingSystem.IsWindows())
         {
             GdiBackend.Register();
