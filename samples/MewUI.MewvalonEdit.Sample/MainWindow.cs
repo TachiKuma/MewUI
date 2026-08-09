@@ -207,9 +207,10 @@ public sealed class MainWindow : Window
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }
                     .Children(new TextBlock().Text("Indentation size").Width(180), indentationSize),
                 Toggle("Read only", _editor.IsReadOnly, value => _editor.IsReadOnly = value),
-                // Off by default, as in the original: Insert is easy to hit by accident.
                 Toggle("Allow Insert to overwrite", _editor.Options.AllowToggleOverstrikeMode,
                     value => _editor.Options.AllowToggleOverstrikeMode = value),
+                Toggle("Ctrl+click to follow links", _editor.Options.RequireControlModifierForHyperlinkClick,
+                    value => _editor.Options.RequireControlModifierForHyperlinkClick = value),
                 Toggle("Enable IME", _editor.Options.EnableImeSupport,
                     value => _editor.Options.EnableImeSupport = value),
                 Toggle("Hide cursor while typing", _editor.Options.HideCursorWhileTyping,
@@ -227,10 +228,7 @@ public sealed class MainWindow : Window
                 // Setting any of these replaces the host's selection layer with the editor's own,
                 // which is the one consumer proving layer replacement works.
                 customSelection,
-                // The caret is the editor's own layer, so overstrike widens it over the character it
-                // would overwrite and the colour is settable. Insert does not toggle it yet.
-                Toggle("Overstrike caret", _editor.TextArea.OverstrikeMode,
-                    value => _editor.TextArea.OverstrikeMode = value),
+                // The caret is the editor's own layer, so its colour is settable.
                 Toggle("Custom caret color", false,
                     value => _editor.TextArea.Caret.CaretBrush = value ? Color.FromRgb(220, 60, 60) : null))
         }.WithTheme((theme, border) => border
