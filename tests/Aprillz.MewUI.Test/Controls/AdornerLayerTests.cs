@@ -4,14 +4,12 @@ using MewUI.Test.Infrastructure;
 
 namespace MewUI.Test.Controls;
 
-/// <summary>
-/// An adorner spans the whole element it adorns, so it must answer the pointer only where it draws.
-/// Answering for the empty space around its children puts a sheet of glass over the content below,
-/// which reads as a window that stopped responding.
-/// </summary>
+/// An adorner is a layer over the element it adorns, not a sheet across it: it takes the pointer only
+/// where it draws, and what it carries resolves against that element the way popup content resolves
+/// against its owner.
 [TestClass]
 [DoNotParallelize]
-public sealed class AdornerHitTestTests
+public sealed class AdornerLayerTests
 {
     [TestMethod]
     public void TheSpaceAroundAnAdornerFallsThroughToTheContent()
@@ -69,5 +67,28 @@ public sealed class AdornerHitTestTests
 
         Assert.IsGreaterThan(before, themedDepth,
             "the theme change stopped at the adorner and never reached what it carries");
+    }
+
+    [TestMethod]
+    public void WhatAnAdornerCarriesInheritsFromTheElementItAdorns()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("The GDI backend is Windows-only.");
+            return;
+        }
+
+        var ink = Color.FromRgb(10, 120, 200);
+        var window = HeadlessWindow.Create(400, 200);
+        var content = new Border { Foreground = ink };
+        window.Content = content;
+        window.PerformLayout();
+
+        var label = new TextBlock { Text = "badge" };
+        AdornerLayer.GetAdornerLayer(content)!.Add(new Adorner(content, new Border { Child = label }));
+        window.PerformLayout();
+
+        Assert.AreEqual(ink, label.Foreground,
+            "an inherited value stopped at the window instead of coming from the adorned element");
     }
 }

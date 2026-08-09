@@ -3252,8 +3252,11 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         ArgumentNullException.ThrowIfNull(adornedElement);
         ArgumentNullException.ThrowIfNull(adorner);
 
-        // Attach to this window so FindVisualRoot()/theme/DPI work.
+        // Attach to this window so FindVisualRoot()/theme/DPI work, and resolve through the adorned
+        // element the way a popup resolves through its owner: an adorner decorates that element, so
+        // its inherited values and styles are the ones it should be drawn with.
         adorner.Parent = this;
+        adorner.ContextParentOverride = adornedElement;
 
         _adorners.Add(new AdornerEntry
         {
@@ -3271,6 +3274,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         {
             if (ReferenceEquals(_adorners[i].Element, adorner))
             {
+                _adorners[i].Element.ContextParentOverride = null;
                 _adorners[i].Element.Parent = null;
                 _adorners.RemoveAt(i);
                 RequestUpdatePass();
@@ -3289,6 +3293,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         {
             if (ReferenceEquals(_adorners[i].Adorned, adornedElement))
             {
+                _adorners[i].Element.ContextParentOverride = null;
                 _adorners[i].Element.Parent = null;
                 _adorners.RemoveAt(i);
                 removed++;
