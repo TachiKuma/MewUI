@@ -207,6 +207,11 @@ public sealed class MainWindow : Window
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 }
                     .Children(new TextBlock().Text("Indentation size").Width(180), indentationSize),
                 Toggle("Read only", _editor.IsReadOnly, value => _editor.IsReadOnly = value),
+                // Off by default, as in the original: Insert is easy to hit by accident.
+                Toggle("Allow Insert to overwrite", _editor.Options.AllowToggleOverstrikeMode,
+                    value => _editor.Options.AllowToggleOverstrikeMode = value),
+                Toggle("Enable IME", _editor.Options.EnableImeSupport,
+                    value => _editor.Options.EnableImeSupport = value),
                 Toggle("Highlight current line", _editor.Options.HighlightCurrentLine,
                     value => _editor.Options.HighlightCurrentLine = value),
                 Toggle("Show column ruler", _editor.Options.ShowColumnRuler,
