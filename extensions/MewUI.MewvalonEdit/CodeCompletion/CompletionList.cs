@@ -20,11 +20,14 @@ public sealed class CompletionList
 
     public CompletionList()
     {
+        // Before the theme callback below, which runs at once and asks how tall the rows are.
+        _visibleItems = _completionData;
         _listBox = new ListBox();
         _listBox.WithTheme((theme, listBox) =>
         {
             _itemHeight = Math.Max(18, theme.Metrics.BaseControlHeight - 2);
             listBox.ItemHeight = _itemHeight;
+            ApplyListHeight();
         });
         _listBox.SelectionChanged += _ => SelectionChanged?.Invoke(this, EventArgs.Empty);
         // Only double clicks on the items commit; the scroll bar is part of the same control here,
@@ -40,7 +43,6 @@ public sealed class CompletionList
                 RequestInsertion(EventArgs.Empty);
             }
         };
-        _visibleItems = _completionData;
     }
 
     /// <summary>The element the completion window hosts.</summary>
@@ -283,6 +285,22 @@ public sealed class CompletionList
         _visibleItems = items;
         _listBox.ItemsSource = ItemsView.Create<ICompletionData>(
             items, static item => item.Content as string ?? item.Text);
+        ApplyListHeight();
+    }
+
+    /// <summary>
+    /// The height the rows need. The list fills the height it is given rather than measuring to its
+    /// items, so without this the window collapses to its own minimum and shows part of one row.
+    /// </summary>
+    internal double DesiredListHeight => Math.Max(_itemHeight, _visibleItems.Count * _itemHeight);
+
+    /// <summary>Raised after the rows changed the height the list wants.</summary>
+    internal event Action? DesiredHeightChanged;
+
+    private void ApplyListHeight()
+    {
+        _listBox.Height = DesiredListHeight;
+        DesiredHeightChanged?.Invoke();
     }
 
     private int GetMatchQuality(string itemText, string query)

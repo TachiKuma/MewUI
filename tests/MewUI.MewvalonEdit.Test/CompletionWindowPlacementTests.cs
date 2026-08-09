@@ -64,6 +64,26 @@ public sealed class CompletionWindowPlacementTests
     }
 
     [TestMethod]
+    public void TheWindowIsAsTallAsItsRowsAndShrinksWhenFilteringDoes()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var (editor, _) = CreateEditorInWindow("");
+        var completion = OpenWindow(editor);
+
+        double rowHeight = completion.PlacedBounds.Height / WORDS.Length;
+        Assert.IsGreaterThan(10, rowHeight, $"the window collapsed to a fraction of a row: {completion.PlacedBounds}");
+
+        editor.TextArea.PerformTextInput("De");
+        int visible = completion.CompletionList.VisibleItems.Count;
+
+        Assert.IsLessThan(WORDS.Length, visible, "the query did not narrow the list");
+        Assert.AreEqual(visible * rowHeight, completion.PlacedBounds.Height, 1.0,
+            "the window kept the height of the unfiltered list");
+        completion.Close();
+    }
+
+    [TestMethod]
     public void TypingKeepsTheWindowOpen()
     {
         if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }

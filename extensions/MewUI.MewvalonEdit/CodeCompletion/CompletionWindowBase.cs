@@ -87,9 +87,18 @@ public class CompletionWindowBase
             return;
         }
         _isOpen = true;
+        OnShowing();
         AttachEvents();
         _popup.Closed += OnPopupClosed;
         Place();
+    }
+
+    /// <summary>
+    /// Runs before the window is placed, so a derived window can bring its content up to date with
+    /// whatever was configured after construction. Placement measures that content.
+    /// </summary>
+    protected virtual void OnShowing()
+    {
     }
 
     /// <summary>Closes the window and detaches everything it attached. Closing twice is harmless.</summary>

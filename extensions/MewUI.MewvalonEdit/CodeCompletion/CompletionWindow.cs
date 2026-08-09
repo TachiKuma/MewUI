@@ -17,6 +17,18 @@ public class CompletionWindow : CompletionWindowBase
         Root.MaxHeight = 300;
         Root.MinHeight = 15;
         Root.MinWidth = 30;
+        // Filtering changes how many rows there are, and the window has to grow or shrink with them.
+        CompletionList.DesiredHeightChanged += () => UpdatePosition();
+    }
+
+    /// <summary>
+    /// The items are added after the window is constructed, and nothing in the list observes that,
+    /// so the rows are published here - which is also what gives the window its height.
+    /// </summary>
+    protected override void OnShowing()
+    {
+        base.OnShowing();
+        CompletionList.ResetVisibleItems();
     }
 
     /// <summary>The completion list used in this window.</summary>
