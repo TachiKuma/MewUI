@@ -23,6 +23,9 @@ public class TextEditorOptions : MewObject
     public static readonly MewProperty<bool> AllowToggleOverstrikeModeProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(AllowToggleOverstrikeMode), false);
 
+    public static readonly MewProperty<bool> EnableImeSupportProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(EnableImeSupport), true);
+
     public static readonly MewProperty<bool> ShowSpacesProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowSpaces), false);
 
@@ -115,6 +118,13 @@ public class TextEditorOptions : MewObject
     {
         get => GetValue(AllowToggleOverstrikeModeProperty);
         set => SetValue(AllowToggleOverstrikeModeProperty, value);
+    }
+
+    /// <summary>Whether text can be composed in the editor through an input method.</summary>
+    public virtual bool EnableImeSupport
+    {
+        get => GetValue(EnableImeSupportProperty);
+        set => SetValue(EnableImeSupportProperty, value);
     }
 
     public virtual bool ShowSpaces

@@ -1147,6 +1147,7 @@ public class TextEditor : Control, ITextEditorComponent
     private void OnOptionsChanged(object? sender, MewProperty option)
     {
         _surface.TabSize = Options.IndentationSize;
+        _surface.ImeMode = Options.EnableImeSupport ? ImeMode.Auto : ImeMode.Disabled;
         UpdateBuiltInElementGenerators();
         // A generator reads the options while it scans, and the scan cache keys on the document
         // version alone, so without this a toggled option waits for the next edit to show.

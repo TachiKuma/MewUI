@@ -2,6 +2,7 @@ using Aprillz.MewUI;
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.MewvalonEdit;
 using Aprillz.MewUI.MewvalonEdit.Editing;
+using Aprillz.MewUI.Text;
 
 namespace MewUI.MewvalonEdit.Test;
 
@@ -75,5 +76,16 @@ public sealed class OverstrikeTests
         editor.Measure(new Size(400, 300));
         editor.Arrange(new Rect(0, 0, 400, 300));
         return editor;
+    }
+
+    [TestMethod]
+    public void TurningImeSupportOffDisablesCompositionOnTheSurface()
+    {
+        var editor = CreateEditor("abc");
+        Assert.AreEqual(ImeMode.Auto, editor.Surface.ImeMode, "composition is available unless a host turns it off");
+
+        editor.Options.EnableImeSupport = false;
+
+        Assert.AreEqual(ImeMode.Disabled, editor.Surface.ImeMode);
     }
 }
