@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.MewvalonEdit;
@@ -41,6 +42,28 @@ public sealed class CompletionWindowPlacementTests
     }
 
     [TestMethod]
+    public void InsightWindowAlsoOpensPastTheEditorBottom()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var (editor, window) = CreateEditorInWindow(string.Join('\n', Enumerable.Repeat("Method(", 40)));
+        editor.CaretOffset = editor.Document.TextLength;
+        editor.TextArea.Caret.BringCaretToView();
+        window.PerformLayout();
+
+        var insight = new OverloadInsightWindow(editor.TextArea)
+        {
+            Provider = new SingleOverloadProvider()
+        };
+        insight.Show();
+
+        Assert.IsGreaterThan(0, insight.PlacedBounds.Height, "the popup reported no placement");
+        Assert.IsGreaterThan(editor.Bounds.Bottom, insight.PlacedBounds.Bottom,
+            $"the insight window stopped at the editor bottom (editor={editor.Bounds}, popup={insight.PlacedBounds})");
+        insight.Close();
+    }
+
+    [TestMethod]
     public void TypingKeepsTheWindowOpen()
     {
         if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
@@ -74,6 +97,17 @@ public sealed class CompletionWindowPlacementTests
         Assert.IsTrue(completion.IsOpen, "scrolling closed the completion window");
         Assert.AreNotEqual(before, completion.PlacedBounds.Y, "the window did not follow its anchor");
         completion.Close();
+    }
+
+    private sealed class SingleOverloadProvider : IOverloadProvider
+    {
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public int SelectedIndex { get; set; }
+        public int Count => 1;
+        public string CurrentIndexText => "1 of 1";
+        public object? CurrentHeader => "Method(int value)";
+        public object? CurrentContent => "the only overload";
     }
 
     private static (TextEditor editor, Window window) CreateEditorInWindow(string text)
