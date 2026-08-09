@@ -43,10 +43,14 @@ internal sealed class SearchPanelView
             _panel.SearchPattern = value;
             UpdateStatus();
         };
-        // F3 and Escape belong to the editor's input map. Enter is the panel's own key: its map is
-        // nearer to the focused search box than the editor's, so it wins exactly inside the panel.
+        // The panel floats on the window's adorner layer, so keys pressed in it never pass through
+        // the editor and its map. It carries the whole set itself, which is why the original gives
+        // its search layer a key handler of its own rather than leaving them to the text area.
         Root.InputMap.Map(new KeyGesture(Key.Enter), () => { _panel.FindNext(); UpdateStatus(showPatternError: true); });
         Root.InputMap.Map(new KeyGesture(Key.Enter, ModifierKeys.Shift), () => { _panel.FindPrevious(); UpdateStatus(showPatternError: true); });
+        Root.InputMap.Map(new KeyGesture(Key.F3), () => { _panel.FindNext(); UpdateStatus(showPatternError: true); });
+        Root.InputMap.Map(new KeyGesture(Key.F3, ModifierKeys.Shift), () => { _panel.FindPrevious(); UpdateStatus(showPatternError: true); });
+        Root.InputMap.Map(new KeyGesture(Key.Escape), _panel.Close);
 
         new TextBlock()
             .Ref(out _status)

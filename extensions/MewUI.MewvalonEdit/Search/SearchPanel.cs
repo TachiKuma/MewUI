@@ -19,6 +19,7 @@ public sealed class SearchPanel : ITextClassifier
     private ISearchStrategy? _strategy;
     private bool _strategyIsExplicit;
     private SearchPanelView? _view;
+    private Adorner? _adorner;
     private bool _uninstalled;
     private bool _suspendDocumentRefresh;
 
@@ -73,7 +74,7 @@ public sealed class SearchPanel : ITextClassifier
         bool wasClosed = IsClosed;
         IsClosed = false;
         _view ??= new SearchPanelView(this);
-        _editor.ShowOverlay(_view.Root);
+        ShowAdorner(_view.Root);
         if (wasClosed)
         {
             BindOpenGestures();
@@ -110,10 +111,7 @@ public sealed class SearchPanel : ITextClassifier
         }
         IsClosed = true;
         UnbindOpenGestures();
-        if (_view is SearchPanelView view)
-        {
-            _editor.HideOverlay(view.Root);
-        }
+        HideAdorner();
         _results.Clear();
         _editor.InvalidateTextView();
         // The keyboard was in the panel; closing without this leaves it focused on a hidden box.
@@ -122,6 +120,27 @@ public sealed class SearchPanel : ITextClassifier
 
     /// <summary>Puts the caret in the search box and selects what is there.</summary>
     public void Reactivate() => _view?.Reactivate();
+
+    /// <summary>
+    /// Floats the controls over the text on the window's adorner layer, which is where the original
+    /// puts them: the layer arranges an adorner over the element it adorns, so the panel travels
+    /// with the editor without joining its layout or being clipped by its frame. A panel opened
+    /// before the editor reaches a window waits for it.
+    /// </summary>
+    private void ShowAdorner(UIElement content)
+    {
+        _adorner ??= new Adorner(_editor, content);
+        _editor.ShowAdorner(_adorner);
+    }
+
+    private void HideAdorner()
+    {
+        if (_adorner is Adorner adorner)
+        {
+            _editor.HideAdorner(adorner);
+            _adorner = null;
+        }
+    }
 
     /// <summary>Detaches the panel from the editor. Calling it twice is harmless.</summary>
     public void Uninstall()

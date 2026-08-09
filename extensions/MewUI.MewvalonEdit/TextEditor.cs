@@ -22,6 +22,7 @@ public class TextEditor : Control, ITextEditorComponent
     private Grid? _marginHost;
     private Grid? _overlayHost;
     private FrameworkElement? _pendingOverlay;
+    private Adorner? _pendingAdorner;
     private HighlightingColorizer? _colorizer;
     private readonly EndOfLineMarkerLayer _endOfLineMarkers;
     private readonly LineTransformerAdapter _lineTransformers;
@@ -225,6 +226,37 @@ public class TextEditor : Control, ITextEditorComponent
     {
         _pendingOverlay = null;
         _overlayHost?.Remove(element);
+    }
+
+    /// <summary>
+    /// Floats an adorner over the editor on the window's adorner layer. Held until the editor
+    /// reaches a window when it arrives before that, as an overlay is.
+    /// </summary>
+    internal void ShowAdorner(Adorner adorner)
+    {
+        if (AdornerLayer.GetAdornerLayer(this) is not AdornerLayer layer)
+        {
+            _pendingAdorner = adorner;
+            return;
+        }
+        _pendingAdorner = null;
+        layer.Add(adorner);
+    }
+
+    internal void HideAdorner(Adorner adorner)
+    {
+        _pendingAdorner = null;
+        AdornerLayer.GetAdornerLayer(this)?.Remove(adorner);
+    }
+
+    /// <inheritdoc/>
+    protected override void OnVisualRootChanged(Element? oldRoot, Element? newRoot)
+    {
+        base.OnVisualRootChanged(oldRoot, newRoot);
+        if (_pendingAdorner is Adorner pending && newRoot is Window)
+        {
+            ShowAdorner(pending);
+        }
     }
 
     private void OnLeftMarginsChanged()
