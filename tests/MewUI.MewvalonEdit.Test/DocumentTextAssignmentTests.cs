@@ -33,7 +33,7 @@ public sealed class DocumentTextAssignmentTests
     }
 
     [TestMethod]
-    public void AssigningTextWhileARectangleIsActiveKeepsItsCornersInTheDocument()
+    public void AssigningTextDropsTheSelectionItPointedInto()
     {
         if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
 
@@ -44,11 +44,10 @@ public sealed class DocumentTextAssignmentTests
 
         editor.Text = "short";
 
-        foreach (var segment in editor.TextArea.Selection.Segments)
-        {
-            Assert.IsLessThanOrEqualTo(editor.Document.TextLength, segment.EndOffset,
-                "a rectangle corner survived past the end of the replacement text");
-        }
+        Assert.IsNotInstanceOfType<RectangleSelection>(editor.TextArea.Selection,
+            "the rectangle survived a load and now points into text that no longer exists");
+        Assert.IsTrue(editor.TextArea.Selection.IsEmpty, "the selection survived a load");
+        Assert.IsEmpty(editor.TextArea.Selection.Segments);
     }
 
     private static TextEditor CreateEditor(string text)

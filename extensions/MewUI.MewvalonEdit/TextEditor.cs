@@ -325,6 +325,11 @@ public class TextEditor : Control, ITextEditorComponent
         get => Document.Text;
         set
         {
+            // A wholesale assignment is not an edit: the core drops the undo history along with it,
+            // so the editing state that pointed into the old text has to go the same way a document
+            // swap takes it. Dropping the selection first also keeps a rectangle from mapping its
+            // corners across a change whose removed text was never materialized.
+            TextArea.ClearSelection();
             // Through the surface, whose own setter drops the history the way the original's
             // UndoStack.ClearAll does; Document.Text alone would leave the replace undoable.
             _surface.Text = value ?? string.Empty;
