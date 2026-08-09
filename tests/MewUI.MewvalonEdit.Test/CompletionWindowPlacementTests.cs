@@ -116,6 +116,52 @@ public sealed class CompletionWindowPlacementTests
     }
 
     [TestMethod]
+    public void ADescriptionTemplateBuildsOnceAndRebindsAsTheSelectionMoves()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var (editor, _) = CreateEditorInWindow("");
+        int builds = 0;
+        var completion = new CompletionWindow(editor.TextArea)
+        {
+            DescriptionTemplate = new DelegateTemplate<ICompletionData>(
+                build: _ => { builds++; return new TextBlock(); },
+                bind: static (view, item, _, _) => ((TextBlock)view).Text = $"{item.Text}: {item.Description}")
+        };
+        completion.CompletionList.CompletionData.Add(new CompletionData("First", "one"));
+        completion.CompletionList.CompletionData.Add(new CompletionData("Second", "two"));
+        completion.Show();
+
+        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[0];
+        var view = ((Border)completion.DescriptionPopup.Content!).Child;
+        Assert.AreEqual("First: one", ((TextBlock)view!).Text, "the template did not draw the entry");
+
+        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[1];
+
+        Assert.AreEqual(1, builds, "the template rebuilt its view instead of rebinding it");
+        Assert.AreSame(view, ((Border)completion.DescriptionPopup.Content!).Child);
+        Assert.AreEqual("Second: two", ((TextBlock)view).Text, "the view kept the entry it was bound to before");
+        completion.Close();
+    }
+
+    [TestMethod]
+    public void ADescriptionThatIsNeitherTextNorElementShowsByItsText()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var (editor, _) = CreateEditorInWindow("");
+        var completion = new CompletionWindow(editor.TextArea);
+        completion.CompletionList.CompletionData.Add(new CompletionData("Boxed", new Version(2, 5)));
+        completion.Show();
+
+        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[0];
+
+        Assert.IsTrue(completion.DescriptionPopup.IsOpen, "the description was dropped for having no template");
+        Assert.AreEqual("2.5", ((TextBlock)((Border)completion.DescriptionPopup.Content!).Child!).Text);
+        completion.Close();
+    }
+
+    [TestMethod]
     public void AnEmptyListShowsWhatEmptyTemplateBuilds()
     {
         if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }

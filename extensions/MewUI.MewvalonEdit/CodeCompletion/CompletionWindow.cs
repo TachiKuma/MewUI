@@ -14,6 +14,10 @@ public class CompletionWindow : CompletionWindowBase
 
     private readonly Border _descriptionFrame;
     private readonly Popup _descriptionPopup;
+    private readonly TemplateContext _descriptionContext = new();
+    private IDataTemplate? _descriptionTemplateInUse;
+    private FrameworkElement? _descriptionView;
+    private ICompletionData? _boundDescriptionItem;
 
     public CompletionWindow(TextArea textArea) : base(textArea)
     {
@@ -65,9 +69,9 @@ public class CompletionWindow : CompletionWindowBase
     }
 
     /// <summary>
-    /// Puts the selected item's <see cref="ICompletionData.Description"/> beside the list, or takes
-    /// the panel away when the item carries none. A string is shown wrapped; anything else is shown
-    /// as it is, which is how the original lets a caller supply its own element.
+    /// Puts the selected item's description beside the list, or takes the panel away when the item
+    /// carries none. <see cref="ICompletionData.Description"/> decides whether there is anything to
+    /// show; <see cref="DescriptionTemplate"/>, when set, decides how.
     /// </summary>
     private void UpdateDescription()
     {
@@ -78,20 +82,70 @@ public class CompletionWindow : CompletionWindowBase
 
         if (item.Description is not object description)
         {
-            _descriptionPopup.Close();
+            CloseDescription();
             return;
         }
 
-        _descriptionFrame.Child = description is string text
-            ? new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap }
-            : description as UIElement;
+        _descriptionFrame.Child = DescriptionTemplate is IDataTemplate template
+            ? BindDescription(template, item)
+            : BuildDescription(description);
         if (_descriptionFrame.Child is null)
         {
-            _descriptionPopup.Close();
+            CloseDescription();
             return;
         }
 
         PlaceDescription();
+    }
+
+    /// <summary>
+    /// The template builds its view once and takes the entry again on every selection, the way a
+    /// list rebinds a row it already realized, so walking the list does not rebuild the panel.
+    /// </summary>
+    private FrameworkElement BindDescription(IDataTemplate template, ICompletionData item)
+    {
+        if (!ReferenceEquals(_descriptionTemplateInUse, template))
+        {
+            UnbindDescription();
+            _descriptionView = template.Build(_descriptionContext);
+            _descriptionTemplateInUse = template;
+        }
+        else
+        {
+            template.Unbind(_descriptionView!, _boundDescriptionItem, 0, _descriptionContext);
+            _descriptionContext.Reset();
+        }
+
+        template.Bind(_descriptionView!, item, 0, _descriptionContext);
+        _boundDescriptionItem = item;
+        return _descriptionView!;
+    }
+
+    /// <summary>A string wraps, an element is taken as it is, anything else shows by its text.</summary>
+    private static FrameworkElement? BuildDescription(object description) => description switch
+    {
+        FrameworkElement element => element,
+        string text => new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap },
+        _ => new TextBlock { Text = description.ToString() ?? string.Empty, TextWrapping = TextWrapping.Wrap },
+    };
+
+    private void UnbindDescription()
+    {
+        if (_descriptionTemplateInUse is IDataTemplate template && _descriptionView is FrameworkElement view)
+        {
+            template.Unbind(view, _boundDescriptionItem, 0, _descriptionContext);
+        }
+        _descriptionContext.Reset();
+        _descriptionTemplateInUse = null;
+        _boundDescriptionItem = null;
+        _descriptionView = null;
+    }
+
+    private void CloseDescription()
+    {
+        _descriptionPopup.Close();
+        _descriptionFrame.Child = null;
+        UnbindDescription();
     }
 
     /// <inheritdoc/>
@@ -107,7 +161,7 @@ public class CompletionWindow : CompletionWindowBase
     /// <inheritdoc/>
     protected override void OnClosed(EventArgs e)
     {
-        _descriptionPopup.Close();
+        CloseDescription();
         base.OnClosed(e);
     }
 
@@ -136,6 +190,19 @@ public class CompletionWindow : CompletionWindowBase
 
     /// <summary>The completion list used in this window.</summary>
     public CompletionList CompletionList { get; }
+
+    /// <summary>
+    /// Builds the description panel's content from the selected entry, the way a list builds a row
+    /// from its item: the view is built once and rebound as the selection moves. Null falls back to
+    /// showing <see cref="ICompletionData.Description"/> itself - a string wraps, an element is
+    /// taken as it is, anything else shows by its text.
+    /// </summary>
+    /// <remarks>
+    /// The template receives the whole <see cref="ICompletionData"/>, so it can draw the entry's
+    /// text or icon alongside its description. Whether the panel appears at all still follows
+    /// <see cref="ICompletionData.Description"/> being present.
+    /// </remarks>
+    public IDataTemplate? DescriptionTemplate { get; set; }
 
     /// <summary>The panel showing the selected item's description.</summary>
     internal Popup DescriptionPopup => _descriptionPopup;
