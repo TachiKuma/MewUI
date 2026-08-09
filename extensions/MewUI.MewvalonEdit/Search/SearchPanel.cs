@@ -193,6 +193,13 @@ public sealed class SearchPanel : ITextClassifier
     public Color MarkerBrush { get; set; } = Color.FromArgb(150, 255, 215, 0);
     public IReadOnlyList<SearchResult> Results => _results;
 
+    /// <summary>
+    /// Why the current pattern found nothing to search with, or null when it is usable. A pattern
+    /// being typed is invalid most of the way in, so this is recorded rather than announced; the
+    /// panel shows it once the reader asks to search.
+    /// </summary>
+    public string? PatternError { get; private set; }
+
     public SearchResult? FindNext(int startOffset = -1)
     {
         if (_results.Count == 0) return null;
@@ -266,6 +273,7 @@ public sealed class SearchPanel : ITextClassifier
             return;
         }
 
+        PatternError = null;
         try
         {
             _strategy ??= SearchStrategyFactory.Create(_searchPattern, !MatchCase, WholeWords, SearchMode);
@@ -277,9 +285,11 @@ public sealed class SearchPanel : ITextClassifier
                 }
             }
         }
-        catch (SearchPatternException)
+        catch (SearchPatternException exception)
         {
-            // An incomplete interactive pattern has no results until it becomes usable.
+            // An incomplete interactive pattern has no results until it becomes usable. The reason
+            // is kept rather than raised, so the panel can say it once the reader asks to search.
+            PatternError = exception.Message;
         }
         catch (RegexMatchTimeoutException)
         {

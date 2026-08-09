@@ -108,6 +108,29 @@ public sealed class SearchStrategyTests
     }
 
     /// <summary>
+    /// An unusable pattern leaves a reason behind rather than throwing, so the panel can say why it
+    /// found nothing once the reader asks to search.
+    /// </summary>
+    [TestMethod]
+    public void AnUnusablePatternRecordsWhy()
+    {
+        var editor = new TextEditor { Text = TEXT };
+        var panel = SearchPanel.Install(editor);
+        panel.SearchMode = SearchMode.RegEx;
+
+        panel.SearchPattern = "cat(";
+
+        Assert.IsEmpty(panel.Results);
+        Assert.IsNotNull(panel.PatternError, "the reason the pattern would not compile was dropped");
+
+        panel.SearchPattern = "cat";
+
+        Assert.IsNull(panel.PatternError, "the reason outlived the pattern that caused it");
+        Assert.IsNotEmpty(panel.Results);
+        panel.Uninstall();
+    }
+
+    /// <summary>
     /// A closed panel highlights nothing, so it must find nothing either; the results are what the
     /// classifier paints from.
     /// </summary>

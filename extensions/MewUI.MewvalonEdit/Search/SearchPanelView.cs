@@ -45,8 +45,8 @@ internal sealed class SearchPanelView
         };
         // F3 and Escape belong to the editor's input map. Enter is the panel's own key: its map is
         // nearer to the focused search box than the editor's, so it wins exactly inside the panel.
-        Root.InputMap.Map(new KeyGesture(Key.Enter), () => { _panel.FindNext(); UpdateStatus(); });
-        Root.InputMap.Map(new KeyGesture(Key.Enter, ModifierKeys.Shift), () => { _panel.FindPrevious(); UpdateStatus(); });
+        Root.InputMap.Map(new KeyGesture(Key.Enter), () => { _panel.FindNext(); UpdateStatus(showPatternError: true); });
+        Root.InputMap.Map(new KeyGesture(Key.Enter, ModifierKeys.Shift), () => { _panel.FindPrevious(); UpdateStatus(showPatternError: true); });
 
         new TextBlock()
             .Ref(out _status)
@@ -79,8 +79,8 @@ internal sealed class SearchPanelView
                     .Spacing(8)
                     .Children(
                         _patternBox,
-                        GlyphButton(GlyphKind.ChevronUp, () => { _panel.FindPrevious(); UpdateStatus(); }),
-                        GlyphButton(GlyphKind.ChevronDown, () => { _panel.FindNext(); UpdateStatus(); }),
+                        GlyphButton(GlyphKind.ChevronUp, () => { _panel.FindPrevious(); UpdateStatus(showPatternError: true); }),
+                        GlyphButton(GlyphKind.ChevronDown, () => { _panel.FindNext(); UpdateStatus(showPatternError: true); }),
                         GlyphButton(GlyphKind.Cross, _panel.Close)),
                 new StackPanel()
                     .Horizontal()
@@ -129,8 +129,19 @@ internal sealed class SearchPanelView
         _patternBox.SelectAll();
     }
 
-    public void UpdateStatus()
-        => _status.Text = _panel.Results.Count == 0 && _panel.SearchPattern.Length > 0
+    /// <summary>
+    /// What the status line says. A pattern is invalid most of the way through being typed, so the
+    /// reason only appears once the reader asks to search, which is when the original raises it too.
+    /// </summary>
+    public void UpdateStatus(bool showPatternError = false)
+    {
+        if (showPatternError && _panel.PatternError is string error)
+        {
+            _status.Text = _panel.Localization.ErrorText + error;
+            return;
+        }
+        _status.Text = _panel.Results.Count == 0 && _panel.SearchPattern.Length > 0
             ? _panel.Localization.NoMatchesFoundText
             : string.Empty;
+    }
 }
