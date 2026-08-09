@@ -11,12 +11,21 @@ namespace Aprillz.MewUI;
 /// </remarks>
 public sealed class Command
 {
+    /// <summary>
+    /// Creates a semantic command with optional default presentation metadata.
+    /// </summary>
+    /// <param name="id">Stable textual identity used for diagnostics, logging and persistence.</param>
+    /// <param name="text">
+    /// Optional default presentation text. A single underscore marks the following character as
+    /// the default access key, and a double underscore represents a literal underscore. The
+    /// public <see cref="Text"/> value is normalized and never includes access-key markers.
+    /// </param>
+    /// <param name="icon">Optional reusable icon presentation.</param>
     public Command(string id, string? text = null, IconTemplate? icon = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
         Id = id;
-        Text = text;
-        Icon = icon;
+        Presentation = new CommandPresentation(text, icon);
     }
 
     /// <summary>
@@ -25,14 +34,21 @@ public sealed class Command
     public string Id { get; }
 
     /// <summary>
-    /// Gets the default presentation label, or null when presentation supplies its own text.
+    /// Gets the normalized default presentation label, or null when presentation supplies its own
+    /// text. Access-key markers accepted by the constructor are removed from this value, so
+    /// presenters that do not support access keys can display it directly.
     /// </summary>
-    public string? Text { get; }
+    public string? Text => Presentation.DisplayText;
+
+    /// <summary>
+    /// Gets the stable bindable default presentation for this command.
+    /// </summary>
+    public CommandPresentation Presentation { get; }
 
     /// <summary>
     /// Gets the reusable icon presentation, or null when presenters should show no command icon.
     /// </summary>
-    public IconTemplate? Icon { get; }
+    public IconTemplate? Icon => Presentation.Icon;
 
     public override string ToString() => Id;
 }

@@ -37,7 +37,8 @@ new Button()
 |------|------|------|
 | `OnEventName(handler)` | 이벤트 핸들러 등록 | `.OnClick(...)`, `.OnTextChanged(...)` |
 
-조건부 실행과 재사용 가능한 동작은 이벤트 확장이 아니라 `Command(...)`와 `BindCommand(...)`를 사용합니다.
+조건부 실행과 재사용 가능한 동작은 이벤트 확장이 아니라 `Command(...)`를 사용합니다. `BindCommand(...)`는
+동적으로 제공되는 의미 `Command`를 위한 데이터 바인딩입니다.
 
 같은 `On*` 메서드를 핸들러 delegate의 매개변수 타입만 바꿔 오버로드하지 않습니다. 타입이 명시되지 않은 람다는 두 오버로드에 모두 일치할 수 있으며, 기반 클래스용 확장과 파생 클래스용 확장 사이에서도 같은 문제가 발생합니다. `OnCheckStateChanged`, `OnLayoutSizeChanged`처럼 의미가 구분되는 이름을 사용합니다.
 
@@ -49,6 +50,10 @@ new Button()
 | `BindPropertyName(source, convert, convertBack)` | 양방향 변환 바인딩 | `.BindValue(vm.Level, x => (double)x, x => (int)x)` |
 
 `Bind*` 편의 메서드는 컨버터 오버로드를 제공합니다. 기본 양방향 속성에서 `convertBack`을 생략하면 변환 바인딩은 의도적으로 단방향으로 동작합니다.
+
+receiver가 `Command`인 `.BindText(source)`와 `.BindIcon(source)`도 같은 규칙을 따릅니다. 이 메서드들은
+`Command.Presentation.AccessTextProperty`와 `IconProperty`에 실제 단방향 binding을 만듭니다. text source의
+`_`는 AccessKey 표식이며, 니모닉을 지원하지 않는 소비자는 정규화된 `Command.Text`를 사용할 수 있습니다.
 
 ### 속성 이름 별칭
 
@@ -309,16 +314,15 @@ new Label()
 
 ```csharp
 new Button()
-    .Content("Click Me")
-    .Command(submitCommand)
+    .Command(submitCommand, presentation: CommandPresentationMode.TextAndIcon)
 ```
 
 | 메서드 | 설명 |
 |--------|------|
 | `Content(string)` | 버튼 텍스트 |
 | `OnClick(Action)` | 클릭 핸들러 |
-| `Command(Command)` | 의미 명령 설정 |
-| `BindCommand(ObservableValue<Command?>)` | 명령 바인딩 |
+| `Command(Command, CommandPresentationMode)` | 의미 명령 설정, 선택적으로 Command 텍스트/아이콘 콘텐츠 생성 |
+| `BindCommand(ObservableValue<Command?>, CommandPresentationMode)` | 의미 Command 속성 바인딩과 표시 모드 설정 |
 | `BindContent(ObservableValue<string>)` | 콘텐츠 바인딩 |
 | `BindContent(source, convert)` | 변환된 텍스트 또는 요소 콘텐츠 바인딩 |
 
@@ -864,7 +868,14 @@ new DockPanel()
 | 메서드 | 용도 |
 |--------|------|
 | `Add(...)`, `Item(...)`, `SubMenu(...)`, `Separator()` | 메뉴 구성 |
-| `Menu(...)`, `Command(...)`, `Icon(...)` | MenuItem 하위 메뉴, 명령 및 아이콘 override 설정 |
+| `Item(Command)` | Command의 정규화된 기본 텍스트와 AccessKey 사용 |
+| `Item(string, Command)`, `Text(string)` | `_` 표식으로 MenuItem 텍스트와 AccessKey를 함께 override |
+| `Menu(...)`, `Command(...)`, `Icon(...)` | MenuItem 하위 메뉴, 명령 및 아이콘 placement override 설정 |
+| `BindText(...)`, `BindCommand(...)`, `BindIcon(...)`, `BindIsEnabled(...)` | MenuItem의 실제 MewProperty binding |
+
+`MenuItem.Text`/`Icon`에 값 source가 없으면 Command의 기본 표시를 사용합니다. 명시적인 빈 텍스트와 null
+아이콘은 각각 Command 기본값을 숨깁니다. `IsEnabled` binding은 `CanExecute`에 의해 교체되지 않고 최종
+활성 상태에서 AND로 결합됩니다.
 
 ### Shape 및 Glyph
 

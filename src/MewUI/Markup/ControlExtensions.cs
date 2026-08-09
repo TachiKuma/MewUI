@@ -1355,21 +1355,29 @@ public static class ControlExtensions
     /// <summary>
     /// Sets the semantic command invoked by the button.
     /// </summary>
-    public static Button Command(this Button button, Command? command)
+    public static Button Command(
+        this Button button,
+        Command? command,
+        CommandPresentationMode presentation = CommandPresentationMode.None)
     {
         ArgumentNullException.ThrowIfNull(button);
         button.Command = command;
+        button.CommandPresentationMode = presentation;
         return button;
     }
 
     /// <summary>
     /// Binds the button's semantic command to an observable value.
     /// </summary>
-    public static Button BindCommand(this Button button, ObservableValue<Command?> source)
+    public static Button BindCommand(
+        this Button button,
+        ObservableValue<Command?> source,
+        CommandPresentationMode presentation = CommandPresentationMode.None)
     {
         ArgumentNullException.ThrowIfNull(button);
         ArgumentNullException.ThrowIfNull(source);
         button.SetBinding(Button.CommandProperty, source, BindingMode.OneWay);
+        button.CommandPresentationMode = presentation;
         return button;
     }
 

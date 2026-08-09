@@ -21,7 +21,7 @@ public sealed class CommandRoutingTests
 
         var command = new Command("test.run");
         int executed = 0;
-        button.Commands.Bind(command, () => executed++);
+        button.Commands.Register(command, () => executed++);
 
         bool result = await window.CommandRouter.ExecuteAsync(command);
 
@@ -41,7 +41,7 @@ public sealed class CommandRoutingTests
 
         var command = new Command("test.explicit");
         int executed = 0;
-        target.Commands.Bind(command, () => executed++);
+        target.Commands.Register(command, () => executed++);
 
         bool result = await window.CommandRouter.ExecuteAsync(command, CommandTarget.From(target));
 
@@ -63,7 +63,7 @@ public sealed class CommandRoutingTests
         var command = new Command("test.fallback");
         int executed = 0;
         var documentScope = new CommandScope();
-        documentScope.Bind(command, () => executed++);
+        documentScope.Register(command, () => executed++);
         window.CommandRouter.FallbackTarget = CommandTarget.From(documentScope);
 
         bool result = await window.CommandRouter.ExecuteAsync(command);
@@ -85,7 +85,7 @@ public sealed class CommandRoutingTests
 
         var command = new Command("test.window");
         int executed = 0;
-        window.Commands.Bind(command, () => executed++);
+        window.Commands.Register(command, () => executed++);
 
         bool result = await window.CommandRouter.ExecuteAsync(command);
 
@@ -120,10 +120,10 @@ public sealed class CommandRoutingTests
         var command = new Command("test.shadow");
         int nearExecuted = 0;
         int farExecuted = 0;
-        focused.Commands.Bind(command, () => nearExecuted++, () => false);
+        focused.Commands.Register(command, () => nearExecuted++, () => false);
 
         var fallbackScope = new CommandScope();
-        fallbackScope.Bind(command, () => farExecuted++, () => true);
+        fallbackScope.Register(command, () => farExecuted++, () => true);
         window.CommandRouter.FallbackTarget = CommandTarget.From(fallbackScope);
 
         Assert.IsFalse(window.CommandRouter.CanExecute(command));
@@ -145,7 +145,7 @@ public sealed class CommandRoutingTests
         var command = new Command("test.parentScope");
         int executed = 0;
         var workspaceScope = new CommandScope();
-        workspaceScope.Bind(command, () => executed++);
+        workspaceScope.Register(command, () => executed++);
         var documentScope = new CommandScope(workspaceScope);
 
         bool result = await window.CommandRouter.ExecuteAsync(command, CommandTarget.From(documentScope));
@@ -159,9 +159,9 @@ public sealed class CommandRoutingTests
     {
         var scope = new CommandScope();
         var command = new Command("test.duplicate");
-        scope.Bind(command, static () => { });
+        scope.Register(command, static () => { });
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => scope.Bind(command, static () => { }));
+        Assert.ThrowsExactly<InvalidOperationException>(() => scope.Register(command, static () => { }));
     }
 
     [TestMethod]
@@ -169,11 +169,11 @@ public sealed class CommandRoutingTests
     {
         var scope = new CommandScope();
         var command = new Command("test.rebind");
-        scope.Bind(command, static () => { });
+        scope.Register(command, static () => { });
 
-        Assert.IsTrue(scope.Unbind(command));
+        Assert.IsTrue(scope.Unregister(command));
         Assert.IsFalse(scope.Contains(command));
-        scope.Bind(command, static () => { });
+        scope.Register(command, static () => { });
         Assert.IsTrue(scope.Contains(command));
     }
 
@@ -182,13 +182,13 @@ public sealed class CommandRoutingTests
     {
         var scope = new CommandScope();
         var command = new Command("test.registration");
-        var registration = scope.Bind(command, static () => { });
+        var registration = scope.Register(command, static () => { });
 
         registration.Dispose();
         Assert.IsFalse(scope.Contains(command));
 
-        // A stale token must not remove a newer binding for the same command.
-        scope.Bind(command, static () => { });
+        // A stale token must not remove a newer handler for the same command.
+        scope.Register(command, static () => { });
         registration.Dispose();
         Assert.IsTrue(scope.Contains(command));
     }
@@ -199,6 +199,6 @@ public sealed class CommandRoutingTests
         var scope = new CommandScope();
         scope.Dispose();
 
-        Assert.ThrowsExactly<ObjectDisposedException>(() => scope.Bind(new Command("test.disposed"), static () => { }));
+        Assert.ThrowsExactly<ObjectDisposedException>(() => scope.Register(new Command("test.disposed"), static () => { }));
     }
 }

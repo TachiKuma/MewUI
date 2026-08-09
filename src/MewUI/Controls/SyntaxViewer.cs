@@ -57,10 +57,10 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         _horizontalScrollBar.Parent = this;
         _verticalScrollBar.ValueChanged += value => SetVerticalOffset(value);
         _horizontalScrollBar.ValueChanged += value => SetHorizontalOffset(value);
-        Commands.Bind(StandardCommands.Copy, this,
+        Commands.Register(StandardCommands.Copy, this,
             static viewer => viewer.Copy(),
             static viewer => viewer.SelectionLength > 0);
-        Commands.Bind(StandardCommands.SelectAll, this,
+        Commands.Register(StandardCommands.SelectAll, this,
             static viewer => viewer.SelectAll(),
             static viewer => viewer._document.TextLength > 0);
     }

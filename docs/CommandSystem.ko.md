@@ -15,43 +15,72 @@ InputMap / Button / Menu
 
 ## 기본 구성
 
-`Command`는 동작의 정체성과 기본 표시 텍스트만 가집니다. 실행 delegate는 `CommandScope`에,
+`Command`는 동작의 정체성과 안정적인 `CommandPresentation`만 가집니다. 실행 delegate는 `CommandScope`에,
 키 제스처는 `InputMap`에 등록합니다. 같은 `Id`를 사용해도 서로 다른 `Command` 인스턴스는 다른 명령입니다.
 
 ```csharp
-var save = new Command("file.save", "Save");
+var save = new Command("file.save", "_Save");
 
-window.Commands.Bind(save, () => document.Save(), () => document.IsDirty);
-window.InputMap.Bind(save, new KeyGesture(Key.S, ModifierKeys.Primary));
+window.Commands.Register(save, () => document.Save(), () => document.IsDirty);
+window.InputMap.Map(save, new KeyGesture(Key.S, ModifierKeys.Primary));
 ```
 
-`CommandScope.Bind`가 반환하는 `CommandRegistration`을 dispose하거나 `Unbind`를 호출하면 바인딩이 제거됩니다.
-한 scope에는 명령당 하나의 바인딩만 둘 수 있습니다.
+Command 생성자의 `text`는 `_Save` 형식의 AccessKey 표식을 허용하며 `__`는 실제 `_` 문자 하나를 뜻합니다.
+원문은 `Command.Presentation.AccessText`에 보관되고, `save.Text`는 현재 표식이 제거된 `"Save"`를 반환합니다.
+메뉴처럼 AccessKey를 지원하는 presenter는 `AccessKey`와 `AccessKeyIndex`도 사용합니다. 따라서 Toolbar,
+Command Palette, Tooltip처럼 니모닉을 표시하지 않는 소비자는 `Command.Text`를 그대로 표시해도 `_`가
+노출되지 않습니다.
+
+`CommandScope.Register`가 반환하는 `CommandRegistration`을 dispose하거나 `Unregister`를 호출하면 처리기 등록이 제거됩니다.
+한 scope에는 명령당 하나의 처리기만 둘 수 있습니다.
 
 ## C# Markup에서 사용
 
-Button은 `Command(...)` 또는 `BindCommand(...)`로 의미 동작에 연결합니다.
+Button은 `Command(...)` 또는 `BindCommand(...)`로 의미 동작에 연결합니다. 기본값은 기존처럼 명시적인
+`Content`를 사용합니다. Command의 표시를 자동 생성하려면 `CommandPresentationMode`를 함께 지정합니다.
 
 ```csharp
 new Button()
-    .Content("Save")
-    .Command(save)
+    .Command(save, presentation: CommandPresentationMode.TextAndIcon)
 ```
 
-메뉴도 callback이나 자체 shortcut을 소유하지 않습니다. `Command.Text`를 그대로 쓰거나 표시 텍스트를 덮어쓸 수 있습니다.
+명시적으로 설정하거나 바인딩한 `Content`가 있으면 자동 생성한 Command 표시보다 우선합니다.
+
+### 반응형 표시와 지역화
+
+`Command.Presentation.AccessText`와 `Icon`은 MewProperty입니다. `Command.BindText(...)`와
+`BindIcon(...)`은 값을 한 번 복사하는 편의 메서드가 아니라 각각 `AccessTextProperty`와 `IconProperty`에
+실제 단방향 binding을 만듭니다.
+
+```csharp
+var save = new Command("file.save", icon: saveIcon)
+    .BindText(AppStrings.Save); // ObservableValue<string>, 예: "_Save"
+```
+
+값이 바뀌면 Command의 `Text`/AccessKey가 다시 계산되고, 해당 Command를 기본 표시로 쓰는 열린 메뉴와
+opt-in Button도 갱신됩니다. `CommandPresentation`에는 `CanExecute`, 선택/체크 상태, shortcut 또는
+`CommandParameter`를 넣지 않습니다. 이 값들은 각각 실행 상태, 소비자 상태, `InputMap`, 호출 문맥에
+속합니다.
+
+메뉴도 callback이나 자체 shortcut을 소유하지 않습니다. Command의 기본 텍스트와 AccessKey를 함께 사용하거나,
+항목이 표시되는 문맥에 맞춰 둘을 함께 덮어쓸 수 있습니다.
 
 ```csharp
 var fileMenu = new Menu()
     .Item(save)
-    .Item("Save As...", saveAs)
+    .Item("Save _As...", saveAs)
     .Separator()
     .Item("Unavailable", isEnabled: false); // 표시 전용 항목
 ```
 
+`Item(string, Command)`과 `MenuItem.Text`의 문자열도 같은 `_` 규칙을 사용합니다. 명시적인 항목 텍스트는
+Command의 기본 텍스트와 AccessKey를 모두 덮어쓰므로, 같은 명령을 다른 메뉴에서 다른 AccessKey로 표시할 수 있습니다.
+
 메뉴의 shortcut 열은 현재 command target에서 실제로 유효한 `InputMap` 제스처를 역조회해 표시합니다.
 따라서 메뉴에 별도 shortcut을 중복 선언하지 않습니다.
 
-Command 아이콘은 표시 위치가 요청한 DIP 크기로 새 visual을 만드는 `IconTemplate`로 정의합니다.
+Command 아이콘은 표시 위치가 요청한 크기로 새 visual을 만드는 `IconTemplate`로 정의합니다.
+`IconTemplateSize.Dip`은 레이아웃 크기이며, `Pixel`은 현재 DPI에서 필요한 물리 픽셀 크기입니다.
 ContextMenu와 MenuBar dropdown은 16 DIP를 사용하며, 향후 Toolbar presenter의 기본 크기는 24 DIP입니다.
 
 ```csharp
@@ -61,7 +90,7 @@ copyGeometry.Freeze();
 var copyIcon = new IconTemplate(
     size => new PathShape()
         .Data(copyGeometry)
-        .Size(size)
+        .Size(size.Dip)
         .Stretch(Stretch.Uniform));
 
 var copy = new Command("edit.copy", "Copy", copyIcon);
@@ -72,10 +101,12 @@ var copy = new Command("edit.copy", "Copy", copyIcon);
 `SvgImageSource`, freeze한 `PathGeometry`처럼 visual이 아닌 리소스는 factory 밖에서 만들어 공유합니다.
 SVG는 새 `Image`, geometry는 새 `PathShape`, emoji는 새 `TextBlock`을 반환하는 방식으로 사용합니다.
 렌더링 프레임이나 `CanExecute` 평가마다 생성하는 것이 아니라 presenter가 만들어질 때 한 번 생성합니다.
+비트맵 factory는 `size.Pixel` 이상인 가장 작은 source를 선택하고 visual은 `size.Dip`으로 배치할 수 있습니다.
+DPI가 변경되면 활성 presenter는 새 크기로 icon visual을 다시 생성합니다.
 
-현재 Core에서 Command 아이콘을 자동 materialize하는 presenter는 ContextMenu와 MenuBar dropdown입니다.
-일반 Button은 기존처럼 `Content`를 명시적으로 구성하며, Toolbar presenter는 아직 제공하지 않습니다.
-`ThemeMetrics.ToolBarIconSize`의 24 DIP는 해당 presenter를 추가할 때 사용할 계약을 미리 고정한 값입니다.
+현재 Core에서 Command 아이콘을 자동 materialize하는 소비자는 ContextMenu, MenuBar dropdown, 표시 모드를
+지정한 Button입니다. Button의 기본 동작은 여전히 명시적 `Content`이며, Toolbar presenter는 아직 제공하지
+않습니다. `ThemeMetrics.ToolBarIconSize`의 24 DIP는 해당 presenter를 추가할 때 사용할 계약입니다.
 
 MenuItem별로 Command 아이콘을 덮어쓸 수도 있습니다.
 
@@ -84,13 +115,18 @@ new MenuItem("_Copy", copy)
     .Icon(compactCopyIcon);
 ```
 
+MenuItem의 `Text`와 `Icon`은 **placement override**입니다. 속성에 값 source가 없을 때만 Command 기본값을
+사용합니다. 따라서 명시적인 빈 문자열은 텍스트를 숨기고, 명시적인 `null` 아이콘은 Command 아이콘을
+숨깁니다. `BindText`, `BindIcon`, `BindCommand`, `BindIsEnabled`는 각각 해당 MenuItem MewProperty에 실제
+binding을 만듭니다. 로컬 `IsEnabled`는 `CanExecute`와 AND로 결합되며 binding이 덮어써지지 않습니다.
+
 ## 라우팅과 scope
 
 Element와 Window는 각각 `Commands`와 `InputMap`을 제공합니다. 실행 시 라우터는 현재 target에서 시작해
-요소의 command context, Window, Application 순으로 바인딩을 찾습니다. `CommandScope.Parent`를 사용하면
+요소의 command context, Window, Application 순으로 처리기를 찾습니다. `CommandScope.Parent`를 사용하면
 visual tree와 독립적인 의미 scope 체인도 만들 수 있습니다.
 
-가장 가까운 scope에 바인딩이 있으면 그 바인딩이 명령을 소유합니다. `CanExecute`가 `false`여도 더 먼
+가장 가까운 scope에 처리기가 있으면 그 처리기가 명령을 소유합니다. `CanExecute`가 `false`여도 더 먼
 scope의 같은 명령으로 fallback하지 않습니다. 키 제스처 역시 가장 가까운 `InputMap`이 의미를 결정합니다.
 
 명시적인 scope를 사용하는 동적 ContextMenu는 target을 함께 지정합니다.
@@ -100,7 +136,7 @@ var menu = new ContextMenu();
 var scope = new CommandScope();
 var select = new Command("document.select", "Select");
 
-scope.Bind(select, SelectDocument, CanSelectDocument);
+scope.Register(select, SelectDocument, CanSelectDocument);
 menu.Item(select);
 menu.SetCommandTarget(CommandTarget.From(scope));
 menu.ShowAt(owner, position);
@@ -109,11 +145,11 @@ menu.ShowAt(owner, position);
 ## 표준 편집 명령
 
 `StandardCommands`는 `Cut`, `Copy`, `Paste`, `Delete`, `Undo`, `Redo`, `SelectAll`을 제공합니다.
-TextBox 계열은 이 명령을 자신의 scope에 바인딩합니다. 기본 키는 Application `InputMap`에 등록되므로
+TextBox 계열은 이 명령의 처리기를 자신의 scope에 등록합니다. 기본 키는 Application `InputMap`에 매핑되므로
 로컬 또는 Window `InputMap`에서 재매핑하거나 shadow할 수 있습니다.
 
 ```csharp
-editor.InputMap.Bind(StandardCommands.Copy, new KeyGesture(Key.Insert, ModifierKeys.Control));
+editor.InputMap.Map(StandardCommands.Copy, new KeyGesture(Key.Insert, ModifierKeys.Control));
 ```
 
 ## TextBox, ContextMenu, InputMap과 Edit 메뉴
@@ -129,13 +165,13 @@ TextBox 우클릭 ContextMenu                ├─ StandardCommands.Cut/Copy/Pa
   └─ Cut / Copy / Paste 메뉴 항목 ───────┤             │
                                          │             ▼
 MenuBar의 Edit 메뉴                       │    현재 command target에서
-  └─ Cut / Copy / Paste 메뉴 항목 ───────┘    TextBox의 binding 실행
+  └─ Cut / Copy / Paste 메뉴 항목 ───────┘    TextBox의 처리기 실행
                                                        │
                                                        ▼
                                                선택 영역/클립보드 변경
 ```
 
-`TextBox`는 생성될 때 `Cut`, `Copy`, `Paste`의 실행과 `CanExecute`를 자신의 `Commands`에 바인딩합니다.
+`TextBox`는 생성될 때 `Cut`, `Copy`, `Paste`의 실행과 `CanExecute` 처리기를 자신의 `Commands`에 등록합니다.
 Application의 기본 `InputMap`은 `Primary+X`, `Primary+C`, `Primary+V`를 각각 같은 표준 명령으로 변환합니다.
 ContextMenu와 Edit 메뉴는 실행 delegate를 따로 갖지 않고 그 `Command`만 참조합니다.
 
@@ -162,18 +198,18 @@ var menuBar = new MenuBar()
 // menuBar와 editor를 같은 Window의 레이아웃에 배치한다.
 ```
 
-이 예제에서 메뉴 객체가 TextBox를 상속하거나 TextBox의 command binding을 복제하는 것은 아닙니다.
+이 예제에서 메뉴 객체가 TextBox를 상속하거나 TextBox의 명령 처리기를 복제하는 것은 아닙니다.
 실제 연결은 메뉴를 열거나 키를 누른 시점의 **command target**으로 결정됩니다.
 
 - 키보드: 포커스된 TextBox에서 시작해 유효한 `InputMap`을 찾습니다. Application의 기본 매핑이
-  `Primary+X/C/V`를 표준 명령으로 바꾸고, 라우터가 포커스된 TextBox의 binding을 실행합니다.
+  `Primary+X/C/V`를 표준 명령으로 바꾸고, 라우터가 포커스된 TextBox의 처리기를 실행합니다.
 - TextBox ContextMenu: 우클릭 owner인 TextBox를 target으로 캡처합니다. 따라서 메뉴가 포커스를 가져가더라도
   원래 TextBox의 선택 영역을 대상으로 명령을 실행합니다.
 - MenuBar의 Edit 메뉴: 메뉴를 열기 직전의 포커스 target을 보존합니다. TextBox에 포커스가 있었다면
   Edit 메뉴의 `Cut`, `Copy`, `Paste`도 그 TextBox로 라우팅됩니다.
 
 세 경로는 같은 `CanExecute` 결과도 공유합니다. 예를 들어 선택 영역이 없으면 TextBox의 `Cut`과 `Copy`
-binding이 실행 불가이므로 ContextMenu와 Edit 메뉴에서 모두 비활성화됩니다. `IsReadOnly`인 TextBox에서는
+처리기가 실행 불가이므로 ContextMenu와 Edit 메뉴에서 모두 비활성화됩니다. `IsReadOnly`인 TextBox에서는
 `Cut`과 `Paste`가 비활성화됩니다. 메뉴의 shortcut 표시는 현재 target에서 유효한 `InputMap`을 역조회하므로,
 키를 재매핑해도 ContextMenu와 Edit 메뉴에 별도 shortcut 문자열을 수정할 필요가 없습니다.
 
@@ -206,10 +242,11 @@ Window가 닫히면 해당 Window의 source tracker가 비워집니다. 장기 �
 
 ## 아이콘 수명과 크기
 
-`Command.Icon`과 `MenuItem.Icon`의 타입은 `IconTemplate?`입니다. `MenuItem.Icon`이 null이면 Command 아이콘을
-사용합니다. ContextMenu는 열릴 때 각 command item의 template을 16 DIP로 build하고 닫힐 때 생성한 visual의
-parent를 해제합니다. 다시 열면 새 visual을 만듭니다.
+`Command.Icon`과 `MenuItem.Icon`의 타입은 `IconTemplate?`입니다. `MenuItem.Icon`에 값 source가 없을 때만
+Command 아이콘을 사용하며, 명시적으로 설정한 null은 아이콘을 숨깁니다. ContextMenu는 열릴 때 각 command
+item의 template을 16 DIP로 build하고 닫힐 때 생성한 visual의 parent를 해제합니다. 다시 열면 새 visual을
+만듭니다.
 
-factory에 전달되는 크기는 pixel이 아닌 DIP입니다. DPI 변환과 disabled opacity는 presenter가 담당합니다.
-아이콘 source를 factory 안에서 매번 파싱하지 말고 공유 가능한 source를 캡처해야 합니다. factory가 반환한
+factory에는 DIP와 현재 DPI에서 계산된 목표 pixel 크기가 함께 전달됩니다. DPI 변환과 disabled opacity는
+presenter가 담당합니다. 아이콘 source를 factory 안에서 매번 파싱하지 말고 공유 가능한 source를 캡처해야 합니다. factory가 반환한
 element는 presenter가 정사각형 slot으로 제한하므로 vector와 bitmap에는 `Stretch.Uniform`을 권장합니다.

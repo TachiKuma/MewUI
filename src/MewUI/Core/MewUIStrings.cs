@@ -62,18 +62,33 @@ public static class MewUIStrings
 
     public static ObservableValue<string> BusyIndicatorAborting { get; } = Define("Aborting...");
 
-    // TextBoxContextMenu
-    public static ObservableValue<string> TextBoxContextMenuUndo { get; } = Define("Undo");
+    // Standard command presentation
+    public static ObservableValue<string> CommandUndo { get; } = Define("_Undo");
 
-    public static ObservableValue<string> TextBoxContextMenuRedo { get; } = Define("Redo");
+    public static ObservableValue<string> CommandRedo { get; } = Define("_Redo");
 
-    public static ObservableValue<string> TextBoxContextMenuCut { get; } = Define("Cut");
+    public static ObservableValue<string> CommandCut { get; } = Define("Cu_t");
 
-    public static ObservableValue<string> TextBoxContextMenuCopy { get; } = Define("Copy");
+    public static ObservableValue<string> CommandCopy { get; } = Define("_Copy");
 
-    public static ObservableValue<string> TextBoxContextMenuPaste { get; } = Define("Paste");
+    public static ObservableValue<string> CommandPaste { get; } = Define("_Paste");
 
-    public static ObservableValue<string> TextBoxContextMenuSelectAll { get; } = Define("Select All");
+    public static ObservableValue<string> CommandDelete { get; } = Define("_Delete");
+
+    public static ObservableValue<string> CommandSelectAll { get; } = Define("Select _All");
+
+    // Compatibility names share the same live command-presentation sources.
+    public static ObservableValue<string> TextBoxContextMenuUndo => CommandUndo;
+
+    public static ObservableValue<string> TextBoxContextMenuRedo => CommandRedo;
+
+    public static ObservableValue<string> TextBoxContextMenuCut => CommandCut;
+
+    public static ObservableValue<string> TextBoxContextMenuCopy => CommandCopy;
+
+    public static ObservableValue<string> TextBoxContextMenuPaste => CommandPaste;
+
+    public static ObservableValue<string> TextBoxContextMenuSelectAll => CommandSelectAll;
 
     // FileDialog
     public static ObservableValue<string> FileDialogTitleOpenSingle { get; } = Define("Open File");

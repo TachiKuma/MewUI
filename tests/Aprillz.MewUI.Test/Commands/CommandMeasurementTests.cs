@@ -32,7 +32,7 @@ public sealed class CommandMeasurementTests
         for (int index = 0; index < sourceCount; index++)
         {
             var command = new Command($"measure.cmd{index}");
-            window.Commands.Bind(command, state,
+            window.Commands.Register(command, state,
                 static ignored => { },
                 static flagState => flagState.Flag1 && !flagState.Flag2);
             panel.Add(new Button { Command = command });
@@ -132,7 +132,7 @@ public sealed class CommandMeasurementTests
 
         TestPlatformHosts.Queue.Enqueue(new MinimalPlatformHost((app, mainWindow) =>
         {
-            app.Commands.Bind(command, () => executed++);
+            app.Commands.Register(command, () => executed++);
 
             bool invoked = mainWindow.CommandRouter.ExecuteAsync(command).AsTask().GetAwaiter().GetResult();
             Assert.IsTrue(invoked);

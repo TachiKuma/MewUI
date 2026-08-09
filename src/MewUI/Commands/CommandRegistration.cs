@@ -1,28 +1,28 @@
 namespace Aprillz.MewUI;
 
 /// <summary>
-/// Lifetime token for a single <see cref="CommandScope"/> binding; disposing removes that binding.
+/// Lifetime token for a handler registered with a <see cref="CommandScope"/>; disposing removes it.
 /// </summary>
 public sealed class CommandRegistration : IDisposable
 {
     private CommandScope? _scope;
-    private readonly CommandBinding _binding;
+    private readonly CommandHandler _handler;
 
-    internal CommandRegistration(CommandScope scope, CommandBinding binding)
+    internal CommandRegistration(CommandScope scope, CommandHandler handler)
     {
         _scope = scope;
-        _binding = binding;
+        _handler = handler;
     }
 
     /// <summary>
-    /// Gets the bound command.
+    /// Gets the registered command.
     /// </summary>
-    public Command Command => _binding.Command;
+    public Command Command => _handler.Command;
 
     public void Dispose()
     {
         var scope = _scope;
         _scope = null;
-        scope?.RemoveRegistration(_binding.Command, _binding);
+        scope?.RemoveRegistration(_handler.Command, _handler);
     }
 }

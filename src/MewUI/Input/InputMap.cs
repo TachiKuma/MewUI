@@ -5,8 +5,8 @@ namespace Aprillz.MewUI;
 /// consults maps from the focused element outward and the nearest map claiming a gesture wins.
 /// </summary>
 /// <remarks>
-/// A command's first bound gesture is its primary/display gesture; the rest are alternative
-/// execution gestures. Binding a command again replaces its previous gestures, and binding a
+/// A command's first mapped gesture is its primary/display gesture; the rest are alternative
+/// execution gestures. Mapping a command again replaces its previous gestures, and mapping a
 /// gesture already claimed by another entry moves that gesture to the new entry (runtime remap
 /// semantics). Mutation is a UI-thread operation.
 /// </remarks>
@@ -23,7 +23,7 @@ public sealed class InputMap
     /// <summary>
     /// Maps the given gestures to a command; the first gesture becomes the primary/display gesture.
     /// </summary>
-    public InputMap Bind(Command command, KeyGesture primaryGesture, params KeyGesture[] alternativeGestures)
+    public InputMap Map(Command command, KeyGesture primaryGesture, params KeyGesture[] alternativeGestures)
     {
         ArgumentNullException.ThrowIfNull(command);
         ArgumentNullException.ThrowIfNull(alternativeGestures);
@@ -62,7 +62,7 @@ public sealed class InputMap
     /// <summary>
     /// Maps a gesture to a local callback that is not part of command presentation.
     /// </summary>
-    public InputMap Bind(KeyGesture gesture, Action execute, Func<bool>? canExecute = null)
+    public InputMap Map(KeyGesture gesture, Action execute, Func<bool>? canExecute = null)
     {
         ArgumentNullException.ThrowIfNull(execute);
         ValidateGesture(gesture);
@@ -78,7 +78,7 @@ public sealed class InputMap
     /// <summary>
     /// Removes all gestures mapped to the command; returns false when none were mapped.
     /// </summary>
-    public bool Unbind(Command command)
+    public bool Unmap(Command command)
     {
         ArgumentNullException.ThrowIfNull(command);
 
@@ -94,7 +94,7 @@ public sealed class InputMap
     /// <summary>
     /// Removes the mapping for a single gesture; returns false when the gesture was not mapped.
     /// </summary>
-    public bool Unbind(KeyGesture gesture)
+    public bool Unmap(KeyGesture gesture)
     {
         if (!ClaimGesture(gesture))
         {

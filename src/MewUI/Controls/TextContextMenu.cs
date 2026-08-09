@@ -17,8 +17,8 @@ internal static class TextContextMenu
         menu.Items.Clear();
         bool hasItems = false;
 
-        hasItems |= AddItem(menu, MewUIStrings.TextBoxContextMenuUndo.Value, StandardCommands.Undo, commands);
-        hasItems |= AddItem(menu, MewUIStrings.TextBoxContextMenuRedo.Value, StandardCommands.Redo, commands);
+        hasItems |= AddItem(menu, StandardCommands.Undo, commands);
+        hasItems |= AddItem(menu, StandardCommands.Redo, commands);
 
         if (hasItems && ContainsAny(commands, StandardCommands.Cut, StandardCommands.Copy, StandardCommands.Paste))
         {
@@ -26,9 +26,9 @@ internal static class TextContextMenu
         }
 
         bool hasClipboardItems = false;
-        hasClipboardItems |= AddItem(menu, MewUIStrings.TextBoxContextMenuCut.Value, StandardCommands.Cut, commands);
-        hasClipboardItems |= AddItem(menu, MewUIStrings.TextBoxContextMenuCopy.Value, StandardCommands.Copy, commands);
-        hasClipboardItems |= AddItem(menu, MewUIStrings.TextBoxContextMenuPaste.Value, StandardCommands.Paste, commands);
+        hasClipboardItems |= AddItem(menu, StandardCommands.Cut, commands);
+        hasClipboardItems |= AddItem(menu, StandardCommands.Copy, commands);
+        hasClipboardItems |= AddItem(menu, StandardCommands.Paste, commands);
         hasItems |= hasClipboardItems;
 
         if (hasItems && commands.Contains(StandardCommands.SelectAll))
@@ -36,7 +36,7 @@ internal static class TextContextMenu
             menu.AddSeparator();
         }
 
-        hasItems |= AddItem(menu, MewUIStrings.TextBoxContextMenuSelectAll.Value, StandardCommands.SelectAll, commands);
+        hasItems |= AddItem(menu, StandardCommands.SelectAll, commands);
 
         if (hasItems)
         {
@@ -44,14 +44,14 @@ internal static class TextContextMenu
         }
     }
 
-    private static bool AddItem(ContextMenu menu, string header, Command command, Command[] commands)
+    private static bool AddItem(ContextMenu menu, Command command, Command[] commands)
     {
         if (!commands.Contains(command))
         {
             return false;
         }
 
-        menu.AddItem(header, command);
+        menu.AddItem(command);
         return true;
     }
 

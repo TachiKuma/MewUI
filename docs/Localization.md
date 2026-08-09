@@ -12,7 +12,12 @@ MewUI keeps the user-facing strings that the framework itself renders - message 
 MewUIStrings.CommonOK.Value = "확인(_O)";
 ```
 
-MewUI reads these values **when it builds the UI**, not continuously. Message boxes, context menus, and the file dialog (including its sidebar) are rebuilt every time they are shown, so setting a value before the UI appears is enough - there is no separate binding step. Changing a value does not retitle a dialog that is already on screen; the next time it opens it picks up the new text.
+Most framework UI reads these values **when it builds the UI**. Message boxes and the file dialog (including its sidebar) are rebuilt every time they are shown, so setting a value before the UI appears is enough. Changing a value does not retitle a dialog that is already on screen; the next time it opens it picks up the new text.
+
+Standard editing Commands are the exception: they use live bindings. The `CommandPresentation.AccessText` of
+`StandardCommands.Cut`, `Copy`, `Paste`, and their peers is bound to `MewUIStrings.CommandCut`, `CommandCopy`,
+`CommandPaste`, and so on. Changing one updates open menus and Buttons opted into command presentation immediately.
+App Commands can use the same mechanism with `new Command(...).BindText(AppStrings.Save)`.
 
 Set your translations once at startup, and again if the user switches language at runtime, before the next dialog opens.
 
@@ -27,7 +32,8 @@ Members follow a `{Area}{Role}` naming scheme, where the `Area` prefix marks the
 | `Common` | Shared button labels (OK, Cancel, Yes, No, Retry, Ignore, Abort), reused by message boxes, the busy indicator, and the file dialog. |
 | `Prompt` | Message box title text (chosen by icon) and the "Show Details" toggle. |
 | `BusyIndicator` | Busy indicator abort confirmation and progress text. Its Abort/Yes/No buttons use the `Common` group. |
-| `TextBoxContextMenu` | Right-click menu of text editors (`TextBox`, `MultiLineTextBox`, `PasswordBox`, `NumericUpDown`). |
+| `Command` | Live presentation text for standard editing Commands (`Undo`, `Redo`, `Cut`, `Copy`, `Paste`, `Delete`, `SelectAll`). |
+| `TextBoxContextMenu` | Compatibility names for the `Command` entries; they share the same `ObservableValue` instances. |
 | `FileDialog` | Managed (in-app) file dialog chrome: window titles, accept buttons, field labels, nav tooltips, view toggles, filter name, and column headers. Its Cancel button reuses `CommonCancel`. |
 | `Sidebar` | File dialog sidebar section headers (per-platform conventions). |
 | `Folder` | Known-folder shortcut labels in the file dialog sidebar. |
@@ -70,7 +76,7 @@ static void ApplyKorean()
 }
 ```
 
-Because the framework reads values at construction time, call `ApplyStrings` before showing the first window, and again whenever the language changes. Resetting first means every run starts from a complete English set, so any string a culture does not translate - whether it is missing from a partial translation or left over from a previously selected language - stays English rather than showing a stale value.
+Call `ApplyStrings` before showing the first window, and again whenever the language changes. Resetting first means every run starts from a complete English set, so any string a culture does not translate - whether it is missing from a partial translation or left over from a previously selected language - stays English rather than showing a stale value. Construction-time consumers pick it up the next time they are shown; command-presentation consumers update immediately.
 
 ---
 

@@ -28,7 +28,7 @@ public sealed class CommandEvaluationTests
         var window = HeadlessWindow.Create();
         var command = new Command("file.save", "Save");
         var document = new TestDocument();
-        window.Commands.Bind(command, document,
+        window.Commands.Register(command, document,
             static doc => doc.Save(),
             static doc => doc.IsDirty);
 
@@ -57,7 +57,7 @@ public sealed class CommandEvaluationTests
         var window = HeadlessWindow.Create();
         var command = new Command("file.save", "Save");
         var document = new TestDocument { IsDirty = true };
-        window.Commands.Bind(command, document,
+        window.Commands.Register(command, document,
             static doc => doc.Save(),
             static doc => doc.IsDirty);
 
@@ -88,7 +88,7 @@ public sealed class CommandEvaluationTests
         var window = HeadlessWindow.Create();
         var command = new Command("file.save", "Save");
         var document = new TestDocument { IsDirty = true };
-        window.Commands.Bind(command, document,
+        window.Commands.Register(command, document,
             static doc => doc.Save(),
             static doc => doc.IsDirty);
 
@@ -122,10 +122,10 @@ public sealed class CommandEvaluationTests
         window.Content = button;
         window.PerformLayout();
 
-        Assert.IsFalse(button.IsEffectivelyEnabled, "no binding anywhere leaves the command button disabled");
+        Assert.IsFalse(button.IsEffectivelyEnabled, "no handler anywhere leaves the command button disabled");
 
         var documentScope = new CommandScope();
-        documentScope.Bind(command, static () => { });
+        documentScope.Register(command, static () => { });
         window.CommandRouter.FallbackTarget = CommandTarget.From(documentScope);
 
         Assert.IsTrue(button.IsEffectivelyEnabled, "setting FallbackTarget triggers a command state evaluation");

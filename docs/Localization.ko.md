@@ -12,7 +12,12 @@ MewUI는 프레임워크가 직접 그리는 사용자 노출 문자열 - 메시
 MewUIStrings.CommonOK.Value = "확인(_O)";
 ```
 
-MewUI는 이 값을 **UI를 구축하는 시점**에 읽으며 지속적으로 관찰하지 않습니다. 메시지 박스, 컨텍스트 메뉴, 파일 다이얼로그(사이드바 포함)는 표시할 때마다 다시 구축되므로, UI가 나타나기 전에 값을 설정해 두면 충분하고 별도의 바인딩 단계는 없습니다. 값을 바꿔도 이미 화면에 떠 있는 다이얼로그의 제목은 바뀌지 않으며, 다음에 열 때 새 텍스트가 반영됩니다.
+대부분의 프레임워크 UI는 이 값을 **UI를 구축하는 시점**에 읽습니다. 메시지 박스와 파일 다이얼로그(사이드바 포함)는 표시할 때마다 다시 구축되므로, UI가 나타나기 전에 값을 설정해 두면 충분합니다. 값을 바꿔도 이미 화면에 떠 있는 다이얼로그의 제목은 바뀌지 않으며, 다음에 열 때 새 텍스트가 반영됩니다.
+
+표준 편집 Command는 예외적으로 live binding을 사용합니다. `StandardCommands.Cut`/`Copy`/`Paste` 등의
+`CommandPresentation.AccessText`는 `MewUIStrings.CommandCut`/`CommandCopy`/`CommandPaste`에 바인딩됩니다.
+따라서 이 값을 바꾸면 이미 열린 메뉴와 Command 표시를 사용하도록 opt-in한 Button도 즉시 갱신됩니다.
+앱 Command도 `new Command(...).BindText(AppStrings.Save)`와 같이 같은 방식을 사용할 수 있습니다.
 
 번역은 시작 시점에 한 번 설정하고, 사용자가 실행 중에 언어를 바꾸면 다음 다이얼로그가 열리기 전에 다시 설정합니다.
 
@@ -27,7 +32,8 @@ MewUI는 이 값을 **UI를 구축하는 시점**에 읽으며 지속적으로 �
 | `Common` | 공용 버튼 라벨(OK, Cancel, Yes, No, Retry, Ignore, Abort). 메시지 박스, 비지 인디케이터, 파일 다이얼로그가 함께 재사용. |
 | `Prompt` | 아이콘별 메시지 박스 제목과 "자세히 보기" 토글. |
 | `BusyIndicator` | 비지 인디케이터의 중단 확인 문구와 진행 텍스트. Abort/Yes/No 버튼은 `Common` 그룹을 사용. |
-| `TextBoxContextMenu` | 텍스트 편집기(`TextBox`, `MultiLineTextBox`, `PasswordBox`, `NumericUpDown`)의 오른쪽 클릭 메뉴. |
+| `Command` | 표준 편집 Command의 live 표시 텍스트(`Undo`, `Redo`, `Cut`, `Copy`, `Paste`, `Delete`, `SelectAll`). |
+| `TextBoxContextMenu` | `Command` 항목을 가리키는 호환 이름. 같은 `ObservableValue` 인스턴스를 공유합니다. |
 | `FileDialog` | 관리형(인앱) 파일 다이얼로그 크롬: 창 제목, accept 버튼, 필드 라벨, 내비 툴팁, 뷰 토글, 필터 이름, 컬럼 헤더. Cancel 버튼은 `CommonCancel`을 재사용. |
 | `Sidebar` | 파일 다이얼로그 사이드바 섹션 헤더(플랫폼별 관례). |
 | `Folder` | 파일 다이얼로그 사이드바의 알려진 폴더 바로가기 라벨. |
@@ -70,7 +76,7 @@ static void ApplyKorean()
 }
 ```
 
-프레임워크가 구축 시점에 값을 읽으므로, 첫 창을 표시하기 전에 `ApplyStrings`를 호출하고 언어가 바뀔 때마다 다시 호출하세요. 먼저 리셋하면 매 호출이 완전한 영어 집합에서 시작하므로, 컬처가 번역하지 않은 문자열은 - 부분 번역이라 누락됐든 이전에 선택한 언어에서 남았든 - 낡은 값 대신 영어로 유지됩니다.
+첫 창을 표시하기 전에 `ApplyStrings`를 호출하고 언어가 바뀔 때마다 다시 호출하세요. 먼저 리셋하면 매 호출이 완전한 영어 집합에서 시작하므로, 컬처가 번역하지 않은 문자열은 - 부분 번역이라 누락됐든 이전에 선택한 언어에서 남았든 - 낡은 값 대신 영어로 유지됩니다. 구축 시점 소비자는 다음 표시부터, Command 표시 소비자는 즉시 새 값을 반영합니다.
 
 ---
 

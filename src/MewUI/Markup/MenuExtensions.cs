@@ -79,6 +79,9 @@ public static class MenuExtensions
         return bar;
     }
 
+    /// <summary>
+    /// Adds a command item using the command's normalized text and default access key.
+    /// </summary>
     public static MenuBar Item(this MenuBar bar, Command command)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -86,6 +89,10 @@ public static class MenuExtensions
         return bar;
     }
 
+    /// <summary>
+    /// Adds a command item with a presentation and access-key override. A single underscore marks
+    /// the following character as the access key; use a double underscore for a literal underscore.
+    /// </summary>
     public static MenuBar Item(this MenuBar bar, string text, Command command)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -108,7 +115,8 @@ public static class MenuExtensions
     }
 
     /// <summary>
-    /// Sets the menu item text.
+    /// Sets the menu item's presentation and access-key override. A single underscore marks the
+    /// following character as the access key; use a double underscore for a literal underscore.
     /// </summary>
     /// <param name="item">Target menu item.</param>
     /// <param name="text">Item text.</param>
@@ -116,6 +124,17 @@ public static class MenuExtensions
     public static MenuItem Text(this MenuItem item, string text)
     {
         item.Text = text ?? string.Empty;
+        return item;
+    }
+
+    /// <summary>
+    /// Binds this placement's access-key-aware text override to an observable source.
+    /// </summary>
+    public static MenuItem BindText(this MenuItem item, ObservableValue<string> source)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(source);
+        item.SetBinding(MenuItem.TextProperty, source, BindingMode.OneWay);
         return item;
     }
 
@@ -127,11 +146,29 @@ public static class MenuExtensions
         return item;
     }
 
+    /// <summary>Binds the semantic command invoked by this item.</summary>
+    public static MenuItem BindCommand(this MenuItem item, ObservableValue<Command?> source)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(source);
+        item.SetBinding(MenuItem.CommandProperty, source, BindingMode.OneWay);
+        return item;
+    }
+
     /// <summary>Sets the menu item's icon presentation override.</summary>
     public static MenuItem Icon(this MenuItem item, IconTemplate? icon)
     {
         ArgumentNullException.ThrowIfNull(item);
         item.Icon = icon;
+        return item;
+    }
+
+    /// <summary>Binds this placement's icon override to an observable source.</summary>
+    public static MenuItem BindIcon(this MenuItem item, ObservableValue<IconTemplate?> source)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(source);
+        item.SetBinding(MenuItem.IconProperty, source, BindingMode.OneWay);
         return item;
     }
 
@@ -156,6 +193,18 @@ public static class MenuExtensions
     public static MenuItem IsEnabled(this MenuItem item, bool value = true)
     {
         item.IsEnabled = value;
+        return item;
+    }
+
+    /// <summary>
+    /// Binds the local enabled value. Command CanExecute is combined with this value and does not
+    /// replace the binding.
+    /// </summary>
+    public static MenuItem BindIsEnabled(this MenuItem item, ObservableValue<bool> source)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(source);
+        item.SetBinding(MenuItem.IsEnabledProperty, source, BindingMode.OneWay);
         return item;
     }
 
@@ -185,7 +234,7 @@ public static class MenuExtensions
         return menu;
     }
 
-    /// <summary>Adds a semantic command item.</summary>
+    /// <summary>Adds a semantic command item using the command's normalized text and default access key.</summary>
     public static Menu Item(this Menu menu, Command command)
     {
         ArgumentNullException.ThrowIfNull(menu);
@@ -202,7 +251,11 @@ public static class MenuExtensions
         return menu;
     }
 
-    /// <summary>Adds a semantic command item with a presentation text override.</summary>
+    /// <summary>
+    /// Adds a semantic command item with a presentation and access-key override. A single
+    /// underscore marks the following character as the access key; use a double underscore for a
+    /// literal underscore.
+    /// </summary>
     public static Menu Item(this Menu menu, string text, Command command)
     {
         ArgumentNullException.ThrowIfNull(menu);

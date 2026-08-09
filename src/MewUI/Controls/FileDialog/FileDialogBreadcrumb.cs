@@ -91,7 +91,7 @@ internal sealed class FileDialogBreadcrumb : StackPanel
             foreach (Entry entry in hidden)
             {
                 var command = new Command($"fileDialog.navigate.{entry.Path}", entry.Label);
-                commandScope.Bind(command, entry.Navigate);
+                commandScope.Register(command, entry.Navigate);
                 menu.Item(command);
             }
 

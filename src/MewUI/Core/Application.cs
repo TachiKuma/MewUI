@@ -220,12 +220,12 @@ public sealed class Application
         // Redo has no single cross-platform gesture; Primary+Y covers Windows/Linux convention and
         // Primary+Shift+Z covers the macOS convention, both routed to the same command.
         var map = new InputMap();
-        map.Bind(StandardCommands.Cut, new KeyGesture(Key.X, ModifierKeys.Primary));
-        map.Bind(StandardCommands.Copy, new KeyGesture(Key.C, ModifierKeys.Primary));
-        map.Bind(StandardCommands.Paste, new KeyGesture(Key.V, ModifierKeys.Primary));
-        map.Bind(StandardCommands.SelectAll, new KeyGesture(Key.A, ModifierKeys.Primary));
-        map.Bind(StandardCommands.Undo, new KeyGesture(Key.Z, ModifierKeys.Primary));
-        map.Bind(StandardCommands.Redo,
+        map.Map(StandardCommands.Cut, new KeyGesture(Key.X, ModifierKeys.Primary));
+        map.Map(StandardCommands.Copy, new KeyGesture(Key.C, ModifierKeys.Primary));
+        map.Map(StandardCommands.Paste, new KeyGesture(Key.V, ModifierKeys.Primary));
+        map.Map(StandardCommands.SelectAll, new KeyGesture(Key.A, ModifierKeys.Primary));
+        map.Map(StandardCommands.Undo, new KeyGesture(Key.Z, ModifierKeys.Primary));
+        map.Map(StandardCommands.Redo,
             new KeyGesture(Key.Y, ModifierKeys.Primary),
             new KeyGesture(Key.Z, ModifierKeys.Primary | ModifierKeys.Shift));
         return map;

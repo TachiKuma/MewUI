@@ -212,22 +212,22 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     {
         // One shared handler set for keyboard defaults, menus and toolbars. Semantic edit gestures
         // are resolved by InputMap; direct key handling is limited to caret/navigation mechanics.
-        Commands.Bind(StandardCommands.Copy, this,
+        Commands.Register(StandardCommands.Copy, this,
             static textBase => textBase.Copy(),
             static textBase => textBase._editor.Selection.Length > 0);
-        Commands.Bind(StandardCommands.Cut, this,
+        Commands.Register(StandardCommands.Cut, this,
             static textBase => textBase.Cut(),
             static textBase => !textBase.IsReadOnly && textBase._editor.Selection.Length > 0);
-        Commands.Bind(StandardCommands.Paste, this,
+        Commands.Register(StandardCommands.Paste, this,
             static textBase => textBase.Paste(),
             static textBase => !textBase.IsReadOnly);
-        Commands.Bind(StandardCommands.SelectAll, this,
+        Commands.Register(StandardCommands.SelectAll, this,
             static textBase => textBase.SelectAll(),
             static textBase => textBase._document.TextLength > 0);
-        Commands.Bind(StandardCommands.Undo, this,
+        Commands.Register(StandardCommands.Undo, this,
             static textBase => textBase.Undo(),
             static textBase => !textBase.IsReadOnly && textBase.CanUndo);
-        Commands.Bind(StandardCommands.Redo, this,
+        Commands.Register(StandardCommands.Redo, this,
             static textBase => textBase.Redo(),
             static textBase => !textBase.IsReadOnly && textBase.CanRedo);
     }

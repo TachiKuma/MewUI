@@ -1,4 +1,4 @@
-﻿using Aprillz.MewUI.Controls;
+using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Diagnostics;
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Rendering;
@@ -56,8 +56,8 @@ partial class Window
     /// </summary>
     private void InitializeDebugPerformanceProfiler()
     {
-        InputMap.Bind(new KeyGesture(Key.P, ModifierKeys.Primary | ModifierKeys.Shift), TogglePerformanceMonitor);
-        InputMap.Bind(new KeyGesture(Key.P, ModifierKeys.Primary | ModifierKeys.Shift | ModifierKeys.Alt), ToggleProfiler);
+        InputMap.Map(new KeyGesture(Key.P, ModifierKeys.Primary | ModifierKeys.Shift), TogglePerformanceMonitor);
+        InputMap.Map(new KeyGesture(Key.P, ModifierKeys.Primary | ModifierKeys.Shift | ModifierKeys.Alt), ToggleProfiler);
     }
 
     private void UpdateProfilerEnabled()

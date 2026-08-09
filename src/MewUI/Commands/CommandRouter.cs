@@ -3,13 +3,13 @@ using Aprillz.MewUI.Controls;
 namespace Aprillz.MewUI;
 
 /// <summary>
-/// Resolves a command to its nearest binding for a target context and dispatches invocations,
+/// Resolves a command to its nearest handler for a target context and dispatches invocations,
 /// always re-querying CanExecute at invocation time.
 /// </summary>
 /// <remarks>
 /// Resolution order: the explicit or focused target's context chain, then
 /// <see cref="FallbackTarget"/>, then the window scope, then the application scope. The nearest
-/// binding ends the search even when its CanExecute returns false (disabled shadowing).
+/// handler ends the search even when its CanExecute returns false (disabled shadowing).
 /// </remarks>
 public sealed class CommandRouter
 {
@@ -22,7 +22,7 @@ public sealed class CommandRouter
     internal CommandRouter(Window window) => _window = window;
 
     /// <summary>
-    /// Gets or sets the target consulted when the focused context has no binding; a shell layer
+    /// Gets or sets the target consulted when the focused context has no handler; a shell layer
     /// typically points this at its active content.
     /// </summary>
     public CommandTarget? FallbackTarget
@@ -62,42 +62,42 @@ public sealed class CommandRouter
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!TryResolve(command, target, out var binding))
+        if (!TryResolve(command, target, out var handler))
         {
             return false;
         }
 
         var context = new CommandContext(_window, source: null, CancellationToken.None);
-        return binding.CanExecute(in context);
+        return handler.CanExecute(in context);
     }
 
     /// <summary>
-    /// Executes the command in the current focused context; returns false when no binding exists
+    /// Executes the command in the current focused context; returns false when no handler exists
     /// or CanExecute rejects the invocation.
     /// </summary>
     public ValueTask<bool> ExecuteAsync(Command command, Element? source = null, CancellationToken cancellationToken = default)
         => ExecuteAsync(command, CaptureTarget(), source, cancellationToken);
 
     /// <summary>
-    /// Executes the command for the given target; returns false when no binding exists or
+    /// Executes the command for the given target; returns false when no handler exists or
     /// CanExecute rejects the invocation.
     /// </summary>
     public async ValueTask<bool> ExecuteAsync(Command command, CommandTarget target, Element? source = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (!TryResolve(command, target, out var binding))
+        if (!TryResolve(command, target, out var handler))
         {
             return false;
         }
 
         var context = new CommandContext(_window, source, cancellationToken);
-        if (!binding.CanExecute(in context))
+        if (!handler.CanExecute(in context))
         {
             return false;
         }
 
-        await binding.ExecuteAsync(in context).ConfigureAwait(true);
+        await handler.ExecuteAsync(in context).ConfigureAwait(true);
         return true;
     }
 
@@ -107,18 +107,18 @@ public sealed class CommandRouter
     /// </summary>
     internal bool TryExecuteFromInput(Command command, CommandTarget target, Element? source)
     {
-        if (!TryResolve(command, target, out var binding))
+        if (!TryResolve(command, target, out var handler))
         {
             return false;
         }
 
         var context = new CommandContext(_window, source, CancellationToken.None);
-        if (!binding.CanExecute(in context))
+        if (!handler.CanExecute(in context))
         {
             return false;
         }
 
-        var pending = binding.ExecuteAsync(in context);
+        var pending = handler.ExecuteAsync(in context);
         if (!pending.IsCompleted)
         {
             ObserveAsyncCompletion(pending);
@@ -132,41 +132,41 @@ public sealed class CommandRouter
         return true;
     }
 
-    internal bool TryResolve(Command command, CommandTarget target, out CommandBinding binding)
+    internal bool TryResolve(Command command, CommandTarget target, out CommandHandler handler)
     {
-        if (TryResolveFromOrigin(target.Origin, command, out binding))
+        if (TryResolveFromOrigin(target.Origin, command, out handler))
         {
             return true;
         }
 
         if (_fallbackTarget is CommandTarget fallback &&
             fallback != target &&
-            TryResolveFromOrigin(fallback.Origin, command, out binding))
+            TryResolveFromOrigin(fallback.Origin, command, out handler))
         {
             return true;
         }
 
         if (_window.TryGetCommandScope() is CommandScope windowScope &&
-            TryResolveScopeChain(windowScope, command, out binding))
+            TryResolveScopeChain(windowScope, command, out handler))
         {
             return true;
         }
 
         if (Application.CurrentCommandScopeOrNull is CommandScope applicationScope &&
-            TryResolveScopeChain(applicationScope, command, out binding))
+            TryResolveScopeChain(applicationScope, command, out handler))
         {
             return true;
         }
 
-        binding = null!;
+        handler = null!;
         return false;
     }
 
-    private bool TryResolveFromOrigin(object? origin, Command command, out CommandBinding binding)
+    private bool TryResolveFromOrigin(object? origin, Command command, out CommandHandler handler)
     {
         if (origin is CommandScope scope)
         {
-            return TryResolveScopeChain(scope, command, out binding);
+            return TryResolveScopeChain(scope, command, out handler);
         }
 
         if (origin is Element element)
@@ -181,29 +181,29 @@ public sealed class CommandRouter
                 }
 
                 if (current.TryGetCommandScope() is CommandScope local &&
-                    TryResolveScopeChain(local, command, out binding))
+                    TryResolveScopeChain(local, command, out handler))
                 {
                     return true;
                 }
             }
         }
 
-        binding = null!;
+        handler = null!;
         return false;
     }
 
-    private static bool TryResolveScopeChain(CommandScope scope, Command command, out CommandBinding binding)
+    private static bool TryResolveScopeChain(CommandScope scope, Command command, out CommandHandler handler)
     {
         int steps = 0;
         for (CommandScope? current = scope; current != null && steps < MAX_CHAIN_LENGTH; current = current.Parent, steps++)
         {
-            if (current.TryGetBinding(command, out binding))
+            if (current.TryGetHandler(command, out handler))
             {
                 return true;
             }
         }
 
-        binding = null!;
+        handler = null!;
         return false;
     }
 

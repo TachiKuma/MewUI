@@ -101,6 +101,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
     {
         ArgumentNullException.ThrowIfNull(menu);
         Menu = menu;
+        Menu.Changed += OnMenuChanged;
         if (!double.IsNaN(menu.ItemHeight) && menu.ItemHeight > 0)
         {
             ItemHeight = menu.ItemHeight;
@@ -118,6 +119,39 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
         {
             UpdateScrollFromBar(v);
         };
+    }
+
+    private void OnMenuChanged(MenuModelChange change)
+    {
+        if ((change & MenuModelChange.Structure) != 0 && FindVisualRoot() is Window structureWindow)
+        {
+            CloseDescendants(structureWindow);
+            _hotIndex = -1;
+        }
+
+        if ((change & (MenuModelChange.Structure | MenuModelChange.Text |
+            MenuModelChange.Command | MenuModelChange.Shortcut)) != 0)
+        {
+            _textLayouts.Invalidate();
+            InvalidateMeasure();
+        }
+
+        if ((change & (MenuModelChange.Structure | MenuModelChange.Icon |
+            MenuModelChange.Command)) != 0 && FindVisualRoot() is Window window)
+        {
+            if ((change & (MenuModelChange.Structure | MenuModelChange.Command)) != 0 &&
+                !_capturedCommandTarget.IsEmpty)
+            {
+                UpdateCommandPresentation(window);
+            }
+
+            PrepareMaterializedIcons();
+            if (HasCommandItems()) window.RegisterCommandSource(this);
+            else window.UnregisterCommandSource(this);
+            InvalidateMeasure();
+        }
+
+        InvalidateVisual();
     }
 
     public void AddItem(Command command)
@@ -205,7 +239,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
                     InputMapResolver.TryGetEffectiveGesture(window, command, _capturedCommandTarget.OriginElement, out var gesture)
                         ? gesture.ToDisplayString()
                         : null;
-                item.ApplyCommandPresentation(enabled, shortcutText);
+                item.ApplyCommandState(enabled, shortcutText);
             }
         }
     }
@@ -231,7 +265,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
     {
         ClearMaterializedIcons();
 
-        double size = ResolveIconSize();
+        var size = IconTemplate.ResolveSize(ResolveIconSize(), GetDpi() / 96.0);
         foreach (var entry in Items)
         {
             if (entry is not MenuItem item || item.ResolveIconTemplate() is not IconTemplate template)
@@ -240,8 +274,8 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
             }
 
             var icon = template.Build(size);
-            icon.Width = size;
-            icon.Height = size;
+            icon.Width = size.Dip;
+            icon.Height = size.Dip;
             icon.IsHitTestVisible = false;
             icon.Parent = this;
             _materializedIcons.Add(item, icon);
@@ -358,7 +392,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
                     InputMapResolver.TryGetEffectiveGesture(window, command, _capturedCommandTarget.OriginElement, out var gesture)
                         ? gesture.ToDisplayString()
                         : null;
-                changed |= item.ApplyCommandPresentation(enabled, shortcutText);
+                changed |= item.ApplyCommandState(enabled, shortcutText);
             }
         }
 
@@ -380,6 +414,17 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
 
         if (oldTheme.Metrics.ContextMenuIconSize != newTheme.Metrics.ContextMenuIconSize &&
             FindVisualRoot() is Window)
+        {
+            PrepareMaterializedIcons();
+            InvalidateMeasure();
+        }
+    }
+
+    protected override void OnDpiChanged(uint oldDpi, uint newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        _textLayouts.Invalidate();
+        if (FindVisualRoot() is Window)
         {
             PrepareMaterializedIcons();
             InvalidateMeasure();
@@ -659,7 +704,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
             InvalidateVisual();
         }
 
-        if (index >= 0 && index < Items.Count && Items[index] is MenuItem item && item.SubMenu != null && item.IsEnabled)
+        if (index >= 0 && index < Items.Count && Items[index] is MenuItem item && item.SubMenu != null && item.IsEffectivelyEnabled)
         {
             if (_openSubMenuIndex != index)
             {
@@ -694,7 +739,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
             return;
         }
 
-        if (Items[index] is MenuItem item && item.IsEnabled)
+        if (Items[index] is MenuItem item && item.IsEffectivelyEnabled)
         {
             if (item.SubMenu != null)
             {
@@ -778,7 +823,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
 
         foreach (var entry in Menu.Items)
         {
-            if (entry is not MenuItem item || !item.IsEnabled)
+            if (entry is not MenuItem item || !item.IsEffectivelyEnabled)
                 continue;
 
             var parsed = item.GetParsedText();
@@ -1068,7 +1113,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
                     }
                 }
 
-                var fg = item.IsEnabled ? Foreground : Theme.Palette.DisabledText;
+                var fg = item.IsEffectivelyEnabled ? Foreground : Theme.Palette.DisabledText;
                 var chevronReserved = item.SubMenu != null ? SubMenuGlyphAreaWidth : 0;
 
                 var paddedRow = row.Deflate(ItemPadding);
@@ -1078,14 +1123,14 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
                 {
                     if (_materializedIcons.TryGetValue(item, out var icon))
                     {
-                        if (!item.IsEnabled)
+                        if (!item.IsEffectivelyEnabled)
                         {
                             context.BeginOpacity(0.5);
                         }
 
                         icon.Render(context);
 
-                        if (!item.IsEnabled)
+                        if (!item.IsEffectivelyEnabled)
                         {
                             context.EndOpacity();
                         }
@@ -1160,6 +1205,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
 
     protected override void OnDispose()
     {
+        Menu.Changed -= OnMenuChanged;
         ClearMaterializedIcons();
         base.OnDispose();
     }
@@ -1187,12 +1233,6 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
         }
 
         base.OnMewPropertyChanged(property);
-    }
-
-    protected override void OnDpiChanged(uint oldDpi, uint newDpi)
-    {
-        base.OnDpiChanged(oldDpi, newDpi);
-        _textLayouts.Invalidate();
     }
 
     protected override void OnFontCacheInvalidated(MewProperty property)

@@ -19,8 +19,8 @@ public sealed class InputMapDispatchTests
 
         var command = new Command("test.refresh");
         int executed = 0;
-        window.Commands.Bind(command, () => executed++);
-        window.InputMap.Bind(command, new KeyGesture(Key.F5));
+        window.Commands.Register(command, () => executed++);
+        window.InputMap.Map(command, new KeyGesture(Key.F5));
 
         window.SendKeyDown(Key.F5);
 
@@ -42,10 +42,10 @@ public sealed class InputMapDispatchTests
         var windowCommand = new Command("test.refresh");
         int localExecuted = 0;
         int windowExecuted = 0;
-        editor.Commands.Bind(localCommand, () => localExecuted++);
-        window.Commands.Bind(windowCommand, () => windowExecuted++);
-        editor.InputMap.Bind(localCommand, new KeyGesture(Key.F5));
-        window.InputMap.Bind(windowCommand, new KeyGesture(Key.F5));
+        editor.Commands.Register(localCommand, () => localExecuted++);
+        window.Commands.Register(windowCommand, () => windowExecuted++);
+        editor.InputMap.Map(localCommand, new KeyGesture(Key.F5));
+        window.InputMap.Map(windowCommand, new KeyGesture(Key.F5));
 
         window.SendKeyDown(Key.F5);
 
@@ -68,10 +68,10 @@ public sealed class InputMapDispatchTests
         var windowCommand = new Command("test.refresh");
         int localExecuted = 0;
         int windowExecuted = 0;
-        editor.Commands.Bind(localCommand, () => localExecuted++, () => false);
-        window.Commands.Bind(windowCommand, () => windowExecuted++);
-        editor.InputMap.Bind(localCommand, new KeyGesture(Key.F5));
-        window.InputMap.Bind(windowCommand, new KeyGesture(Key.F5));
+        editor.Commands.Register(localCommand, () => localExecuted++, () => false);
+        window.Commands.Register(windowCommand, () => windowExecuted++);
+        editor.InputMap.Map(localCommand, new KeyGesture(Key.F5));
+        window.InputMap.Map(windowCommand, new KeyGesture(Key.F5));
 
         window.SendKeyDown(Key.F5);
 
@@ -89,7 +89,7 @@ public sealed class InputMapDispatchTests
 
         int executed = 0;
         bool allowed = true;
-        window.InputMap.Bind(new KeyGesture(Key.F12), () => executed++, () => allowed);
+        window.InputMap.Map(new KeyGesture(Key.F12), () => executed++, () => allowed);
 
         window.SendKeyDown(Key.F12);
         Assert.AreEqual(1, executed);
@@ -109,8 +109,8 @@ public sealed class InputMapDispatchTests
 
         var command = new Command("test.find");
         int executed = 0;
-        window.Commands.Bind(command, () => executed++);
-        window.InputMap.Bind(command,
+        window.Commands.Register(command, () => executed++);
+        window.InputMap.Map(command,
             new KeyGesture(Key.F, ModifierKeys.Control),
             new KeyGesture(Key.F3));
 
@@ -132,13 +132,13 @@ public sealed class InputMapDispatchTests
         var command = new Command("test.save");
         int executed = 0;
         int changedCount = 0;
-        window.Commands.Bind(command, () => executed++);
+        window.Commands.Register(command, () => executed++);
         window.InputMap.Changed += () => changedCount++;
 
-        window.InputMap.Bind(command, new KeyGesture(Key.S, ModifierKeys.Control));
+        window.InputMap.Map(command, new KeyGesture(Key.S, ModifierKeys.Control));
         Assert.AreEqual(1, changedCount);
 
-        window.InputMap.Bind(command, new KeyGesture(Key.F2));
+        window.InputMap.Map(command, new KeyGesture(Key.F2));
         Assert.AreEqual(2, changedCount);
 
         window.SendKeyDown(Key.S, ModifierKeys.Control);
@@ -161,7 +161,7 @@ public sealed class InputMapDispatchTests
 
         // Button consumes Space in OnKeyDown; a Space mapping must never observe the key.
         int executed = 0;
-        window.InputMap.Bind(new KeyGesture(Key.Space), () => executed++);
+        window.InputMap.Map(new KeyGesture(Key.Space), () => executed++);
 
         window.SendKeyDown(Key.Space);
 
@@ -182,8 +182,8 @@ public sealed class InputMapDispatchTests
 
         var remapped = new Command("test.remappedCopy");
         int executed = 0;
-        textBox.Commands.Bind(remapped, () => executed++);
-        textBox.InputMap.Bind(remapped, new KeyGesture(Key.C, ModifierKeys.Control));
+        textBox.Commands.Register(remapped, () => executed++);
+        textBox.InputMap.Map(remapped, new KeyGesture(Key.C, ModifierKeys.Control));
 
         window.SendKeyDown(Key.C, ModifierKeys.Control);
 
@@ -202,10 +202,10 @@ public sealed class InputMapDispatchTests
 
         var findCommand = new Command("edit.find");
         var propertiesSearchCommand = new Command("properties.search");
-        window.InputMap.Bind(findCommand,
+        window.InputMap.Map(findCommand,
             new KeyGesture(Key.F, ModifierKeys.Control),
             new KeyGesture(Key.F3));
-        properties.InputMap.Bind(propertiesSearchCommand, new KeyGesture(Key.F, ModifierKeys.Control));
+        properties.InputMap.Map(propertiesSearchCommand, new KeyGesture(Key.F, ModifierKeys.Control));
 
         // From the properties context, Ctrl+F means PropertiesSearch, so Find's effective gesture
         // is its alternative F3, never the shadowed Ctrl+F.

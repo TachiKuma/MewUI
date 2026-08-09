@@ -37,7 +37,8 @@ All extension methods return `this` to enable method chaining.
 |---------|-------------|---------|
 | `OnEventName(handler)` | Register event handler | `.OnClick(...)`, `.OnTextChanged(...)` |
 
-Use `Command(...)` and `BindCommand(...)`, rather than event extensions, for conditional execution and reusable actions.
+Use `Command(...)`, rather than event extensions, for conditional execution and reusable actions. `BindCommand(...)`
+is a data binding for a dynamically supplied semantic Command.
 
 Do not overload the same `On*` method solely by changing the handler delegate's parameter type. Untyped lambdas can match both overloads, including when one extension targets a base class and another targets a derived class. Use a distinct semantic name instead, such as `OnCheckStateChanged` or `OnLayoutSizeChanged`.
 
@@ -49,6 +50,10 @@ Do not overload the same `On*` method solely by changing the handler delegate's 
 | `BindPropertyName(source, convert, convertBack)` | Two-way conversion binding | `.BindValue(vm.Level, x => (double)x, x => (int)x)` |
 
 Converter overloads are available for the `Bind*` convenience methods. For properties that bind two-way by default, omitting `convertBack` intentionally makes the converted binding one-way.
+
+`.BindText(source)` and `.BindIcon(source)` follow the same rule when their receiver is a `Command`: they create real
+one-way bindings to `Command.Presentation.AccessTextProperty` and `IconProperty`. An underscore in the text source is
+an access-key marker; consumers without mnemonic support can use normalized `Command.Text`.
 
 ### Property Name Aliases
 
@@ -309,16 +314,15 @@ new Label()
 
 ```csharp
 new Button()
-    .Content("Click Me")
-    .Command(submitCommand)
+    .Command(submitCommand, presentation: CommandPresentationMode.TextAndIcon)
 ```
 
 | Method | Description |
 |--------|-------------|
 | `Content(string)` | Button text |
 | `OnClick(Action)` | Click handler |
-| `Command(Command)` | Semantic command |
-| `BindCommand(ObservableValue<Command?>)` | Command binding |
+| `Command(Command, CommandPresentationMode)` | Semantic command and optional generated command text/icon content |
+| `BindCommand(ObservableValue<Command?>, CommandPresentationMode)` | Semantic Command binding and presentation mode |
 | `BindContent(ObservableValue<string>)` | Content binding |
 | `BindContent(source, convert)` | Converted text or element content binding |
 
@@ -864,7 +868,14 @@ The tables below index the remaining public markup extensions. Some methods have
 | Methods | Purpose |
 |---------|---------|
 | `Add(...)`, `Item(...)`, `SubMenu(...)`, `Separator()` | Build menus |
-| `Menu(...)`, `Command(...)`, `Icon(...)` | Menu item submenu, command, and icon override |
+| `Item(Command)` | Use the Command's normalized default text and access key |
+| `Item(string, Command)`, `Text(string)` | Override MenuItem text and access key together with `_` markers |
+| `Menu(...)`, `Command(...)`, `Icon(...)` | Menu item submenu, command, and icon placement override |
+| `BindText(...)`, `BindCommand(...)`, `BindIcon(...)`, `BindIsEnabled(...)` | Real bindings to MenuItem MewProperties |
+
+`MenuItem.Text` and `Icon` inherit the Command defaults only while they have no value source. Explicit empty text and
+a null icon suppress those defaults. An `IsEnabled` binding is preserved and ANDed with `CanExecute` for the effective
+state.
 
 ### Shapes and Glyphs
 

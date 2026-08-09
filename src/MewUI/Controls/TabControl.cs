@@ -873,7 +873,7 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
             int index = i;
             var tab = _tabs[i];
             var command = new Command($"tab.select.{index}", GetOverflowMenuText(tab, i));
-            commandScope.Bind(command, () => CommitSelection(index), () => tab.IsEnabled);
+            commandScope.Register(command, () => CommitSelection(index), () => tab.IsEnabled);
             menu.AddItem(command);
         }
 

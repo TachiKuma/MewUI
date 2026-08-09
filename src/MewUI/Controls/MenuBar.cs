@@ -11,7 +11,7 @@ public sealed class MenuBar : Control, IPopupOwner
     private const double ItemHorizontalPadding = 10;
     private const double ItemVerticalPadding = 4;
 
-    private readonly List<MenuItem> _items = new();
+    private readonly MenuBarItemCollection _items = new();
     private readonly List<Rect> _itemBounds = new();
     private readonly MenuTextLayoutCache _textLayouts = new();
     private int _hotIndex = -1;
@@ -61,6 +61,31 @@ public sealed class MenuBar : Control, IPopupOwner
     /// </summary>
     public MenuBar()
     {
+        _items.Changed += OnItemsChanged;
+    }
+
+    private void OnItemsChanged(MenuModelChange change)
+    {
+        if ((change & (MenuModelChange.Structure | MenuModelChange.SubMenu)) != 0)
+        {
+            CloseOpenMenu();
+        }
+
+        if ((change & (MenuModelChange.Structure | MenuModelChange.Text |
+            MenuModelChange.Command)) != 0)
+        {
+            _textLayouts.Invalidate();
+            InvalidateMeasure();
+
+            var window = FindVisualRoot() as Window;
+            UnregisterAccessKeys(window);
+            RegisterAccessKeys(window);
+        }
+
+        if ((change & MenuModelChange.All) != 0)
+        {
+            InvalidateVisual();
+        }
     }
 
     protected override void OnVisualRootChanged(Element? oldRoot, Element? newRoot)
@@ -98,9 +123,6 @@ public sealed class MenuBar : Control, IPopupOwner
     {
         ArgumentNullException.ThrowIfNull(item);
         _items.Add(item);
-        _textLayouts.Invalidate();
-        InvalidateMeasure();
-        InvalidateVisual();
     }
 
     /// <summary>
@@ -255,7 +277,7 @@ public sealed class MenuBar : Control, IPopupOwner
         }
 
         var item = _items[index];
-        if (item.SubMenu == null)
+        if (item.SubMenu == null || !item.IsEffectivelyEnabled)
         {
             CloseOpenMenu();
             return;
@@ -367,7 +389,7 @@ public sealed class MenuBar : Control, IPopupOwner
                 }
             }
 
-            var fg = item.IsEnabled ? Foreground : Theme.Palette.DisabledText;
+            var fg = item.IsEffectivelyEnabled ? Foreground : Theme.Palette.DisabledText;
             var textRect = row.Deflate(new Thickness(ItemHorizontalPadding, 0, ItemHorizontalPadding, 0));
             var showAccessKeys = GetValue(Window.ShowAccessKeysProperty);
             var parsed = item.GetParsedText();
@@ -432,5 +454,12 @@ public sealed class MenuBar : Control, IPopupOwner
     {
         base.OnThemeChanged(oldTheme, newTheme);
         _textLayouts.Invalidate();
+    }
+
+    protected override void OnDispose()
+    {
+        _items.Changed -= OnItemsChanged;
+        UnregisterAccessKeys(FindVisualRoot() as Window);
+        base.OnDispose();
     }
 }

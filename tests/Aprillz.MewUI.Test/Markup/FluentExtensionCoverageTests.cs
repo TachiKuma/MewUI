@@ -149,7 +149,7 @@ public sealed class FluentExtensionCoverageTests
     {
         var first = new Command("test.first", "First");
         var second = new Command("test.second", "Second");
-        var icon = new IconTemplate(size => new Border().Size(size));
+        var icon = new IconTemplate(size => new Border().Size(size.Dip));
         var source = new ObservableValue<Command?>(first);
 
         var button = new Button().BindCommand(source);

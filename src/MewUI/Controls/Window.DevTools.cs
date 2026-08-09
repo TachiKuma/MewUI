@@ -1,4 +1,4 @@
-﻿#if DEBUG
+#if DEBUG
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Diagnostics;
 using Aprillz.MewUI.Rendering;
@@ -72,8 +72,8 @@ public partial class Window
 
     private void InitializeDebugDevTools()
     {
-        InputMap.Bind(new KeyGesture(Key.I, ModifierKeys.Primary | ModifierKeys.Shift), ToggleDebugInspector);
-        InputMap.Bind(new KeyGesture(Key.T, ModifierKeys.Primary | ModifierKeys.Shift), ToggleDebugVisualTree);
+        InputMap.Map(new KeyGesture(Key.I, ModifierKeys.Primary | ModifierKeys.Shift), ToggleDebugInspector);
+        InputMap.Map(new KeyGesture(Key.T, ModifierKeys.Primary | ModifierKeys.Shift), ToggleDebugVisualTree);
         InitializeDebugPerformanceProfiler();
     }
 

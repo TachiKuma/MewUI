@@ -70,6 +70,35 @@ public sealed class ApplicationFailureRecoveryTests
     }
 
     [TestMethod]
+    public void DispatcherDrain_ReevaluatesCommandSourcesWithoutNotification()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("GDI backend is Windows-only."); return; }
+
+        EnsureRegistered();
+        bool canExecute = false;
+        var command = new Command("test.dispatcherDrain");
+        var button = new Button { Command = command };
+        var mainWindow = HeadlessWindow.Create();
+        mainWindow.Commands.Register(command, static () => { }, () => canExecute);
+        mainWindow.Content = button;
+        mainWindow.PerformLayout();
+
+        Hosts.Enqueue(new FailurePlatformHost(onRun: (_, _) =>
+        {
+            Assert.IsFalse(button.IsEffectivelyEnabled);
+
+            var queue = new DispatcherQueue();
+            queue.Enqueue(DispatcherPriority.Normal, () => canExecute = true);
+            queue.Process();
+
+            Assert.IsTrue(button.IsEffectivelyEnabled,
+                "dispatcher drain must evaluate tracked sources without RequerySuggested");
+        }));
+
+        Application.Run(mainWindow);
+    }
+
+    [TestMethod]
     public void ThemeBroadcast_UsesStableWindowAndAdornerSnapshots()
     {
         EnsureRegistered();
