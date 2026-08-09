@@ -63,5 +63,5 @@ internal static class SampleText
 
     public static string LongDocument()
         => string.Join('\n', Enumerable.Range(1, 20_000)
-            .Select(index => $"// line {index:D5}: public static int Value{index} => {index};"));
+            .Select(index => $"public static int Value{index} => {index}; // line {index:D5}"));
 }

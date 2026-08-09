@@ -6,6 +6,7 @@ using Aprillz.MewUI.MewvalonEdit.Folding;
 using Aprillz.MewUI.MewvalonEdit.Highlighting;
 using Aprillz.MewUI.MewvalonEdit.Rendering;
 using Aprillz.MewUI.MewvalonEdit.Search;
+using Aprillz.MewUI.MewvalonEdit.Snippets;
 
 namespace Aprillz.MewUI.MewvalonEdit.Sample;
 
@@ -20,7 +21,6 @@ public sealed class MainWindow : Window
     private readonly TextBlock _position = new();
     private readonly TextBlock _selection = new();
     private readonly TextBlock _documentState = new();
-    private readonly TextBlock _searchState = new();
     private readonly TextBlock _encoding = new() { Text = "UTF-8" };
     private readonly SampleFileList _files = new();
     private readonly Border _optionsPanel;
@@ -73,49 +73,6 @@ public sealed class MainWindow : Window
                 _editor);
     }
 
-    // Temporary automation for the Ctrl+End scroll trace: loads the long document, focuses the
-    // editing surface and sends Ctrl+End through the real key routing, so the MEWUI_SCROLL_TRACE
-    // instrumentation logs a run without needing a person at the window. Not for commit.
-    public void EnableScrollTraceRun()
-    {
-        int phase = 0;
-        _smokeTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(700));
-        _smokeTimer.Tick += () =>
-        {
-            switch (phase++)
-            {
-                case 0:
-                    LoadBuiltIn(SampleText.LongDocument(), "C#");
-                    break;
-                case 1:
-                    GetSurface().Focus();
-                    break;
-                case 2:
-                    SendCtrlEnd();
-                    break;
-                case 6:
-                    _smokeTimer!.Stop();
-                    Close();
-                    break;
-            }
-        };
-        Loaded += _smokeTimer.Start;
-    }
-
-    private Control GetSurface()
-        => (Control)typeof(TextEditor)
-            .GetProperty("Surface", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-            .GetValue(_editor)!;
-
-    private void SendCtrlEnd()
-    {
-        // Reflection into the core router sends the key down the same bubbling path the platform
-        // uses, so the traced code path matches a real keypress.
-        var router = typeof(Window).Assembly.GetType("Aprillz.MewUI.Input.WindowInputRouter")!;
-        var keyDown = router.GetMethod("KeyDown", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!;
-        keyDown.Invoke(null, [this, new KeyEventArgs(Key.End, 0, ModifierKeys.Control)]);
-    }
-
     public void EnableSmokeTest()
     {
         int phase = 0;
@@ -153,12 +110,11 @@ public sealed class MainWindow : Window
 
     private FrameworkElement CreateToolbar()
     {
-        var searchBox = new TextBox().Width(150).Placeholder("Find text...");
-        searchBox.TextChanged += value =>
-        {
-            _search.SearchPattern = value;
-            _searchState.Text = $"Matches: {_search.Results.Count}";
-        };
+        // A click leaves the focus on the button, and the editing features ride the editor's own
+        // focus - the completion and snippet keys among them - so every action that drives the
+        // editor takes the focus back first.
+        Button EditorAction(string content, Action action)
+            => new Button().Content(content).OnClick(() => { _editor.Focus(); action(); });
 
         return new WrapPanel
         {
@@ -166,26 +122,29 @@ public sealed class MainWindow : Window
             Spacing = 6,
             Padding = new Thickness(8)
         }.Children(
-            new Button().Content("C#").OnClick(() => LoadBuiltIn(SampleText.CSharp, "C#")),
-            new Button().Content("XML").OnClick(() => LoadBuiltIn(SampleText.Xml, "XML")),
-            new Button().Content("JSON").OnClick(() => LoadBuiltIn(SampleText.Json, "Json")),
-            new Button().Content("Long").OnClick(() => LoadBuiltIn(SampleText.LongDocument(), "C#")),
-            new Button().Content("Control chars").OnClick(() => LoadBuiltIn(ControlCharacterSample.Text(), null)),
-            new Button().Content("Undo").OnClick(() => _editor.Undo()),
-            new Button().Content("Redo").OnClick(() => _editor.Redo()),
-            searchBox,
-            new Button().Content("Find next").OnClick(() => _search.FindNext()),
-            new Button().Content("Replace all").OnClick(() =>
-            {
-                int count = _search.ReplaceAll("match");
-                _searchState.Text = $"Replaced: {count}";
-            }),
-            new Button().Content("Toggle fold").OnClick(ToggleFirstFolding),
-            new Button().Content("Complete").OnClick(CompleteCurrentWord),
-            new Button().Content("Insert template").OnClick(InsertCodeTemplate),
+            EditorAction("C#", () => LoadBuiltIn(SampleText.CSharp, "C#")),
+            EditorAction("XML", () => LoadBuiltIn(SampleText.Xml, "XML")),
+            EditorAction("JSON", () => LoadBuiltIn(SampleText.Json, "Json")),
+            EditorAction("Long", () => LoadBuiltIn(SampleText.LongDocument(), "C#")),
+            EditorAction("Control chars", () => LoadBuiltIn(ControlCharacterSample.Text(), null)),
+            Divider(),
+            EditorAction("Undo", () => _editor.Undo()),
+            EditorAction("Redo", () => _editor.Redo()),
+            Divider(),
+            // The panel, the completion window and the snippet all answer their own keys; the
+            // buttons are here so the features are visible without knowing them.
+            EditorAction("Find (Ctrl+F)", _search.Open),
+            EditorAction("Complete (Ctrl+Space)", CompleteCurrentWord),
+            EditorAction("Insert snippet", InsertForLoopSnippet),
+            Divider(),
             new Button().Content("Options").OnClick(() => _optionsPanel.IsVisible = !_optionsPanel.IsVisible),
             new Button().Content("Theme").OnClick(ToggleTheme));
     }
+
+    /// <summary>A hairline between toolbar groups.</summary>
+    private static FrameworkElement Divider()
+        => new Border { Width = 1, Margin = new Thickness(2, 2, 2, 2) }
+            .WithTheme((theme, border) => border.Background(theme.Palette.ControlBorder));
 
     private Border CreateOptionsPanel()
     {
@@ -275,7 +234,7 @@ public sealed class MainWindow : Window
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 18
-            }.Children(_position, _selection, _documentState, _foldingState, _encoding, _searchState));
+            }.Children(_position, _selection, _documentState, _foldingState, _encoding));
 
     /// <summary>
     /// Loads one of the samples built into this executable. The file list holds no row for it, so
@@ -355,9 +314,6 @@ public sealed class MainWindow : Window
 
     private void CompleteCurrentWord()
     {
-        // The toolbar button steals the focus on click; the completion keys ride the editor's
-        // input, so the editor must have it back before the window opens.
-        _editor.Focus();
         int end = _editor.CaretOffset;
         int start = end;
         while (start > 0 && char.IsLetterOrDigit(_editor.Document.GetCharAt(start - 1))) start--;
@@ -375,12 +331,26 @@ public sealed class MainWindow : Window
         completion.CompletionList.SelectItem(_editor.Document.GetText(start, end - start));
     }
 
-    private void InsertCodeTemplate()
+    private void InsertForLoopSnippet()
     {
-        const string template = "for (int index = 0; index < count; index++)\n{\n    \n}";
-        int start = _editor.SelectionStart;
-        _editor.TextArea.ReplaceSelection(template);
-        _editor.CaretOffset = Math.Min(_editor.Document.TextLength, start + template.IndexOf("    ", StringComparison.Ordinal) + 4);
+        // The counter is one replaceable field mirrored into two bound copies, the limit is a
+        // second field, and the caret lands in the body when interactive mode ends. Tab walks the
+        // fields, Enter and Escape end the mode.
+        var counter = new SnippetReplaceableTextElement { Text = "i" };
+        var snippet = new Snippet();
+        snippet.Elements.Add(new SnippetTextElement { Text = "for (int " });
+        snippet.Elements.Add(counter);
+        snippet.Elements.Add(new SnippetTextElement { Text = " = 0; " });
+        snippet.Elements.Add(new SnippetBoundElement { TargetElement = counter });
+        snippet.Elements.Add(new SnippetTextElement { Text = " < " });
+        snippet.Elements.Add(new SnippetReplaceableTextElement { Text = "count" });
+        snippet.Elements.Add(new SnippetTextElement { Text = "; " });
+        snippet.Elements.Add(new SnippetBoundElement { TargetElement = counter });
+        snippet.Elements.Add(new SnippetTextElement { Text = "++)\n{\n\t" });
+        snippet.Elements.Add(new SnippetCaretElement());
+        snippet.Elements.Add(new SnippetTextElement { Text = "\n}" });
+
+        snippet.Insert(_editor.TextArea);
     }
 
     private static void ToggleTheme()
@@ -400,6 +370,5 @@ public sealed class MainWindow : Window
     {
         string language = highlightingName ?? _editor.SyntaxHighlighting?.Name ?? "Plain text";
         _documentState.Text = $"{language} · {_editor.LineCount:N0} lines · {_editor.Document.TextLength:N0} chars";
-        _searchState.Text = $"Matches: {_search.Results.Count}";
     }
 }
