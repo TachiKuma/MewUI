@@ -12,6 +12,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     private const string ELLIPSIS = "...";
     private readonly IGraphicsFactory _factory;
     private readonly Dictionary<FontKey, IFont> _fonts = [];
+    private readonly Dictionary<IFont, double> _fontLineHeights = [];
     private readonly ManagedTextLayoutCache _cache;
     private bool _disposed;
 
@@ -54,7 +55,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         {
             var font = GetFont(snapshot.DefaultStyle, snapshot.Dpi);
             var segments = MeasureFastPathSegments(context, snapshot.Text, font, out var measured);
-            double height = ResolveLineHeight(snapshot.Paragraph, font.Ascent + font.Descent, measured.Height);
+            double height = ResolveLineHeight(
+                snapshot.Paragraph, GetFontLineHeight(context, font), measured.Height);
             double width = measured.Width;
             double trailingWhitespace = MeasureTrailingWhitespace(context, snapshot, font);
             double x = ResolveLineX(snapshot.Paragraph, width - trailingWhitespace);
@@ -412,7 +414,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             }
 
             var lineClusters = clusters.GetRange(index, contentEnd - index);
-            var line = CreateLine(snapshot, lineClusters, y, explicitBreak ? clusters[scan].Length : 0, lineStart);
+            var line = CreateLine(
+                context, snapshot, lineClusters, y, explicitBreak ? clusters[scan].Length : 0, lineStart);
             lines.Add(line);
             y = line.Metrics.Bounds.Bottom + snapshot.Paragraph.LineSpacing;
 
@@ -431,7 +434,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         if (clusters.Count == 0 || clusters[^1].Kind == ManagedTextClusterKind.NewLine)
         {
             var font = GetFont(snapshot.DefaultStyle, snapshot.Dpi);
-            double height = ResolveLineHeight(snapshot.Paragraph, font.Ascent + font.Descent, font.Ascent + font.Descent);
+            double fontHeight = GetFontLineHeight(context, font);
+            double height = ResolveLineHeight(snapshot.Paragraph, fontHeight, fontHeight);
             lines.Add(new ManagedTextLine(
                 new TextLayoutLineMetrics(snapshot.Text.Length, 0, 0, new Rect(0, y, 0, height), font.Ascent),
                 []));
@@ -441,6 +445,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     }
 
     private ManagedTextLine CreateLine(
+        IGraphicsContext context,
         TextLayoutRequestSnapshot snapshot,
         List<ManagedTextCluster> clusters,
         double y,
@@ -455,7 +460,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             ? 0
             : clusters.Max(static cluster => cluster.Baseline);
         var defaultFont = GetFont(snapshot.DefaultStyle, snapshot.Dpi);
-        double height = ResolveLineHeight(snapshot.Paragraph, defaultFont.Ascent + defaultFont.Descent, naturalHeight);
+        double height = ResolveLineHeight(
+            snapshot.Paragraph, GetFontLineHeight(context, defaultFont), naturalHeight);
         if (baseline <= 0)
         {
             baseline = defaultFont.Ascent;
@@ -484,6 +490,23 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                 trailingWhitespace,
                 trailingWhitespaceLength),
             clusters);
+    }
+
+    /// <summary>
+    /// The height a line of this font takes. A run of glyphs reports the measured height, which
+    /// some backends pad to whole device pixels above the design metrics; a line that renders no
+    /// glyph at all - an empty line, or one holding only tabs - has no run to take that from, so
+    /// it measures the font here instead of falling back to the unpadded metrics and coming out
+    /// shorter than the lines around it.
+    /// </summary>
+    private double GetFontLineHeight(IGraphicsContext context, IFont font)
+    {
+        if (!_fontLineHeights.TryGetValue(font, out double height))
+        {
+            height = Math.Max(font.Ascent + font.Descent, context.MeasureText(" ", font).Height);
+            _fontLineHeights.Add(font, height);
+        }
+        return height;
     }
 
     internal IFont GetFont(TextRunStyle style, uint dpi)
@@ -784,6 +807,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             font.Dispose();
         }
         _fonts.Clear();
+        _fontLineHeights.Clear();
     }
 
     private readonly record struct FontKey(string Family, double Size, FontWeight Weight, bool Italic, uint Dpi);
