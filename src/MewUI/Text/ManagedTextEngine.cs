@@ -380,7 +380,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                     : cluster.Width;
                 bool exceeds = snapshot.Paragraph.Wrapping != TextWrapping.NoWrap &&
                                !double.IsPositiveInfinity(maxWidth) &&
-                               width + clusterWidth > maxWidth &&
+                               width + clusterWidth > maxWidth + WrapTolerance(maxWidth) &&
                                scan > index;
                 if (exceeds)
                 {
@@ -640,6 +640,15 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             _ => 0
         };
     }
+
+    /// <summary>
+    /// Slack the wrap decision allows before it breaks a line. Backends report glyph advances as
+    /// single-precision floats, so the width a caller measured and the width accumulated here can
+    /// differ by a float epsilon; laying text out in the width it just measured would otherwise
+    /// wrap against its own measurement. The slack stays far below one device pixel at any scale.
+    /// </summary>
+    private static double WrapTolerance(double maxWidth)
+        => Math.Max(1e-6, Math.Abs(maxWidth) * 1e-6);
 
     private static double ResolveLineHeight(TextParagraphStyle paragraph, double fontHeight, double measuredHeight)
         => paragraph.LineHeight is > 0
