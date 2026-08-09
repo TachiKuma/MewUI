@@ -1,0 +1,219 @@
+# Command System
+
+MewUI's Command System unifies keyboard input, buttons, menus, and direct code invocation through one semantic execution path.
+It separates command identity (`Command`), execution scope (`CommandScope`), input gestures (`InputMap`), and presentation controls.
+
+```text
+InputMap / Button / Menu
+          ↓
+       Command
+          ↓
+    CommandRouter
+          ↓
+ CommandScope CanExecute / Execute
+```
+
+## Basic structure
+
+A `Command` contains only an action identity and default presentation text. Register execution delegates with a
+`CommandScope` and key gestures with an `InputMap`. Two different `Command` instances remain different commands even
+when they use the same `Id`.
+
+```csharp
+var save = new Command("file.save", "Save");
+
+window.Commands.Bind(save, () => document.Save(), () => document.IsDirty);
+window.InputMap.Bind(save, new KeyGesture(Key.S, ModifierKeys.Primary));
+```
+
+Dispose the `CommandRegistration` returned by `CommandScope.Bind`, or call `Unbind`, to remove a binding. A scope can
+contain only one binding for each command.
+
+## C# Markup usage
+
+Connect a Button to a semantic action with `Command(...)` or `BindCommand(...)`.
+
+```csharp
+new Button()
+    .Content("Save")
+    .Command(save)
+```
+
+Menus do not own callbacks or shortcuts either. They can use `Command.Text` or override the presentation text.
+
+```csharp
+var fileMenu = new Menu()
+    .Item(save)
+    .Item("Save As...", saveAs)
+    .Separator()
+    .Item("Unavailable", isEnabled: false); // Presentation-only item
+```
+
+The menu shortcut column looks up the effective `InputMap` gesture for the current command target. Do not duplicate
+the shortcut declaration on the menu item.
+
+Define a command icon with an `IconTemplate` that creates a new visual at the DIP size requested by its presenter.
+ContextMenu and MenuBar dropdowns use 16 DIPs. The default size for a future Toolbar presenter is 24 DIPs.
+
+```csharp
+var copyGeometry = PathGeometry.Parse(copyPathData);
+copyGeometry.Freeze();
+
+var copyIcon = new IconTemplate(
+    size => new PathShape()
+        .Data(copyGeometry)
+        .Size(size)
+        .Stretch(Stretch.Uniform));
+
+var copy = new Command("edit.copy", "Copy", copyIcon);
+```
+
+Every `IconTemplate.Build` call must return a new parentless `FrameworkElement`. This allows multiple presenters to
+show the same Command without conflicting over a visual parent. Non-visual resources such as `ImageSource`,
+`SvgImageSource`, and frozen `PathGeometry` can be created outside the factory and shared. Return a new `Image` for
+SVG, a new `PathShape` for geometry, or a new `TextBlock` for an emoji. Build the visual once when the presenter is
+created, not on every render frame or `CanExecute` evaluation.
+
+The Core presenters that currently materialize Command icons are ContextMenu and MenuBar dropdowns. A regular Button
+continues to use explicitly constructed `Content`, and no Toolbar presenter is available yet. The 24-DIP
+`ThemeMetrics.ToolBarIconSize` establishes the contract for that future presenter.
+
+A MenuItem can override the Command icon.
+
+```csharp
+new MenuItem("_Copy", copy)
+    .Icon(compactCopyIcon);
+```
+
+## Routing and scopes
+
+Element and Window each provide `Commands` and `InputMap`. Execution starts at the current target and searches the
+element command context, Window, and Application in order. `CommandScope.Parent` can also define a semantic scope
+chain that is independent of the visual tree.
+
+The nearest scope binding owns the command. A binding whose `CanExecute` is `false` does not fall back to another
+binding for the same command in a more distant scope. The nearest effective `InputMap` determines the gesture meaning
+in the same way.
+
+A dynamic ContextMenu that uses an explicit scope must also specify its target.
+
+```csharp
+var menu = new ContextMenu();
+var scope = new CommandScope();
+var select = new Command("document.select", "Select");
+
+scope.Bind(select, SelectDocument, CanSelectDocument);
+menu.Item(select);
+menu.SetCommandTarget(CommandTarget.From(scope));
+menu.ShowAt(owner, position);
+```
+
+## Standard editing commands
+
+`StandardCommands` provides `Cut`, `Copy`, `Paste`, `Delete`, `Undo`, `Redo`, and `SelectAll`. TextBox controls bind
+these commands in their own scope. Default gestures are registered in the Application `InputMap`, so a local or
+Window `InputMap` can remap or shadow them.
+
+```csharp
+editor.InputMap.Bind(StandardCommands.Copy, new KeyGesture(Key.Insert, ModifierKeys.Control));
+```
+
+## TextBox, ContextMenu, InputMap, and the Edit menu
+
+The following diagram is not a type inheritance hierarchy or the actual visual tree. It is a logical view of how
+several UI entry points converge on the same editing command execution.
+
+```text
+Keyboard Primary+X/C/V
+  └─ Application InputMap ───────────────┐
+                                         │
+TextBox right-click ContextMenu          ├─ StandardCommands.Cut/Copy/Paste
+  └─ Cut / Copy / Paste menu items ──────┤             │
+                                         │             ▼
+MenuBar Edit menu                        │    Execute the TextBox binding
+  └─ Cut / Copy / Paste menu items ──────┘    at the current command target
+                                                       │
+                                                       ▼
+                                               Selection/clipboard changes
+```
+
+When a `TextBox` is created, it binds the execution and `CanExecute` behavior of `Cut`, `Copy`, and `Paste` to its
+`Commands`. The default Application `InputMap` maps `Primary+X`, `Primary+C`, and `Primary+V` to those same standard
+commands. ContextMenu and Edit menu items reference only the `Command`; they do not carry separate execution
+delegates.
+
+The following example attaches a custom ContextMenu to make the relationship explicit. Without an assigned
+ContextMenu, TextBox creates its default editing menu from the same standard commands when needed.
+
+```csharp
+var editor = new TextBox()
+    .Text("Select text, then use Cut or Copy.")
+    .ContextMenu(
+        new ContextMenu()
+            .Item(StandardCommands.Cut)
+            .Item(StandardCommands.Copy)
+            .Item(StandardCommands.Paste));
+
+var editMenu = new Menu()
+    .Item(StandardCommands.Cut)
+    .Item(StandardCommands.Copy)
+    .Item(StandardCommands.Paste);
+
+var menuBar = new MenuBar()
+    .Items(new MenuItem("_Edit").Menu(editMenu));
+
+// Place menuBar and editor in the layout of the same Window.
+```
+
+The menu objects neither inherit from TextBox nor duplicate its command bindings. The command target at the time a
+menu opens or a key is pressed provides the actual connection.
+
+- Keyboard: resolution starts at the focused TextBox and finds an effective `InputMap`. The Application mapping
+  converts `Primary+X/C/V` to standard commands, and the router executes the focused TextBox binding.
+- TextBox ContextMenu: the menu captures its right-click owner as the target. The commands therefore continue to
+  operate on the original TextBox selection even after the menu takes focus.
+- MenuBar Edit menu: the menu preserves the focus target that existed just before it opened. If a TextBox had focus,
+  the Edit menu's `Cut`, `Copy`, and `Paste` commands route to that TextBox.
+
+All three paths also share the same `CanExecute` result. With no selection, the TextBox `Cut` and `Copy` bindings are
+not executable, so both ContextMenu and Edit menu disable those items. A read-only TextBox disables `Cut` and
+`Paste`. The menu shortcut column looks up the effective target `InputMap`, so remapping a gesture does not require
+editing separate shortcut strings in ContextMenu and the Edit menu.
+
+## CanExecute and state updates
+
+`CanExecute` must be fast and free of side effects. MewUI tracks only active command sources, such as connected
+Buttons and open menus, and evaluates their state at the end of a dispatcher turn. Focus, property, and input-map
+changes also trigger evaluation. Execution always checks `CanExecute` again immediately before invoking a binding.
+
+When an unobservable value such as a regular field changes outside the UI thread, marshal the change to the UI
+dispatcher. The default model does not perform arbitrary full visual-tree scans or expose per-command change events.
+
+## Lifetime management
+
+A Button is tracked as a command source only while connected to a visual root. A ContextMenu is tracked only while
+open. Closing a Window clears that Window's source tracker. When registering a temporary handler in a long-lived
+scope, dispose its `CommandRegistration` so captured objects are not retained unnecessarily.
+
+## Removed legacy APIs
+
+The following paths were removed because they could duplicate Command System execution or maintain conflicting
+enabled states.
+
+- `Window.KeyBindings`, `Window.ProcessKeyBindings`, and the core `KeyBinding`
+- `Button.CanClick` and the C# Markup `OnCanClick`
+- `MenuItem.Click`, `MenuItem.CanClick`, and `MenuItem.Shortcut`
+- Callback-based `Menu.Item`/`ContextMenu.Item` overloads and shortcut arguments
+
+The ordinary UI event `Button.Click` and its `OnClick` extension remain available. Use Command for reusable actions,
+enabled conditions, shortcuts, and actions shared with menus.
+
+## Icon lifetime and size
+
+`Command.Icon` and `MenuItem.Icon` use `IconTemplate?`. A null `MenuItem.Icon` falls back to the Command icon. A
+ContextMenu builds each command item's template at 16 DIPs when it opens and detaches the generated visual when it
+closes. Reopening the menu creates a new visual.
+
+The size passed to the factory is measured in DIPs, not pixels. The presenter handles DPI conversion and disabled
+opacity. Capture reusable sources instead of parsing them inside the factory. The presenter constrains the returned
+element to a square slot, so `Stretch.Uniform` is recommended for vectors and bitmaps.

@@ -36,7 +36,8 @@ new Button()
 | 패턴 | 설명 | 예시 |
 |------|------|------|
 | `OnEventName(handler)` | 이벤트 핸들러 등록 | `.OnClick(...)`, `.OnTextChanged(...)` |
-| `OnCanEventName(func)` | 조건부 실행 (Commanding) | `.OnCanClick(() => isValid)` |
+
+조건부 실행과 재사용 가능한 동작은 이벤트 확장이 아니라 `Command(...)`와 `BindCommand(...)`를 사용합니다.
 
 같은 `On*` 메서드를 핸들러 delegate의 매개변수 타입만 바꿔 오버로드하지 않습니다. 타입이 명시되지 않은 람다는 두 오버로드에 모두 일치할 수 있으며, 기반 클래스용 확장과 파생 클래스용 확장 사이에서도 같은 문제가 발생합니다. `OnCheckStateChanged`, `OnLayoutSizeChanged`처럼 의미가 구분되는 이름을 사용합니다.
 
@@ -309,15 +310,15 @@ new Label()
 ```csharp
 new Button()
     .Content("Click Me")
-    .OnCanClick(() => isFormValid)
-    .OnClick(() => Submit())
+    .Command(submitCommand)
 ```
 
 | 메서드 | 설명 |
 |--------|------|
 | `Content(string)` | 버튼 텍스트 |
 | `OnClick(Action)` | 클릭 핸들러 |
-| `OnCanClick(Func<bool>)` | 클릭 가능 조건 (Commanding) |
+| `Command(Command)` | 의미 명령 설정 |
+| `BindCommand(ObservableValue<Command?>)` | 명령 바인딩 |
 | `BindContent(ObservableValue<string>)` | 콘텐츠 바인딩 |
 | `BindContent(source, convert)` | 변환된 텍스트 또는 요소 콘텐츠 바인딩 |
 
@@ -863,7 +864,7 @@ new DockPanel()
 | 메서드 | 용도 |
 |--------|------|
 | `Add(...)`, `Item(...)`, `SubMenu(...)`, `Separator()` | 메뉴 구성 |
-| `Menu(...)`, `Shortcut(...)` | MenuItem 하위 메뉴 및 단축키 |
+| `Menu(...)`, `Command(...)`, `Icon(...)` | MenuItem 하위 메뉴, 명령 및 아이콘 override 설정 |
 
 ### Shape 및 Glyph
 
@@ -880,42 +881,6 @@ new DockPanel()
 | `Interval(...)`, `IntervalMs(...)`, `OnTick(...)`, `Start()`, `Stop()` | DispatcherTimer 설정 |
 | `With(...)` | StyleSheet에 스타일 추가 |
 | `HeaderInset(...)` | 헤더 레이아웃 인셋 |
-
----
-
-## Commanding (CanExecute 패턴)
-
-Button의 `OnCanClick`을 사용하여 WPF ICommand와 유사한 패턴을 구현할 수 있습니다.
-
-```csharp
-var text = new ObservableValue<string>("");
-
-new TextBox()
-    .BindText(text)
-    .OnTextChanged(_ => window.RequerySuggested()),
-
-new Button()
-    .Content("Submit")
-    .OnCanClick(() => !string.IsNullOrWhiteSpace(text.Value))
-    .OnClick(() => Submit(text.Value))
-```
-
-### 자동 재평가 시점
-
-`CanClick`은 다음 시점에 자동으로 재평가됩니다:
-- **Focus 변경** - 포커스가 이동할 때
-- **MouseUp** - 마우스 버튼을 뗄 때
-- **KeyUp** - 키를 뗄 때
-
-### 수동 재평가
-
-상태가 변경된 후 수동으로 재평가가 필요한 경우:
-
-```csharp
-// 이벤트 핸들러 내에서 상태 변경 후
-counter.Value++;
-window.RequerySuggested();  // CanClick 재평가 트리거
-```
 
 ---
 

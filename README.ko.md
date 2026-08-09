@@ -329,6 +329,7 @@ MewUI는 크로스플랫폼 관리형 파일 및 폴더 대화상자를 제공�
 
 - [설치 및 패키지 구성](docs/Installation.ko.md)
 - [C# Markup](docs/CSharpMarkup.ko.md)
+- [Command System](docs/CommandSystem.ko.md)
 - [Binding](docs/Binding.ko.md)
 - [Items and Templates](docs/ItemsAndTemplates.ko.md)
 - [Theme](docs/Theme.ko.md)

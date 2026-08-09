@@ -36,7 +36,8 @@ All extension methods return `this` to enable method chaining.
 | Pattern | Description | Example |
 |---------|-------------|---------|
 | `OnEventName(handler)` | Register event handler | `.OnClick(...)`, `.OnTextChanged(...)` |
-| `OnCanEventName(func)` | Conditional execution (Commanding) | `.OnCanClick(() => isValid)` |
+
+Use `Command(...)` and `BindCommand(...)`, rather than event extensions, for conditional execution and reusable actions.
 
 Do not overload the same `On*` method solely by changing the handler delegate's parameter type. Untyped lambdas can match both overloads, including when one extension targets a base class and another targets a derived class. Use a distinct semantic name instead, such as `OnCheckStateChanged` or `OnLayoutSizeChanged`.
 
@@ -309,15 +310,15 @@ new Label()
 ```csharp
 new Button()
     .Content("Click Me")
-    .OnCanClick(() => isFormValid)
-    .OnClick(() => Submit())
+    .Command(submitCommand)
 ```
 
 | Method | Description |
 |--------|-------------|
 | `Content(string)` | Button text |
 | `OnClick(Action)` | Click handler |
-| `OnCanClick(Func<bool>)` | Click condition (Commanding) |
+| `Command(Command)` | Semantic command |
+| `BindCommand(ObservableValue<Command?>)` | Command binding |
 | `BindContent(ObservableValue<string>)` | Content binding |
 | `BindContent(source, convert)` | Converted text or element content binding |
 
@@ -863,7 +864,7 @@ The tables below index the remaining public markup extensions. Some methods have
 | Methods | Purpose |
 |---------|---------|
 | `Add(...)`, `Item(...)`, `SubMenu(...)`, `Separator()` | Build menus |
-| `Menu(...)`, `Shortcut(...)` | Menu item submenu and shortcut |
+| `Menu(...)`, `Command(...)`, `Icon(...)` | Menu item submenu, command, and icon override |
 
 ### Shapes and Glyphs
 
@@ -880,42 +881,6 @@ The tables below index the remaining public markup extensions. Some methods have
 | `Interval(...)`, `IntervalMs(...)`, `OnTick(...)`, `Start()`, `Stop()` | DispatcherTimer configuration |
 | `With(...)` | Add styles to a StyleSheet |
 | `HeaderInset(...)` | Header layout inset |
-
----
-
-## Commanding (CanExecute Pattern)
-
-You can implement a pattern similar to WPF ICommand using Button's `OnCanClick`.
-
-```csharp
-var text = new ObservableValue<string>("");
-
-new TextBox()
-    .BindText(text)
-    .OnTextChanged(_ => window.RequerySuggested()),
-
-new Button()
-    .Content("Submit")
-    .OnCanClick(() => !string.IsNullOrWhiteSpace(text.Value))
-    .OnClick(() => Submit(text.Value))
-```
-
-### Automatic Re-evaluation Timing
-
-`CanClick` is automatically re-evaluated at these times:
-- **Focus change** - When focus moves
-- **MouseUp** - When mouse button is released
-- **KeyUp** - When key is released
-
-### Manual Re-evaluation
-
-When manual re-evaluation is needed after state changes:
-
-```csharp
-// After state change in event handler
-counter.Value++;
-window.RequerySuggested();  // Trigger CanClick re-evaluation
-```
 
 ---
 

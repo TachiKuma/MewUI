@@ -350,6 +350,7 @@ Set `PreferNative` to `false` to use the managed dialog directly.
 
 - [Installation & Packages](docs/Installation.md)
 - [C# Markup](docs/CSharpMarkup.md)
+- [Command System](docs/CommandSystem.md)
 - [Binding](docs/Binding.md)
 - [Items and Templates](docs/ItemsAndTemplates.md)
 - [Theme](docs/Theme.md)
