@@ -18,6 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Themes\2026-palette.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\extensions\MewUI.MewvalonEdit\MewUI.MewvalonEdit.csproj" />
     <ProjectReference Include="..\..\src\MewUI.Platform.Win32\MewUI.Platform.Win32.csproj" />
     <ProjectReference Include="..\..\src\MewUI.Platform.X11\MewUI.Platform.X11.csproj" />
