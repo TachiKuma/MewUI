@@ -11,7 +11,7 @@ internal static class DockMenuCommands
         ArgumentNullException.ThrowIfNull(execute);
 
         var command = new Command($"mewdock.menu.{id}", text);
-        commands.Bind(command, execute, () => canExecute);
+        commands.Register(command, execute, () => canExecute);
         menu.AddItem(command);
     }
 }
