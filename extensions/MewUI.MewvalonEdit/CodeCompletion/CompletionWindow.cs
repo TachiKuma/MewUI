@@ -18,7 +18,7 @@ public class CompletionWindow : CompletionWindowBase
         Root.MinHeight = 15;
         Root.MinWidth = 30;
         // Filtering changes how many rows there are, and the window has to grow or shrink with them.
-        CompletionList.DesiredHeightChanged += () => UpdatePosition();
+        CompletionList.VisibleItemsChanged += () => UpdatePosition();
     }
 
     /// <summary>

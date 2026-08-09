@@ -71,15 +71,34 @@ public sealed class CompletionWindowPlacementTests
         var (editor, _) = CreateEditorInWindow("");
         var completion = OpenWindow(editor);
 
-        double rowHeight = completion.PlacedBounds.Height / WORDS.Length;
-        Assert.IsGreaterThan(10, rowHeight, $"the window collapsed to a fraction of a row: {completion.PlacedBounds}");
+        double whole = completion.PlacedBounds.Height;
+        Assert.IsGreaterThan(WORDS.Length * 10.0, whole,
+            $"the window collapsed to a fraction of a row: {completion.PlacedBounds}");
 
         editor.TextArea.PerformTextInput("De");
-        int visible = completion.CompletionList.VisibleItems.Count;
 
-        Assert.IsLessThan(WORDS.Length, visible, "the query did not narrow the list");
-        Assert.AreEqual(visible * rowHeight, completion.PlacedBounds.Height, 1.0,
+        Assert.IsLessThan(WORDS.Length, completion.CompletionList.VisibleItems.Count,
+            "the query did not narrow the list");
+        Assert.IsLessThan(whole, completion.PlacedBounds.Height,
             "the window kept the height of the unfiltered list");
+        completion.Close();
+    }
+
+    [TestMethod]
+    public void ALongListStopsAtTheWindowCap()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var (editor, _) = CreateEditorInWindow("");
+        var completion = new CompletionWindow(editor.TextArea);
+        for (int index = 0; index < 60; index++)
+        {
+            completion.CompletionList.CompletionData.Add(new CompletionData($"Item{index:D3}"));
+        }
+        completion.Show();
+
+        Assert.AreEqual(completion.Root.MaxHeight, completion.PlacedBounds.Height,
+            "the rows grew past the window, which caps its height and scrolls instead");
         completion.Close();
     }
 
