@@ -207,7 +207,10 @@ public sealed class TextDocument : ITextSource
     /// Counts a change against the original-file marker. Every change reaches it, including the
     /// ones an undo applied, which the stack tells apart itself.
     /// </summary>
-    private void CountAgainstOriginalFile() => _undoStack?.NotifyDocumentChanged();
+    // Through the property, not the field: the stack is created on first use, and counting only
+    // once someone happened to touch it would let the edits before that go unrecorded, leaving
+    // IsModified false on a document that had already been edited.
+    private void CountAgainstOriginalFile() => UndoStack.NotifyDocumentChanged();
     public void Replace(ISegment segment, string? text)
     {
         ArgumentNullException.ThrowIfNull(segment);

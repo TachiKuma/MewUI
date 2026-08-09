@@ -334,6 +334,10 @@ public class TextEditor : Control, ITextEditorComponent
             // UndoStack.ClearAll does; Document.Text alone would leave the replace undoable.
             _surface.Text = value ?? string.Empty;
             CaretOffset = 0;
+            // The assignment left no undo to return through, so the text now in the document is the
+            // only state there is to be original. The original marks this modified because there an
+            // assignment is an ordinary undoable edit.
+            Document.UndoStack.MarkAsOriginalFile();
         }
     }
 
@@ -606,6 +610,9 @@ public class TextEditor : Control, ITextEditorComponent
         Text = reader.ReadToEnd();
         // After reading, so the reader has had its chance to detect one from the bytes.
         Encoding = reader.CurrentEncoding;
+        // Assigning the text counts as an edit against the original-file marker, so what was just
+        // read off disk would otherwise present as modified.
+        IsModified = false;
     }
 
     public void Save(string fileName)
