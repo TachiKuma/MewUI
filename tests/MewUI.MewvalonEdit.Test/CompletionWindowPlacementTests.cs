@@ -85,6 +85,29 @@ public sealed class CompletionWindowPlacementTests
     }
 
     [TestMethod]
+    public void TheDescriptionOpensBesideTheListAndFollowsTheSelection()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var (editor, _) = CreateEditorInWindow("");
+        var completion = new CompletionWindow(editor.TextArea);
+        completion.CompletionList.CompletionData.Add(new CompletionData("Described", "what it does"));
+        completion.CompletionList.CompletionData.Add(new CompletionData("Bare"));
+        completion.Show();
+
+        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[0];
+        Assert.IsTrue(completion.DescriptionPopup.IsOpen, "the described item showed no description");
+        Assert.IsGreaterThan(0, completion.DescriptionBounds.Width, "the description panel measured to nothing");
+        Assert.AreEqual(completion.PlacedBounds.Right, completion.DescriptionBounds.X,
+            "the description did not open against the right edge of the list");
+
+        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[1];
+        Assert.IsFalse(completion.DescriptionPopup.IsOpen, "an item without a description kept the panel up");
+
+        completion.Close();
+    }
+
+    [TestMethod]
     public void ALongListStopsAtTheWindowCap()
     {
         if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }

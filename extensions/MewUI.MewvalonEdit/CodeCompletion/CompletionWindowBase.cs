@@ -237,6 +237,15 @@ public class CompletionWindowBase
         var placed = _popup.IsOpen ? _popup.MoveTo(anchor) : _popup.ShowAt(Editor, anchor);
         PlacedBounds = placed;
         IsUp = placed.Height > 0 && placed.Y < anchor.Y;
+        OnPlaced();
+    }
+
+    /// <summary>
+    /// Runs after every placement, so a derived window can move whatever it hangs off its own
+    /// bounds. <see cref="PlacedBounds"/> is current by then.
+    /// </summary>
+    protected virtual void OnPlaced()
+    {
     }
 
     /// <summary>
