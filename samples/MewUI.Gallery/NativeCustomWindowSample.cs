@@ -129,7 +129,7 @@ internal class NativeCustomWindowSample : NativeCustomWindow
     private Command WindowCommand(string id, Action execute, Func<bool> canExecute)
     {
         var command = new Command($"gallery.nativeCustomWindow.{id}");
-        Commands.Bind(command, execute, canExecute);
+        Commands.Register(command, execute, canExecute);
         return command;
     }
 

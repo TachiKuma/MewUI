@@ -121,16 +121,16 @@ Application.Run(window);
 Command MenuCommand(string id, string text, Action execute, KeyGesture? gesture = null)
 {
     var command = new Command($"sample.{id}", text);
-    window.Commands.Bind(command, execute);
+    window.Commands.Register(command, execute);
     if (gesture is KeyGesture keyGesture)
-        window.InputMap.Bind(command, keyGesture);
+        window.InputMap.Map(command, keyGesture);
     return command;
 }
 
 Command DemoCommand(string id, Action execute, Func<bool> canExecute)
 {
     var command = new Command($"sample.commanding.{id}");
-    window.Commands.Bind(command, execute, canExecute);
+    window.Commands.Register(command, execute, canExecute);
     return command;
 }
 

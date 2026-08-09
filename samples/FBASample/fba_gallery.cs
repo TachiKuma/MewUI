@@ -2610,7 +2610,7 @@ FrameworkElement PromptDialogCard()
             Window dialog = null!;
             var acceptCommand = new Command("gallery.dialog.accept", "OK");
             await new Window().Ref(out dialog)
-                .Apply(w => w.Commands.Bind(acceptCommand,
+                .Apply(w => w.Commands.Register(acceptCommand,
                     () => { result = input.Text; dialog.Close(); },
                     () => !string.IsNullOrWhiteSpace(input.Text)))
                 .Title("Input").FitContentHeight(300, 300).Padding(12)
@@ -2758,9 +2758,9 @@ MenuBar CreateMenu(Action<string> onShortcut)
     Command MenuCommand(string id, string text, string message, KeyGesture? gesture = null)
     {
         var command = new Command($"gallery.menu.{id}", text);
-        window.Commands.Bind(command, () => onShortcut(message));
+        window.Commands.Register(command, () => onShortcut(message));
         if (gesture is KeyGesture keyGesture)
-            window.InputMap.Bind(command, keyGesture);
+            window.InputMap.Map(command, keyGesture);
         return command;
     }
 
@@ -3470,9 +3470,9 @@ static class GalleryView
         Command MenuCommand(string id, string text, string message, KeyGesture? gesture = null)
         {
             var command = new Command($"gallery.windowMenu.{id}", text);
-            commandHost.Commands.Bind(command, () => onShortcut(message));
+            commandHost.Commands.Register(command, () => onShortcut(message));
             if (gesture is KeyGesture keyGesture)
-                commandHost.InputMap.Bind(command, keyGesture);
+                commandHost.InputMap.Map(command, keyGesture);
             return command;
         }
 
@@ -3704,7 +3704,7 @@ internal class NativeCustomWindowSample : NativeCustomWindow
     Command WindowCommand(string id, Action execute, Func<bool> canExecute)
     {
         var command = new Command($"gallery.nativeCustomWindow.{id}");
-        Commands.Bind(command, execute, canExecute);
+        Commands.Register(command, execute, canExecute);
         return command;
     }
 

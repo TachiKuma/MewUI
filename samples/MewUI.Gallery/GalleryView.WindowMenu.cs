@@ -324,6 +324,7 @@ partial class GalleryView
 
     private FrameworkElement MenusCard()
     {
+        var copyPresentation = new ObservableValue<string>("_Copy");
         var shortcutLog = new TextBlock()
             .FontSize(11)
             .TextWrapping(TextWrapping.Wrap)
@@ -352,11 +353,15 @@ partial class GalleryView
                 .Spacing(8)
                 .Children(
                     scopeState,
-                    CreateMenu(window.Commands, inputScope.InputMap, OnShortcut),
+                    CreateMenu(window.Commands, inputScope.InputMap, OnShortcut, copyPresentation),
                     new TextBlock()
                         .FontSize(11)
                         .TextWrapping(TextWrapping.Wrap)
                         .Text("The menu handlers live in Window.Commands. Shortcut gestures live only in this bordered InputMap scope."),
+                    new Button()
+                        .Content("Toggle Copy presentation")
+                        .OnClick(() => copyPresentation.Value =
+                            copyPresentation.Value == "_Copy" ? "복사(_C)" : "_Copy"),
                     new TextBox()
                         .Placeholder("Focus here: Ctrl/Cmd + N, S, numpad + or -"),
                     shortcutLog));
@@ -378,9 +383,13 @@ partial class GalleryView
     }
 
     public static MenuBar CreateMenu(Element commandHost, Action<string> onShortcut)
-        => CreateMenu(commandHost.Commands, commandHost.InputMap, onShortcut);
+        => CreateMenu(commandHost.Commands, commandHost.InputMap, onShortcut, copyPresentation: null);
 
-    private static MenuBar CreateMenu(CommandScope commands, InputMap inputMap, Action<string> onShortcut)
+    private static MenuBar CreateMenu(
+        CommandScope commands,
+        InputMap inputMap,
+        Action<string> onShortcut,
+        ObservableValue<string>? copyPresentation)
     {
         var p = ModifierKeys.Primary;
         IconTemplate MenuIcon(string name)
@@ -393,7 +402,7 @@ partial class GalleryView
             {
                 var icon = new PathShape()
                     .Data(geometry)
-                    .Size(size)
+                    .Size(size.Dip)
                     .Stretch(Stretch.Uniform);
                 icon.Bind(Shape.FillProperty, icon, TextElement.ForegroundProperty,
                     (Color color) => (Brush)new SolidColorBrush(color));
@@ -404,9 +413,9 @@ partial class GalleryView
         Command MenuCommand(string id, string text, string message, KeyGesture? gesture = null, IconTemplate? icon = null)
         {
             var command = new Command($"gallery.menu.{id}", text, icon);
-            commands.Bind(command, () => onShortcut(message));
+            commands.Register(command, () => onShortcut(message));
             if (gesture is KeyGesture keyGesture)
-                inputMap.Bind(command, keyGesture);
+                inputMap.Map(command, keyGesture);
             return command;
         }
 
@@ -427,12 +436,23 @@ partial class GalleryView
             .Separator()
             .Item(MenuCommand("file.exit", "E_xit", "File > Exit application"));
 
+        var copyCommand = MenuCommand(
+            "edit.copy",
+            "_Copy",
+            "Edit > Copy to clipboard",
+            new KeyGesture(Key.C, p),
+            MenuIcon("copy_regular"));
+        if (copyPresentation != null)
+        {
+            copyCommand.BindText(copyPresentation);
+        }
+
         var editMenu = new Menu()
             .Item(MenuCommand("edit.undo", "_Undo", "Edit > Undo last action", new KeyGesture(Key.Z, p)))
             .Item(MenuCommand("edit.redo", "_Redo", "Edit > Redo last action", new KeyGesture(Key.Y, p)))
             .Separator()
             .Item(MenuCommand("edit.cut", "Cu_t", "Edit > Cut to clipboard", new KeyGesture(Key.X, p), MenuIcon("cut_regular")))
-            .Item(MenuCommand("edit.copy", "_Copy", "Edit > Copy to clipboard", new KeyGesture(Key.C, p), MenuIcon("copy_regular")))
+            .Item(copyCommand)
             .Item(MenuCommand("edit.paste", "_Paste", "Edit > Paste from clipboard", new KeyGesture(Key.V, p), MenuIcon("clipboard_paste_regular")))
             .Separator()
             .SubMenu("_Find", new Menu()
@@ -592,7 +612,7 @@ partial class GalleryView
 
         await new Window()
             .Ref(out dialog)
-            .Apply(w => w.Commands.Bind(acceptCommand, () =>
+            .Apply(w => w.Commands.Register(acceptCommand, () =>
             {
                 result = input.Text;
                 dialog.Close();

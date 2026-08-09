@@ -40,7 +40,7 @@ public sealed class MainWindow : Window
         };
         _search = SearchPanel.Install(_editor.TextArea);
         // Ctrl+Space opens the completion window at the current word, VS-style.
-        _editor.InputMap.Bind(
+        _editor.InputMap.Map(
             new KeyGesture(Key.Space, ModifierKeys.Control), CompleteCurrentWord);
         // Installing the manager attaches the folding margin beside the line numbers; its boxes
         // toggle a section on click.
