@@ -30,7 +30,6 @@ public sealed class PopupClosedEventArgs : EventArgs
 /// </summary>
 public class Popup : FrameworkElement, IVisualTreeHost, ILogicalTreeHost
 {
-    private bool _isOpen;
     private PopupCloseKind _closeKind = PopupCloseKind.UserInitiated;
 
     public static readonly MewProperty<UIElement?> ContentProperty =
@@ -41,6 +40,11 @@ public class Popup : FrameworkElement, IVisualTreeHost, ILogicalTreeHost
 
     public static readonly MewProperty<bool> StaysOpenProperty =
         MewProperty<bool>.Register<Popup>(nameof(StaysOpen), false);
+
+    private static readonly MewPropertyKey<bool> IsOpenPropertyKey =
+        MewProperty<bool>.RegisterReadOnly<Popup>(nameof(IsOpen), false);
+
+    public static readonly MewProperty<bool> IsOpenProperty = IsOpenPropertyKey.Property;
 
     /// <summary>The element shown in the popup surface.</summary>
     public UIElement? Content
@@ -59,8 +63,11 @@ public class Popup : FrameworkElement, IVisualTreeHost, ILogicalTreeHost
         set => SetValue(StaysOpenProperty, value);
     }
 
-    /// <summary>Whether the popup is currently on screen.</summary>
-    public bool IsOpen => _isOpen;
+    /// <summary>
+    /// Whether the popup is currently on screen. A read-only property so a trigger can bind its own
+    /// state to it or a style can key off it, while opening stays a call.
+    /// </summary>
+    public bool IsOpen => GetValue(IsOpenProperty);
 
     public event EventHandler? Opened;
 
@@ -81,9 +88,9 @@ public class Popup : FrameworkElement, IVisualTreeHost, ILogicalTreeHost
         }
 
         var bounds = window.ShowPopup(owner, this, w => Place(w, anchorInWindow, side), staysOpen: StaysOpen);
-        if (!_isOpen)
+        if (!IsOpen)
         {
-            _isOpen = true;
+            SetValue(IsOpenPropertyKey, true);
             _closeKind = PopupCloseKind.UserInitiated;
             Opened?.Invoke(this, EventArgs.Empty);
         }
@@ -96,7 +103,7 @@ public class Popup : FrameworkElement, IVisualTreeHost, ILogicalTreeHost
     /// </summary>
     public Rect MoveTo(Rect anchorInWindow, PopupAnchorSide side = PopupAnchorSide.Below)
     {
-        if (!_isOpen || FindVisualRoot() is not Window window)
+        if (!IsOpen || FindVisualRoot() is not Window window)
         {
             return default;
         }
@@ -109,7 +116,7 @@ public class Popup : FrameworkElement, IVisualTreeHost, ILogicalTreeHost
     /// <summary>Closes the popup. Closing a closed popup is harmless.</summary>
     public void Close()
     {
-        if (!_isOpen || FindVisualRoot() is not Window window)
+        if (!IsOpen || FindVisualRoot() is not Window window)
         {
             return;
         }
@@ -194,9 +201,9 @@ public class Popup : FrameworkElement, IVisualTreeHost, ILogicalTreeHost
 
         // The popup manager takes a closing popup out of the tree; that detach is the only signal a
         // popup element gets, because the close notification goes to the owner rather than here.
-        if (_isOpen && newRoot == null)
+        if (IsOpen && newRoot == null)
         {
-            _isOpen = false;
+            SetValue(IsOpenPropertyKey, false);
             Closed?.Invoke(this, new PopupClosedEventArgs(_closeKind));
         }
     }

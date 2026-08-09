@@ -152,6 +152,30 @@ public sealed class PopupTests
     }
 
     [TestMethod]
+    public void IsOpen_IsAReadOnlyPropertyThatTracksTheSurface()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("The GDI backend is Windows-only.");
+            return;
+        }
+
+        var (window, owner) = CreateWindow();
+        var popup = CreatePopup(80, 40);
+
+        Assert.IsTrue(Popup.IsOpenProperty.IsReadOnly, "a trigger could set IsOpen instead of observing it");
+        Assert.AreEqual(nameof(Popup.IsOpen), Popup.IsOpenProperty.Name,
+            "IsOpen is not backed by a property, so nothing can bind to or style off it");
+        Assert.IsFalse(popup.IsOpen);
+
+        popup.ShowAt(owner, new Rect(10, 10, 20, 20));
+        Assert.IsTrue(popup.IsOpen, "the property did not follow the surface");
+
+        popup.Close();
+        Assert.IsFalse(popup.IsOpen);
+    }
+
+    [TestMethod]
     public void MoveTo_RepositionsAnOpenPopupAndIgnoresAClosedOne()
     {
         if (!OperatingSystem.IsWindows())
