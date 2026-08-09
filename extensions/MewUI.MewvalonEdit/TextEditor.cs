@@ -35,6 +35,7 @@ public class TextEditor : Control, ITextEditorComponent
     private readonly ElementGeneratorAdapter _elementGenerators;
     // Where the pointer last was, so the cursor can be re-asked for without it moving again.
     private Point? _lastCursorProbe;
+    private bool _cursorHiddenWhileTyping;
     private ModifierKeys _lastCursorModifiers;
     private bool _rectangleDragging;
     private SingleCharacterElementGenerator? _singleCharacterGenerator;
@@ -952,9 +953,24 @@ public class TextEditor : Control, ITextEditorComponent
     /// </summary>
     internal void InvalidateCursorIfMouseWithinTextView()
     {
-        if (_surface.IsMouseOver)
+        // Typing rebuilds the lines, and re-asking here would undo the hiding on the very keystroke
+        // that asked for it. Only the pointer moving brings it back.
+        if (_surface.IsMouseOver && !_cursorHiddenWhileTyping)
         {
             UpdateCursor();
+        }
+    }
+
+    /// <summary>
+    /// Takes the pointer out of the way of what is being typed. It comes back the moment the
+    /// pointer moves, which is where <see cref="UpdateCursor"/> takes over again.
+    /// </summary>
+    private void HideCursorWhileTyping()
+    {
+        if (Options.HideCursorWhileTyping && _surface.IsMouseOver)
+        {
+            _cursorHiddenWhileTyping = true;
+            _surface.Cursor = CursorType.None;
         }
     }
 
@@ -964,6 +980,7 @@ public class TextEditor : Control, ITextEditorComponent
         {
             return;
         }
+        _cursorHiddenWhileTyping = false;
         if (FindElementAtPoint(position) is not VisualLineElement element)
         {
             _surface.Cursor = CursorType.IBeam;
@@ -1102,6 +1119,7 @@ public class TextEditor : Control, ITextEditorComponent
 
     private void OnSurfaceTextInput(TextInputEventArgs e)
     {
+        HideCursorWhileTyping();
         if (!Options.ConvertTabsToSpaces || string.IsNullOrEmpty(e.Text) || !e.Text.Contains('\t'))
         {
             return;

@@ -88,4 +88,19 @@ public sealed class OverstrikeTests
 
         Assert.AreEqual(ImeMode.Disabled, editor.Surface.ImeMode);
     }
+
+    [TestMethod]
+    public void TypingTakesThePointerOutOfTheWay()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var editor = CreateEditor("abc");
+        Assert.IsTrue(editor.Options.HideCursorWhileTyping, "the original hides it by default");
+
+        editor.Options.HideCursorWhileTyping = false;
+        editor.TextArea.PerformTextInput("X");
+
+        Assert.AreNotEqual(CursorType.None, editor.Surface.Cursor,
+            "the pointer went away with the option turned off");
+    }
 }

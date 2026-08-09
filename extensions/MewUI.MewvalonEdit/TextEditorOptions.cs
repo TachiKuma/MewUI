@@ -26,6 +26,9 @@ public class TextEditorOptions : MewObject
     public static readonly MewProperty<bool> EnableImeSupportProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(EnableImeSupport), true);
 
+    public static readonly MewProperty<bool> HideCursorWhileTypingProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(HideCursorWhileTyping), true);
+
     public static readonly MewProperty<bool> ShowSpacesProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowSpaces), false);
 
@@ -125,6 +128,13 @@ public class TextEditorOptions : MewObject
     {
         get => GetValue(EnableImeSupportProperty);
         set => SetValue(EnableImeSupportProperty, value);
+    }
+
+    /// <summary>Whether the pointer is taken out of the way while text is being typed.</summary>
+    public virtual bool HideCursorWhileTyping
+    {
+        get => GetValue(HideCursorWhileTypingProperty);
+        set => SetValue(HideCursorWhileTypingProperty, value);
     }
 
     public virtual bool ShowSpaces
