@@ -46,6 +46,21 @@ new Button()
 
 Explicitly assigned or bound `Content` takes precedence over generated command presentation.
 
+Each `SegmentButton` container in a `ButtonGroup` is also an independent Command consumer. Connect the per-item
+Command in `PrepareContainer`; its `CanExecute` result participates in that segment's effective enabled state.
+
+```csharp
+new ButtonGroup()
+    .Items(alignmentCommands, command => command.Text)
+    .PrepareContainer<Command>((segment, command, _) =>
+        segment.Command(command));
+```
+
+`SegmentedControl` remains a selection control rather than becoming a Command consumer. For independent actions such
+as left/center/right/justify alignment, use `ButtonGroup` as above. To bind the current alignment as a selected value,
+use `SegmentedControl.SelectedIndex`/`SelectedItem`. This connection does not require `CommandParameter`: each
+`SegmentButton` receives the Command it executes.
+
 ### Reactive presentation and localization
 
 `Command.Presentation.AccessText` and `Icon` are MewProperties. `Command.BindText(...)` and `BindIcon(...)` create

@@ -2804,8 +2804,9 @@ public static class ControlExtensions
 
     /// <summary>
     /// Configures each <see cref="ButtonGroup"/> segment container after its content is bound. Use it
-    /// to wire the segment's <see cref="SegmentButton.Click"/> (command), <see cref="SegmentButton.IsCheckable"/>
-    /// / <see cref="SegmentButton.IsChecked"/> (independent toggle), enabled state, or tooltip.
+    /// to assign <see cref="SegmentButton.Command"/>, subscribe to <see cref="SegmentButton.Click"/>,
+    /// or configure <see cref="SegmentButton.IsCheckable"/> / <see cref="SegmentButton.IsChecked"/>
+    /// (independent toggle), enabled state, or tooltip.
     /// </summary>
     public static ButtonGroup PrepareContainer<T>(this ButtonGroup control, Action<SegmentButton, T, int> prepare)
     {
@@ -2814,6 +2815,23 @@ public static class ControlExtensions
 
         control.SetPrepareContainer((container, item, index) => prepare(container, (T)item!, index));
         return control;
+    }
+
+    /// <summary>Sets the semantic command invoked by a segment button.</summary>
+    public static SegmentButton Command(this SegmentButton button, Command? command)
+    {
+        ArgumentNullException.ThrowIfNull(button);
+        button.Command = command;
+        return button;
+    }
+
+    /// <summary>Binds the semantic command invoked by a segment button.</summary>
+    public static SegmentButton BindCommand(this SegmentButton button, ObservableValue<Command?> source)
+    {
+        ArgumentNullException.ThrowIfNull(button);
+        ArgumentNullException.ThrowIfNull(source);
+        button.SetBinding(SegmentButton.CommandProperty, source, BindingMode.OneWay);
+        return button;
     }
 
     /// <summary>Sets how a segmented control sizes its segments along the horizontal axis.</summary>

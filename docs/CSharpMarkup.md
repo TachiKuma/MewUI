@@ -326,6 +326,25 @@ new Button()
 | `BindContent(ObservableValue<string>)` | Content binding |
 | `BindContent(source, convert)` | Converted text or element content binding |
 
+### ButtonGroup segments
+
+```csharp
+new ButtonGroup()
+    .Items(commands, command => command.Text)
+    .PrepareContainer<Command>((segment, command, _) =>
+        segment.Command(command))
+```
+
+| Method | Description |
+|--------|-------------|
+| `PrepareContainer<T>(Action<SegmentButton, T, int>)` | Configure each item container |
+| `SegmentButton.Command(Command)` | Set the semantic Command executed by the segment |
+| `SegmentButton.BindCommand(ObservableValue<Command?>)` | Bind the segment's Command property |
+
+`SegmentedControl` is a selection control rather than a Command consumer. Assign Commands to the individual
+`SegmentButton` containers in a `ButtonGroup` for independent actions; bind a single selected value through the
+selection API of `SegmentedControl`.
+
 ### TextBox
 
 ```csharp

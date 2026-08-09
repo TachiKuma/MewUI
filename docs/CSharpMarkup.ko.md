@@ -326,6 +326,24 @@ new Button()
 | `BindContent(ObservableValue<string>)` | 콘텐츠 바인딩 |
 | `BindContent(source, convert)` | 변환된 텍스트 또는 요소 콘텐츠 바인딩 |
 
+### ButtonGroup 세그먼트
+
+```csharp
+new ButtonGroup()
+    .Items(commands, command => command.Text)
+    .PrepareContainer<Command>((segment, command, _) =>
+        segment.Command(command))
+```
+
+| 메서드 | 설명 |
+|--------|------|
+| `PrepareContainer<T>(Action<SegmentButton, T, int>)` | 항목별 세그먼트 구성 |
+| `SegmentButton.Command(Command)` | 세그먼트가 실행할 의미 Command 설정 |
+| `SegmentButton.BindCommand(ObservableValue<Command?>)` | 세그먼트 Command 속성 바인딩 |
+
+`SegmentedControl`은 Command 소비자가 아니라 선택 컨트롤입니다. 독립 동작 묶음은 `ButtonGroup`의
+각 `SegmentButton`에 Command를 지정하고, 단일 선택 값은 `SegmentedControl`의 선택 API에 바인딩합니다.
+
 ### TextBox
 
 ```csharp

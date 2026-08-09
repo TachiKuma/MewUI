@@ -46,6 +46,21 @@ new Button()
 
 명시적으로 설정하거나 바인딩한 `Content`가 있으면 자동 생성한 Command 표시보다 우선합니다.
 
+`ButtonGroup`의 각 컨테이너인 `SegmentButton`도 독립적인 Command 소비자입니다. 항목별 Command는
+`PrepareContainer`에서 연결하며, `CanExecute`는 해당 세그먼트의 유효 enabled 상태에 반영됩니다.
+
+```csharp
+new ButtonGroup()
+    .Items(alignmentCommands, command => command.Text)
+    .PrepareContainer<Command>((segment, command, _) =>
+        segment.Command(command));
+```
+
+`SegmentedControl`은 값 하나를 선택하는 selection control이므로 Command 소비자로 바뀌지 않습니다.
+정렬의 좌/중/우/분배처럼 각 항목이 독립 동작이면 위와 같이 `ButtonGroup`을 사용하고, 현재 정렬 값을
+선택 상태로 바인딩하려면 `SegmentedControl.SelectedIndex`/`SelectedItem`을 사용합니다. 이 연결에는
+`CommandParameter`가 필요하지 않습니다. 각 `SegmentButton`이 실행할 Command 자체를 받습니다.
+
 ### 반응형 표시와 지역화
 
 `Command.Presentation.AccessText`와 `Icon`은 MewProperty입니다. `Command.BindText(...)`와
