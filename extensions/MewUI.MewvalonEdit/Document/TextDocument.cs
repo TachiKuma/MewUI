@@ -297,7 +297,8 @@ public sealed class TextDocument : ITextSource
         Changed?.Invoke(this, new DocumentChangeEventArgs(
             change.Offset,
             change.RemovedText,
-            _document.GetText(change.Offset, change.InsertedLength)));
+            _document.GetText(change.Offset, change.InsertedLength),
+            change.RemovedLength));
         TextChanged?.Invoke(this, EventArgs.Empty);
         RaiseCountsChanged();
     }

@@ -121,19 +121,39 @@ public readonly record struct TextLocation(int Line, int Column) : IComparable<T
 }
 
 /// <summary>A replace that happened to a text source, with the text on both sides of it.</summary>
-public class TextChangeEventArgs(int offset, string? removedText, string? insertedText) : EventArgs
+public class TextChangeEventArgs : EventArgs
 {
-    public int Offset { get; } = offset >= 0
-        ? offset
-        : throw new ArgumentOutOfRangeException(nameof(offset), offset, "Offset must not be negative.");
+    private readonly int _removalLength;
 
-    /// <summary>The text that was removed.</summary>
-    public ITextSource RemovedText { get; } = new StringTextSource(removedText ?? string.Empty);
+    public TextChangeEventArgs(int offset, string? removedText, string? insertedText)
+        : this(offset, removedText, insertedText, (removedText ?? string.Empty).Length)
+    {
+    }
+
+    /// <summary>
+    /// Carries a removal length that the removed text does not account for. A wholesale text
+    /// assignment is unrecorded and hands over no removed text, but every offset still has to move
+    /// across the whole of it.
+    /// </summary>
+    public TextChangeEventArgs(int offset, string? removedText, string? insertedText, int removalLength)
+    {
+        Offset = offset >= 0
+            ? offset
+            : throw new ArgumentOutOfRangeException(nameof(offset), offset, "Offset must not be negative.");
+        RemovedText = new StringTextSource(removedText ?? string.Empty);
+        InsertedText = new StringTextSource(insertedText ?? string.Empty);
+        _removalLength = Math.Max(removalLength, RemovedText.TextLength);
+    }
+
+    public int Offset { get; }
+
+    /// <summary>The text that was removed. Empty when the change did not materialize it.</summary>
+    public ITextSource RemovedText { get; }
 
     /// <summary>The text that was inserted.</summary>
-    public ITextSource InsertedText { get; } = new StringTextSource(insertedText ?? string.Empty);
+    public ITextSource InsertedText { get; }
 
-    public int RemovalLength => RemovedText.TextLength;
+    public int RemovalLength => _removalLength;
     public int InsertionLength => InsertedText.TextLength;
 
     /// <summary>Where <paramref name="offset"/> lands after this change.</summary>
@@ -150,9 +170,19 @@ public class TextChangeEventArgs(int offset, string? removedText, string? insert
 }
 
 /// <summary>A replace that happened to a document.</summary>
-public class DocumentChangeEventArgs(int offset, string? removedText, string? insertedText)
-    : TextChangeEventArgs(offset, removedText, insertedText)
+public class DocumentChangeEventArgs : TextChangeEventArgs
 {
+    public DocumentChangeEventArgs(int offset, string? removedText, string? insertedText)
+        : base(offset, removedText, insertedText)
+    {
+    }
+
+    /// <inheritdoc cref="TextChangeEventArgs(int, string, string, int)"/>
+    public DocumentChangeEventArgs(int offset, string? removedText, string? insertedText, int removalLength)
+        : base(offset, removedText, insertedText, removalLength)
+    {
+    }
+
     private OffsetChangeMap? _offsetChangeMap;
 
     /// <summary>The change as an offset map, so an offset can be carried across it.</summary>
