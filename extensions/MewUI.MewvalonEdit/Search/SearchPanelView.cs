@@ -37,8 +37,9 @@ internal sealed class SearchPanelView
             root.CornerRadius = theme.Metrics.ControlCornerRadius;
             root.Background = theme.Palette.ContainerBackground;
             root.BorderBrush = theme.Palette.ControlBorder;
-            // The panel hangs inside the editor and the font properties inherit, so without these
-            // the controls come out in the document's monospace font at the document's size.
+            // The panel resolves against the editor, whose document font and ink would otherwise reach
+            // these controls. It is chrome, so it takes the theme's own.
+            root.Foreground = theme.Palette.WindowText;
             root.FontFamily(theme.Metrics.FontFamily).FontSize(theme.Metrics.FontSize);
         });
         _patternBox = new TextBox().Width(160).Placeholder("Find");
@@ -90,6 +91,7 @@ internal sealed class SearchPanelView
             root.CornerRadius = theme.Metrics.ControlCornerRadius;
             root.Background = theme.Palette.ContainerBackground;
             root.BorderBrush = theme.Palette.ControlBorder;
+            root.Foreground = theme.Palette.WindowText;
             root.FontFamily(theme.Metrics.FontFamily).FontSize(theme.Metrics.FontSize);
         });
 
