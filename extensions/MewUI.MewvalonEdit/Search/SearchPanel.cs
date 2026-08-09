@@ -194,7 +194,7 @@ public sealed class SearchPanel : ITextClassifier
             value ??= string.Empty;
             if (_searchPattern == value) return;
             _searchPattern = value;
-            Refresh();
+            Refresh(changeSelection: true);
         }
     }
 
@@ -216,7 +216,7 @@ public sealed class SearchPanel : ITextClassifier
     public bool MatchCase
     {
         get => _matchCase;
-        set { if (_matchCase != value) { _matchCase = value; Refresh(); } }
+        set { if (_matchCase != value) { _matchCase = value; Refresh(changeSelection: true); } }
     }
 
     /// <summary>Shorthand for <see cref="SearchMode"/>, which carries the wildcard mode as well.</summary>
@@ -230,13 +230,13 @@ public sealed class SearchPanel : ITextClassifier
     public SearchMode SearchMode
     {
         get => _searchMode;
-        set { if (_searchMode != value) { _searchMode = value; Refresh(); } }
+        set { if (_searchMode != value) { _searchMode = value; Refresh(changeSelection: true); } }
     }
 
     public bool WholeWords
     {
         get => _wholeWords;
-        set { if (_wholeWords != value) { _wholeWords = value; Refresh(); } }
+        set { if (_wholeWords != value) { _wholeWords = value; Refresh(changeSelection: true); } }
     }
 
     /// <summary>
@@ -246,7 +246,7 @@ public sealed class SearchPanel : ITextClassifier
     public ISearchStrategy? SearchStrategy
     {
         get => _strategy;
-        set { _strategy = value; _strategyIsExplicit = value is not null; Refresh(); }
+        set { _strategy = value; _strategyIsExplicit = value is not null; Refresh(changeSelection: true); }
     }
 
     public Color MarkerBrush { get; set; } = Color.FromArgb(150, 255, 215, 0);
@@ -259,10 +259,15 @@ public sealed class SearchPanel : ITextClassifier
     /// </summary>
     public string? PatternError { get; private set; }
 
+    /// <summary>
+    /// Selects the match after <paramref name="startOffset"/>, wrapping to the first one. Negative
+    /// takes one past the start of the current selection, so the match a reader is already on is
+    /// stepped over rather than found again.
+    /// </summary>
     public SearchResult? FindNext(int startOffset = -1)
     {
         if (_results.Count == 0) return null;
-        if (startOffset < 0) startOffset = _editor.SelectionStart + _editor.SelectionLength;
+        if (startOffset < 0) startOffset = _editor.SelectionStart + 1;
         int index = LowerBoundByOffset(startOffset);
         var result = index < _results.Count ? _results[index] : _results[0];
         SelectResult(result);
@@ -311,9 +316,19 @@ public sealed class SearchPanel : ITextClassifier
         return count;
     }
 
-    public void Refresh()
+    /// <summary>Rescans the document, leaving the selection where it is.</summary>
+    public void Refresh() => Refresh(changeSelection: false);
+
+    /// <summary>
+    /// Rescans the document. With <paramref name="changeSelection"/> the first match at or after the
+    /// current selection is also selected and brought on screen, which is what makes typing into the
+    /// box walk the reader through the document. Nothing stays selected when no match lies at or
+    /// after that point: only asking for the next match wraps.
+    /// </summary>
+    private void Refresh(bool changeSelection)
     {
         ObjectDisposedException.ThrowIf(_uninstalled, this);
+        int anchor = _editor.SelectionStart;
         _results.Clear();
         if (IsClosed)
         {
@@ -332,6 +347,10 @@ public sealed class SearchPanel : ITextClassifier
             return;
         }
 
+        if (changeSelection)
+        {
+            _editor.Select(anchor, 0);
+        }
         PatternError = null;
         try
         {
@@ -354,6 +373,14 @@ public sealed class SearchPanel : ITextClassifier
         {
             // An expensive interactive expression yields no results instead of blocking input.
             _results.Clear();
+        }
+        if (changeSelection)
+        {
+            int index = LowerBoundByOffset(anchor);
+            if (index < _results.Count)
+            {
+                SelectResult(_results[index]);
+            }
         }
         _editor.InvalidateTextView();
     }

@@ -71,9 +71,8 @@ public sealed class SearchKeyRoutingTests
         var (window, editor, panel) = CreateHost();
         panel.Open();
         panel.SearchPattern = "cat";
-
-        SendKey(window, Key.F3);
-        Assert.AreEqual(panel.Results[0].Offset, editor.SelectionStart);
+        Assert.AreEqual(panel.Results[0].Offset, editor.SelectionStart,
+            "Typing the pattern already lands on the first match ahead of the caret.");
 
         SendKey(window, Key.F3);
         Assert.AreEqual(panel.Results[1].Offset, editor.SelectionStart);
@@ -104,7 +103,8 @@ public sealed class SearchKeyRoutingTests
         panel.Open();
         SendKey(window, Key.F3);
         Assert.AreEqual(1, windowF3Hits, "An open panel must claim F3 again.");
-        Assert.AreEqual(panel.Results[0].Offset, editor.SelectionStart);
+        Assert.AreEqual(panel.Results[1].Offset, editor.SelectionStart,
+            "Reopening leaves the selection alone, so the walk goes on from the match it was on.");
     }
 
     [TestMethod]
@@ -115,9 +115,6 @@ public sealed class SearchKeyRoutingTests
         var (window, editor, panel) = CreateHost();
         panel.Open();
         panel.SearchPattern = "cat";
-
-        SendKey(window, Key.Enter);
-        Assert.AreEqual(panel.Results[0].Offset, editor.SelectionStart);
 
         SendKey(window, Key.Enter);
         Assert.AreEqual(panel.Results[1].Offset, editor.SelectionStart);
