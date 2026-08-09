@@ -5,8 +5,9 @@ using Aprillz.MewUI.Text;
 namespace Aprillz.MewUI.MewvalonEdit.Search;
 
 /// <summary>
-/// The panel the reader types into, floating over the text area on the window's adorner layer as
-/// the original does.
+/// The panel the reader types into. AvalonEdit puts the same row of controls in an adorner over the
+/// text area; here it is a child of the editor.s overlay layer, which keeps it inside the editor.s
+/// input scope. Only the message it shows floats on an adorner.
 /// </summary>
 internal sealed class SearchPanelView
 {
@@ -15,7 +16,7 @@ internal sealed class SearchPanelView
     private readonly ObservableValue<string> _patternSource;
     private readonly TextBlock _status;
 
-    /// <summary>The element the adorner carries over the editor.</summary>
+    /// <summary>The element put on the editor.s overlay layer.</summary>
     public Border Root { get; }
 
     /// <summary>The message shown below the panel, on an adorner of its own.</summary>
@@ -60,14 +61,11 @@ internal sealed class SearchPanelView
             static value => value,
             value => { _panel.ValidatePattern(value); return value; },
             BindingMode.TwoWay);
-        // The panel floats on the window's adorner layer, so keys pressed in it never pass through
-        // the editor and its map. It carries the whole set itself, which is why the original gives
-        // its search layer a key handler of its own rather than leaving them to the text area.
+        // F3 and Escape belong to the editor.s input map, which the panel sits inside. Enter is the
+        // panel.s own key: its map is nearer to the focused search box than the editor.s, so it wins
+        // exactly inside the panel.
         Root.InputMap.Map(new KeyGesture(Key.Enter), () => { _panel.FindNext(); UpdateStatus(showPatternError: true); });
         Root.InputMap.Map(new KeyGesture(Key.Enter, ModifierKeys.Shift), () => { _panel.FindPrevious(); UpdateStatus(showPatternError: true); });
-        Root.InputMap.Map(new KeyGesture(Key.F3), () => { _panel.FindNext(); UpdateStatus(showPatternError: true); });
-        Root.InputMap.Map(new KeyGesture(Key.F3, ModifierKeys.Shift), () => { _panel.FindPrevious(); UpdateStatus(showPatternError: true); });
-        Root.InputMap.Map(new KeyGesture(Key.Escape), _panel.Close);
 
         // The message hangs below the panel on its own adorner rather than joining the panel, so
         // saying something does not resize the controls under the reader's hands. The original

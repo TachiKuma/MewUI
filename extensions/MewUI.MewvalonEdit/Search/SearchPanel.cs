@@ -19,7 +19,6 @@ public sealed class SearchPanel : ITextClassifier
     private ISearchStrategy? _strategy;
     private bool _strategyIsExplicit;
     private SearchPanelView? _view;
-    private Adorner? _adorner;
     private Adorner? _messageAdorner;
     private bool _uninstalled;
     private bool _suspendDocumentRefresh;
@@ -75,7 +74,7 @@ public sealed class SearchPanel : ITextClassifier
         bool wasClosed = IsClosed;
         IsClosed = false;
         _view ??= new SearchPanelView(this);
-        ShowAdorner(_view);
+        ShowPanel(_view);
         if (wasClosed)
         {
             BindOpenGestures();
@@ -112,7 +111,7 @@ public sealed class SearchPanel : ITextClassifier
         }
         IsClosed = true;
         UnbindOpenGestures();
-        HideAdorner();
+        HidePanel();
         _results.Clear();
         _editor.InvalidateTextView();
         // The keyboard was in the panel; closing without this leaves it focused on a hidden box.
@@ -123,32 +122,28 @@ public sealed class SearchPanel : ITextClassifier
     public void Reactivate() => _view?.Reactivate();
 
     /// <summary>
-    /// Floats the controls over the text on the window's adorner layer, which is where the original
-    /// puts them: the layer arranges an adorner over the element it adorns, so the panel travels
-    /// with the editor without joining its layout or being clipped by its frame. A panel opened
-    /// before the editor reaches a window waits for it.
+    /// The controls go on the editor's overlay, which keeps them inside its input scope so the walk
+    /// and close keys stay the editor's. Only the message rides an adorner: it hangs below the panel
+    /// and must not be clipped by the editor's frame, and it can appear and go without resizing the
+    /// controls the reader is using.
     /// </summary>
-    private void ShowAdorner(SearchPanelView view)
+    private void ShowPanel(SearchPanelView view)
     {
-        _adorner ??= new Adorner(_editor, view.Root);
-        _editor.ShowAdorner(_adorner);
-        // The message rides a second adorner under the panel, so it can appear and go without
-        // resizing the controls the reader is using.
+        _editor.ShowOverlay(view.Root);
         _messageAdorner ??= new BelowPanelAdorner(_editor, view.Root, view.MessageRoot);
         _editor.ShowAdorner(_messageAdorner);
     }
 
-    private void HideAdorner()
+    private void HidePanel()
     {
         if (_messageAdorner is Adorner message)
         {
             _editor.HideAdorner(message);
             _messageAdorner = null;
         }
-        if (_adorner is Adorner adorner)
+        if (_view is SearchPanelView view)
         {
-            _editor.HideAdorner(adorner);
-            _adorner = null;
+            _editor.HideOverlay(view.Root);
         }
     }
 
