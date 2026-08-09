@@ -212,6 +212,8 @@ public sealed class MainWindow : Window
                     value => _editor.Options.AllowToggleOverstrikeMode = value),
                 Toggle("Enable IME", _editor.Options.EnableImeSupport,
                     value => _editor.Options.EnableImeSupport = value),
+                Toggle("Hide cursor while typing", _editor.Options.HideCursorWhileTyping,
+                    value => _editor.Options.HideCursorWhileTyping = value),
                 Toggle("Highlight current line", _editor.Options.HighlightCurrentLine,
                     value => _editor.Options.HighlightCurrentLine = value),
                 Toggle("Show column ruler", _editor.Options.ShowColumnRuler,
