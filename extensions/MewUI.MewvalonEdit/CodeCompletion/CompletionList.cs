@@ -8,49 +8,128 @@ namespace Aprillz.MewUI.MewvalonEdit.CodeCompletion;
 /// <see cref="CompletionData"/> as the user types, and raises <see cref="InsertionRequested"/>
 /// when an entry is chosen.
 /// </summary>
-public sealed class CompletionList
+public class CompletionList : Control
 {
-    private readonly ListBox _listBox;
+    private const string PART_LIST = "PART_List";
+
     private readonly List<ICompletionData> _completionData = [];
     private List<ICompletionData> _visibleItems;
     // SelectItem gets called for every caret move; this executes the work only when the query changed.
     private string? _currentText;
     private List<ICompletionData>? _currentList;
     private double _itemHeight = 18;
+    // The rows live in a template part, so the list owns the selection itself and the part shows it.
+    private ListBox? _listBox;
+    private int _selectedIndex = -1;
+
+    public static readonly MewProperty<bool> IsFilteringProperty =
+        MewProperty<bool>.Register<CompletionList>(nameof(IsFiltering), true);
 
     public CompletionList()
     {
         _visibleItems = _completionData;
-        _listBox = new ListBox();
-        _listBox.WithTheme((theme, listBox) =>
+        Template = new DelegateControlTemplate<CompletionList>(BuildTemplate);
+        this.WithTheme(static (theme, list) =>
         {
-            _itemHeight = Math.Max(18, theme.Metrics.BaseControlHeight - 2);
-            listBox.ItemHeight = _itemHeight;
+            var completionList = (CompletionList)list;
+            completionList._itemHeight = Math.Max(18, theme.Metrics.BaseControlHeight - 2);
+            completionList.ApplyItemHeight();
         });
-        _listBox.SelectionChanged += _ => SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static Element BuildTemplate(CompletionList owner, ControlTemplateContext context)
+    {
+        var listBox = new ListBox();
+        context.Register(PART_LIST, listBox);
+        return listBox;
+    }
+
+    /// <inheritdoc/>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        _listBox = GetTemplateChild<ListBox>(PART_LIST);
+        if (_listBox is null)
+        {
+            return;
+        }
+
+        _listBox.SelectionChanged += OnListSelectionChanged;
         // Only double clicks on the items commit; the scroll bar is part of the same control here,
         // but a double click on it never changes the selection, so committing the selected item is
         // still what the user meant.
         // MewUI event args do not derive from EventArgs, so the trigger cannot ride along as the
         // original's insertionRequestEventArgs does.
-        _listBox.MouseDoubleClick += e =>
-        {
-            if (e.Button == MouseButton.Left && _listBox.SelectedIndex >= 0)
-            {
-                e.Handled = true;
-                RequestInsertion(EventArgs.Empty);
-            }
-        };
+        _listBox.MouseDoubleClick += OnListDoubleClick;
+        ApplyItemHeight();
+        PublishVisibleItems();
+        _listBox.SelectedIndex = _selectedIndex;
     }
 
-    /// <summary>The element the completion window hosts.</summary>
-    internal FrameworkElement Root => _listBox;
+    private void OnListSelectionChanged(object? item)
+    {
+        int index = _listBox?.SelectedIndex ?? -1;
+        if (_selectedIndex == index)
+        {
+            return;
+        }
+        _selectedIndex = index;
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnListDoubleClick(MouseEventArgs e)
+    {
+        if (e.Button == MouseButton.Left && _selectedIndex >= 0)
+        {
+            e.Handled = true;
+            RequestInsertion(EventArgs.Empty);
+        }
+    }
+
+    private void ApplyItemHeight()
+    {
+        if (_listBox is not null)
+        {
+            _listBox.ItemHeight = _itemHeight;
+        }
+    }
+
+    private void PublishVisibleItems()
+    {
+        if (_listBox is not null)
+        {
+            _listBox.ItemsSource = ItemsView.Create<ICompletionData>(
+                _visibleItems, static item => item.Content as string ?? item.Text);
+        }
+    }
+
+    private int SelectedIndex
+    {
+        get => _selectedIndex;
+        set
+        {
+            if (_selectedIndex == value)
+            {
+                return;
+            }
+            _selectedIndex = value;
+            if (_listBox is not null)
+            {
+                _listBox.SelectedIndex = value;
+            }
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
 
     /// <summary>
     /// If true, the list is filtered to show only matching items, and substrings match. If false,
     /// the old behavior: no filtering, search by StartsWith.
     /// </summary>
-    public bool IsFiltering { get; set; } = true;
+    public bool IsFiltering
+    {
+        get => GetValue(IsFilteringProperty);
+        set => SetValue(IsFilteringProperty, value);
+    }
 
     /// <summary>The list completion data can be added to.</summary>
     public IList<ICompletionData> CompletionData => _completionData;
@@ -72,13 +151,12 @@ public sealed class CompletionList
     {
         get
         {
-            int index = _listBox.SelectedIndex;
+            int index = SelectedIndex;
             return index >= 0 && index < _visibleItems.Count ? _visibleItems[index] : null;
         }
         set
         {
-            int index = value is null ? -1 : _visibleItems.IndexOf(value);
-            _listBox.SelectedIndex = index;
+            SelectedIndex = value is null ? -1 : _visibleItems.IndexOf(value);
         }
     }
 
@@ -88,7 +166,7 @@ public sealed class CompletionList
         int index = _visibleItems.IndexOf(item);
         if (index >= 0)
         {
-            _listBox.ScrollIntoView(index);
+            _listBox?.ScrollIntoView(index);
         }
     }
 
@@ -96,7 +174,7 @@ public sealed class CompletionList
     {
         get
         {
-            double height = _listBox.Bounds.Height;
+            double height = Bounds.Height;
             if (height <= 0 || _itemHeight <= 0)
             {
                 return 10;
@@ -115,19 +193,19 @@ public sealed class CompletionList
         {
             case Key.Down:
                 e.Handled = true;
-                SelectIndex(_listBox.SelectedIndex + 1);
+                SelectIndex(SelectedIndex + 1);
                 break;
             case Key.Up:
                 e.Handled = true;
-                SelectIndex(_listBox.SelectedIndex - 1);
+                SelectIndex(SelectedIndex - 1);
                 break;
             case Key.PageDown:
                 e.Handled = true;
-                SelectIndex(_listBox.SelectedIndex + VisibleItemCount);
+                SelectIndex(SelectedIndex + VisibleItemCount);
                 break;
             case Key.PageUp:
                 e.Handled = true;
-                SelectIndex(_listBox.SelectedIndex - VisibleItemCount);
+                SelectIndex(SelectedIndex - VisibleItemCount);
                 break;
             case Key.Home:
                 e.Handled = true;
@@ -209,7 +287,7 @@ public sealed class CompletionList
         {
             return;
         }
-        int suggestedIndex = _listBox.SelectedIndex;
+        int suggestedIndex = SelectedIndex;
         int bestIndex = -1;
         int bestQuality = -1;
         double bestPriority = 0;
@@ -253,7 +331,7 @@ public sealed class CompletionList
     {
         if (bestIndex < 0)
         {
-            _listBox.SelectedIndex = -1;
+            SelectedIndex = -1;
         }
         else
         {
@@ -267,7 +345,7 @@ public sealed class CompletionList
         {
             return;
         }
-        _listBox.SelectedIndex = Math.Clamp(index, 0, _visibleItems.Count - 1);
+        SelectedIndex = Math.Clamp(index, 0, _visibleItems.Count - 1);
     }
 
     /// <summary>Shows every item again after filtering narrowed the list.</summary>
@@ -281,8 +359,7 @@ public sealed class CompletionList
     private void SetVisibleItems(List<ICompletionData> items)
     {
         _visibleItems = items;
-        _listBox.ItemsSource = ItemsView.Create<ICompletionData>(
-            items, static item => item.Content as string ?? item.Text);
+        PublishVisibleItems();
         VisibleItemsChanged?.Invoke();
     }
 
@@ -298,8 +375,8 @@ public sealed class CompletionList
     /// </summary>
     internal Rect GetSelectedRowBounds()
     {
-        var bounds = _listBox.Bounds;
-        if (!_listBox.TryGetItemBounds(_listBox.SelectedIndex, out var row))
+        var bounds = Bounds;
+        if (_listBox is null || !_listBox.TryGetItemBounds(_selectedIndex, out var row))
         {
             return bounds;
         }

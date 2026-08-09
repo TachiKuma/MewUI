@@ -10,8 +10,8 @@ public class OverloadInsightWindow : InsightWindow
 
     public OverloadInsightWindow(TextArea textArea) : base(textArea)
     {
-        _overloadViewer.Root.Margin = new Thickness(2, 0, 0, 0);
-        Content = _overloadViewer.Root;
+        _overloadViewer.Margin = new Thickness(2, 0, 0, 0);
+        Content = _overloadViewer;
     }
 
     /// <summary>The item provider.</summary>

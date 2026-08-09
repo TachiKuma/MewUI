@@ -18,7 +18,7 @@ public class CompletionWindow : CompletionWindowBase
     public CompletionWindow(TextArea textArea) : base(textArea)
     {
         CompletionList = new CompletionList();
-        Root.Child = CompletionList.Root;
+        Root.Child = CompletionList;
         // The original's shape: fixed width, automatic height up to a cap. The frame is the
         // list's own, as in the original.
         Root.Width = 175;
