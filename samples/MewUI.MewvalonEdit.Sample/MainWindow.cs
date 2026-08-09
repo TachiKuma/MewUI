@@ -258,12 +258,12 @@ public sealed class MainWindow : Window
 
     private void LoadSample(string text, string? highlightingName)
     {
+        // The assignment alone puts the caret back and takes the search and the foldings with it;
+        // only the strategy that finds foldings in the new language is this host's to pick.
         _editor.Text = text;
-        _editor.CaretOffset = 0;
         _editor.SyntaxHighlighting = highlightingName is null
             ? null
             : HighlightingManager.Instance.GetDefinition(highlightingName);
-        _search.Refresh();
         UpdateFoldings(highlightingName);
         UpdateStatus();
         UpdateDocumentState(highlightingName);
