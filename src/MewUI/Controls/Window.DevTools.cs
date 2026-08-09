@@ -72,8 +72,8 @@ public partial class Window
 
     private void InitializeDebugDevTools()
     {
-        KeyBindings.Add(new KeyBinding(new KeyGesture(Key.I, ModifierKeys.Primary | ModifierKeys.Shift), ToggleDebugInspector));
-        KeyBindings.Add(new KeyBinding(new KeyGesture(Key.T, ModifierKeys.Primary | ModifierKeys.Shift), ToggleDebugVisualTree));
+        InputMap.Bind(new KeyGesture(Key.I, ModifierKeys.Primary | ModifierKeys.Shift), ToggleDebugInspector);
+        InputMap.Bind(new KeyGesture(Key.T, ModifierKeys.Primary | ModifierKeys.Shift), ToggleDebugVisualTree);
         InitializeDebugPerformanceProfiler();
     }
 

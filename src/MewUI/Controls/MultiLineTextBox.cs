@@ -3,6 +3,7 @@ using Aprillz.MewUI.Platform;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Text;
 using Aprillz.MewUI.Text.Editing;
+using System.Diagnostics;
 using System.Globalization;
 
 namespace Aprillz.MewUI.Controls;
@@ -55,6 +56,22 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     private IGraphicsContext? _graphics;
     private double _preferredCaretX = double.NaN;
     private bool _dragSelecting;
+
+    // Temporary scroll instrumentation, active only when MEWUI_SCROLL_TRACE is set.
+    private static readonly bool _scrollTraceEnabled =
+        !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("MEWUI_SCROLL_TRACE"));
+    private const int TRACE_STABLE_PASSES = 3;
+    private const int TRACE_MAX_PASSES = 120;
+    private bool _traceCtrlEndActive;
+    private bool _traceFrameWatch;
+    private int _traceRenderPasses;
+    private int _traceArrangePasses;
+    private int _traceStablePasses;
+    private int _traceLinesLaidOutAtStart;
+    private int _traceMaterializePassesAtStart;
+    private double _traceLastExtent;
+    private double _traceLastOffset;
+    private long _traceStartTimestamp;
 
     static MultiLineTextBox()
     {
@@ -178,6 +195,10 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         _contentBounds = GetEditorContentBounds();
         UpdateViewport();
         ArrangeScrollBars();
+        if (_scrollTraceEnabled)
+        {
+            TraceFramePass("arrange");
+        }
     }
 
     protected override void OnRender(IGraphicsContext context)
@@ -186,6 +207,10 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         DrawBackgroundAndBorder(context, bounds, Background, BorderBrush, BorderThickness, CornerRadius);
         _contentBounds = GetEditorContentBounds();
         UpdateViewport();
+        if (_scrollTraceEnabled)
+        {
+            TraceFramePass("render");
+        }
 
         context.Save();
         try
@@ -697,10 +722,19 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             return;
         }
+        bool traceCtrlEnd = _scrollTraceEnabled && e.PrimaryKey && e.Key == Key.End;
+        if (traceCtrlEnd)
+        {
+            BeginCtrlEndTrace();
+        }
         if (e.PrimaryKey && HandlePrimaryKey(e))
         {
             e.Handled = true;
             EnsureCaretVisible();
+            if (traceCtrlEnd)
+            {
+                CompleteCtrlEndTrace();
+            }
             return;
         }
 
@@ -751,6 +785,73 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         }
         e.Handled = true;
         EnsureCaretVisible();
+    }
+
+    private void BeginCtrlEndTrace()
+    {
+        EnsureView();
+        _traceStartTimestamp = Stopwatch.GetTimestamp();
+        _traceCtrlEndActive = true;
+        _traceFrameWatch = false;
+        _traceLinesLaidOutAtStart = _view?.TraceLinesLaidOut ?? 0;
+        _traceMaterializePassesAtStart = _view?.TraceMaterializePasses ?? 0;
+        Console.Error.WriteLine(FormattableString.Invariant(
+            $"[scroll-trace] ctrl-end start extent={(_view?.ExtentHeight ?? 0):F1} vOffset={_verticalOffset:F1} lineCount={_document.LineCount} caretOffset={_editor.CaretPosition}"));
+    }
+
+    private void CompleteCtrlEndTrace()
+    {
+        double elapsedMs = Stopwatch.GetElapsedTime(_traceStartTimestamp).TotalMilliseconds;
+        int linesLaidOut = (_view?.TraceLinesLaidOut ?? 0) - _traceLinesLaidOutAtStart;
+        int materializePasses = (_view?.TraceMaterializePasses ?? 0) - _traceMaterializePassesAtStart;
+        _traceLastExtent = _view?.ExtentHeight ?? 0;
+        _traceLastOffset = _verticalOffset;
+        Console.Error.WriteLine(FormattableString.Invariant(
+            $"[scroll-trace] ctrl-end done ms={elapsedMs:F1} extent={_traceLastExtent:F1} vOffset={_verticalOffset:F1} linesLaidOut={linesLaidOut} materializePasses={materializePasses}"));
+        _traceCtrlEndActive = false;
+        _traceFrameWatch = true;
+        _traceRenderPasses = 0;
+        _traceArrangePasses = 0;
+        _traceStablePasses = 0;
+    }
+
+    private void TraceFramePass(string kind)
+    {
+        if (!_traceFrameWatch || _view is null)
+        {
+            return;
+        }
+        if (kind == "render")
+        {
+            _traceRenderPasses++;
+        }
+        else
+        {
+            _traceArrangePasses++;
+        }
+        double elapsedMs = Stopwatch.GetElapsedTime(_traceStartTimestamp).TotalMilliseconds;
+        double extent = _view.ExtentHeight;
+        bool changed = Math.Abs(extent - _traceLastExtent) > 0.01 ||
+                       Math.Abs(_verticalOffset - _traceLastOffset) > 0.01;
+        if (changed)
+        {
+            Console.Error.WriteLine(FormattableString.Invariant(
+                $"[scroll-trace] frame kind={kind} ms={elapsedMs:F1} render={_traceRenderPasses} arrange={_traceArrangePasses} extent={extent:F1} extentDelta={extent - _traceLastExtent:F1} vOffset={_verticalOffset:F1} linesLaidOut={_view.TraceLinesLaidOut - _traceLinesLaidOutAtStart} thumb={_verticalScrollBar.Value:F1}/{_verticalScrollBar.Maximum:F1}"));
+            _traceLastExtent = extent;
+            _traceLastOffset = _verticalOffset;
+            _traceStablePasses = 0;
+        }
+        else
+        {
+            _traceStablePasses++;
+        }
+        bool exhausted = _traceRenderPasses + _traceArrangePasses >= TRACE_MAX_PASSES;
+        if (_traceStablePasses >= TRACE_STABLE_PASSES || exhausted)
+        {
+            Console.Error.WriteLine(FormattableString.Invariant(
+                $"[scroll-trace] settled ms={elapsedMs:F1} render={_traceRenderPasses} arrange={_traceArrangePasses} extent={extent:F1} vOffset={_verticalOffset:F1} thumb={_verticalScrollBar.Value:F1}/{_verticalScrollBar.Maximum:F1} truncated={exhausted}"));
+            _traceFrameWatch = false;
+        }
     }
 
     private void MoveToLineEdge(bool start, bool extend)
@@ -967,6 +1068,11 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
             SetVerticalOffset(vertical, false);
             SetHorizontalOffset(horizontal, false);
             UpdateViewport();
+            if (_traceCtrlEndActive)
+            {
+                Console.Error.WriteLine(FormattableString.Invariant(
+                    $"[scroll-trace] ensure-visible pass={pass} ms={Stopwatch.GetElapsedTime(_traceStartTimestamp).TotalMilliseconds:F1} caretY={caret.Y:F1} vBefore={settledVertical:F1} vAfter={_verticalOffset:F1} extent={_view.ExtentHeight:F1} linesLaidOut={_view.TraceLinesLaidOut - _traceLinesLaidOutAtStart}"));
+            }
             if (Math.Abs(_verticalOffset - settledVertical) < 0.001 &&
                 Math.Abs(_horizontalOffset - settledHorizontal) < 0.001)
             {

@@ -1353,6 +1353,27 @@ public static class ControlExtensions
     }
 
     /// <summary>
+    /// Sets the semantic command invoked by the button.
+    /// </summary>
+    public static Button Command(this Button button, Command? command)
+    {
+        ArgumentNullException.ThrowIfNull(button);
+        button.Command = command;
+        return button;
+    }
+
+    /// <summary>
+    /// Binds the button's semantic command to an observable value.
+    /// </summary>
+    public static Button BindCommand(this Button button, ObservableValue<Command?> source)
+    {
+        ArgumentNullException.ThrowIfNull(button);
+        ArgumentNullException.ThrowIfNull(source);
+        button.SetBinding(Button.CommandProperty, source, BindingMode.OneWay);
+        return button;
+    }
+
+    /// <summary>
     /// Adds a click event handler.
     /// </summary>
     /// <param name="button">Target button.</param>
@@ -1385,33 +1406,6 @@ public static class ControlExtensions
             handler();
             e.Handled = true;
         };
-        return button;
-    }
-
-    /// <summary>
-    /// Sets the can click predicate.
-    /// </summary>
-    /// <param name="button">Target button.</param>
-    /// <param name="canClick">Can click function.</param>
-    /// <returns>The button for chaining.</returns>
-    public static Button OnCanClick(this Button button, Func<bool> canClick)
-    {
-        ArgumentNullException.ThrowIfNull(button);
-        ArgumentNullException.ThrowIfNull(canClick);
-
-        button.CanClick = canClick;
-        return button;
-    }
-
-    /// <summary>
-    /// Sets the predicate that determines whether the button can be clicked.
-    /// </summary>
-    /// <param name="button">Target button.</param>
-    /// <param name="value">Can-click predicate.</param>
-    /// <returns>The button for chaining.</returns>
-    public static Button CanClick(this Button button, Func<bool>? value)
-    {
-        button.CanClick = value;
         return button;
     }
 
@@ -3635,33 +3629,37 @@ public static class ControlExtensions
     }
 
     /// <summary>
-    /// Adds a menu item.
+    /// Adds a semantic command item.
     /// </summary>
     /// <param name="menu">Target context menu.</param>
     /// <param name="text">Item text.</param>
-    /// <param name="onClick">Click handler.</param>
-    /// <param name="isEnabled">Enabled state.</param>
+    /// <param name="command">Semantic command.</param>
     /// <returns>The context menu for chaining.</returns>
-    public static ContextMenu Item(this ContextMenu menu, string text, Action? onClick = null, bool isEnabled = true)
+    public static ContextMenu Item(this ContextMenu menu, string text, Command command)
     {
         ArgumentNullException.ThrowIfNull(menu);
-        menu.AddItem(text, onClick, isEnabled);
+        menu.AddItem(text, command);
+        return menu;
+    }
+
+    /// <summary>Adds a non-executable presentation item.</summary>
+    public static ContextMenu Item(this ContextMenu menu, string text, bool isEnabled = true)
+    {
+        ArgumentNullException.ThrowIfNull(menu);
+        menu.AddItem(text, isEnabled);
         return menu;
     }
 
     /// <summary>
-    /// Adds a menu item with a keyboard shortcut.
+    /// Adds a semantic command item using command presentation metadata.
     /// </summary>
     /// <param name="menu">Target context menu.</param>
-    /// <param name="text">Item text.</param>
-    /// <param name="shortcut">Keyboard shortcut gesture.</param>
-    /// <param name="onClick">Click handler.</param>
-    /// <param name="isEnabled">Enabled state.</param>
+    /// <param name="command">Semantic command.</param>
     /// <returns>The context menu for chaining.</returns>
-    public static ContextMenu Item(this ContextMenu menu, string text, KeyGesture shortcut, Action? onClick = null, bool isEnabled = true)
+    public static ContextMenu Item(this ContextMenu menu, Command command)
     {
         ArgumentNullException.ThrowIfNull(menu);
-        menu.AddItem(text, onClick, isEnabled, shortcut);
+        menu.AddItem(command);
         return menu;
     }
 
@@ -3679,24 +3677,6 @@ public static class ControlExtensions
         ArgumentNullException.ThrowIfNull(subMenu);
 
         menu.AddSubMenu(text, subMenu.Menu, isEnabled);
-        return menu;
-    }
-
-    /// <summary>
-    /// Adds a submenu with a keyboard shortcut.
-    /// </summary>
-    /// <param name="menu">Target context menu.</param>
-    /// <param name="text">Submenu text.</param>
-    /// <param name="shortcut">Keyboard shortcut gesture.</param>
-    /// <param name="subMenu">Submenu.</param>
-    /// <param name="isEnabled">Enabled state.</param>
-    /// <returns>The context menu for chaining.</returns>
-    public static ContextMenu SubMenu(this ContextMenu menu, string text, KeyGesture shortcut, ContextMenu subMenu, bool isEnabled = true)
-    {
-        ArgumentNullException.ThrowIfNull(menu);
-        ArgumentNullException.ThrowIfNull(subMenu);
-
-        menu.AddSubMenu(text, subMenu.Menu, isEnabled, shortcut);
         return menu;
     }
 

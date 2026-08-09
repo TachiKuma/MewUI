@@ -56,8 +56,8 @@ partial class Window
     /// </summary>
     private void InitializeDebugPerformanceProfiler()
     {
-        KeyBindings.Add(new KeyBinding(new KeyGesture(Key.P, ModifierKeys.Primary | ModifierKeys.Shift), TogglePerformanceMonitor));
-        KeyBindings.Add(new KeyBinding(new KeyGesture(Key.P, ModifierKeys.Primary | ModifierKeys.Shift | ModifierKeys.Alt), ToggleProfiler));
+        InputMap.Bind(new KeyGesture(Key.P, ModifierKeys.Primary | ModifierKeys.Shift), TogglePerformanceMonitor);
+        InputMap.Bind(new KeyGesture(Key.P, ModifierKeys.Primary | ModifierKeys.Shift | ModifierKeys.Alt), ToggleProfiler);
     }
 
     private void UpdateProfilerEnabled()

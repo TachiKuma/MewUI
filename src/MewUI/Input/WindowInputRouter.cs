@@ -255,8 +255,8 @@ internal static class WindowInputRouter
             current.RaiseKeyDown(args);
         }
 
-        // Input-map dispatch runs after bubbling so a focused control's own key handling keeps
-        // priority over shortcuts (same principle as Window.KeyBindings).
+        // Input-map dispatch runs after bubbling so a focused control's non-command key handling
+        // keeps priority. Semantic shortcuts have a single resolution path through InputMap.
         if (!args.Handled)
         {
             InputMapResolver.TryDispatchKeyDown(window, args);

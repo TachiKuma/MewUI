@@ -90,26 +90,8 @@ public partial class Button : Control, IVisualTreeHost, ICommandSource
     /// </summary>
     public event Action? Click;
 
-    public Func<bool>? CanClick
-    {
-        get;
-        set
-        {
-            if (field != value)
-            {
-                field = value;
-                RefreshEnabledSubtree();
-            }
-        }
-    }
-
     protected override bool ComputeIsEnabledSuggestion()
     {
-        if (CanClick != null && !CanClick())
-        {
-            return false;
-        }
-
         if (GetValue(CommandProperty) is Command command && FindVisualRoot() is Window window)
         {
             return window.CommandRouter.CanExecute(command, CommandTarget.From(this));
@@ -242,6 +224,13 @@ public partial class Button : Control, IVisualTreeHost, ICommandSource
         {
             window.CommandRouter.TryExecuteFromInput(command, CommandTarget.From(this), this);
         }
+    }
+
+    protected override void OnDispose()
+    {
+        _commandSourceWindow?.UnregisterCommandSource(this);
+        _commandSourceWindow = null;
+        base.OnDispose();
     }
 
     internal void RaiseClick() => OnClick();

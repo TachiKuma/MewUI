@@ -86,9 +86,13 @@ internal sealed class FileDialogBreadcrumb : StackPanel
         {
             Add(CreateSeparatorElement(_entries[0].Path));
             var menu = new ContextMenu();
+            var commandScope = new CommandScope();
+            menu.SetCommandTarget(CommandTarget.From(commandScope));
             foreach (Entry entry in hidden)
             {
-                menu.Item(entry.Label, entry.Navigate);
+                var command = new Command($"fileDialog.navigate.{entry.Path}", entry.Label);
+                commandScope.Bind(command, entry.Navigate);
+                menu.Item(command);
             }
 
             Button overflow = CreateCrumbButton("…", static () => { });

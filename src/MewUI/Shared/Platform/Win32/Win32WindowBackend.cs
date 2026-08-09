@@ -2467,7 +2467,6 @@ internal sealed class Win32WindowBackend : IWindowBackend
         }
 
         WindowInputRouter.KeyDown(Window, args);
-        Window.ProcessKeyBindings(args);
         Window.ProcessAccessKeyDown(args);
 
         // WPF-like Tab behavior:

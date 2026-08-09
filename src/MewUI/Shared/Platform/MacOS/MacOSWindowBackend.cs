@@ -1712,7 +1712,6 @@ internal sealed class MacOSWindowBackend : IWindowBackend
             }
 
             WindowInputRouter.KeyDown(_window, args);
-            _window.ProcessKeyBindings(args);
             _window.ProcessAccessKeyDown(args);
 
             // WPF-like Tab behavior:

@@ -52,4 +52,6 @@ public partial class Window
     /// Runs one command state evaluation pass over the registered command sources.
     /// </summary>
     internal void EvaluateCommandStates() => _commandStateTracker?.EvaluateAll();
+
+    internal void ClearCommandSources() => _commandStateTracker?.Clear();
 }

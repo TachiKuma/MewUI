@@ -20,9 +20,8 @@ public sealed class MenuItem : MenuEntry
     private string? _cachedDisplayText;
     private char _cachedAccessKey;
     private int _cachedUnderlineIndex = -1;
-    private KeyGesture? _shortcut;
-    private string? _cachedShortcutDisplayText;
     private Command? _command;
+    private IconTemplate? _icon;
     private string? _commandShortcutDisplayText;
 
     public MenuItem() { }
@@ -39,8 +38,7 @@ public sealed class MenuItem : MenuEntry
 
     /// <summary>
     /// The semantic command this item invokes. A command item takes execution, enabled state and
-    /// shortcut display from the command system; <see cref="Click"/> and <see cref="Shortcut"/>
-    /// are ignored while a command is set.
+    /// shortcut display from the command system.
     /// </summary>
     public Command? Command
     {
@@ -68,6 +66,17 @@ public sealed class MenuItem : MenuEntry
             _cachedDisplayText = null;
         }
     }
+
+    /// <summary>
+    /// Presentation icon override; when null, <see cref="MewUI.Command.Icon"/> supplies the icon.
+    /// </summary>
+    public IconTemplate? Icon
+    {
+        get => _icon;
+        set => _icon = value;
+    }
+
+    internal IconTemplate? ResolveIconTemplate() => _icon ?? _command?.Icon;
 
     private string ResolveRawText()
         => _text.Length > 0 ? _text : _command?.Text ?? string.Empty;
@@ -100,38 +109,12 @@ public sealed class MenuItem : MenuEntry
     public bool IsEnabled { get; set; } = true;
 
     /// <summary>
-    /// Optional predicate evaluated when the menu opens.
-    /// When set, <see cref="IsEnabled"/> is updated automatically.
-    /// </summary>
-    public Func<bool>? CanClick { get; set; }
-
-    /// <summary>
-    /// Keyboard shortcut gesture. Auto-generates display text and registers with Window.KeyBindings.
-    /// </summary>
-    public KeyGesture? Shortcut
-    {
-        get => _shortcut;
-        set
-        {
-            if (_shortcut == value) return;
-            _shortcut = value;
-            _cachedShortcutDisplayText = null;
-        }
-    }
-
-    /// <summary>
     /// Returns the cached shortcut display string (e.g. "Ctrl+S"), or null if no shortcut applies.
     /// Command items show the effective input-map gesture resolved when the menu opened.
     /// </summary>
     internal string? GetShortcutDisplayText()
     {
-        if (_command != null)
-            return _commandShortcutDisplayText;
-
-        if (_shortcut == null)
-            return null;
-
-        return _cachedShortcutDisplayText ??= _shortcut.Value.ToDisplayString();
+        return _commandShortcutDisplayText;
     }
 
     /// <summary>
@@ -146,18 +129,7 @@ public sealed class MenuItem : MenuEntry
         return changed;
     }
 
-    public Action? Click { get; set; }
-
     public Menu? SubMenu { get; set; }
-
-    /// <summary>
-    /// Re-evaluates <see cref="CanClick"/> and updates <see cref="IsEnabled"/>.
-    /// </summary>
-    internal void ReevaluateCanClick()
-    {
-        if (CanClick != null)
-            IsEnabled = CanClick();
-    }
 
     public override string ToString() => Text;
 }

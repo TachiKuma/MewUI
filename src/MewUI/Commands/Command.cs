@@ -11,11 +11,12 @@ namespace Aprillz.MewUI;
 /// </remarks>
 public sealed class Command
 {
-    public Command(string id, string? text = null)
+    public Command(string id, string? text = null, IconTemplate? icon = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
         Id = id;
         Text = text;
+        Icon = icon;
     }
 
     /// <summary>
@@ -27,6 +28,11 @@ public sealed class Command
     /// Gets the default presentation label, or null when presentation supplies its own text.
     /// </summary>
     public string? Text { get; }
+
+    /// <summary>
+    /// Gets the reusable icon presentation, or null when presenters should show no command icon.
+    /// </summary>
+    public IconTemplate? Icon { get; }
 
     public override string ToString() => Id;
 }

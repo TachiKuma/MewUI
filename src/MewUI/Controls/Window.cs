@@ -1082,26 +1082,6 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         set => SetValue(ShowAccessKeysProperty, value);
     }
 
-    /// <summary>
-    /// Gets the list of global keyboard shortcuts for this window.
-    /// Bindings are checked after bubbling (so control-level shortcuts like TextBox Ctrl+C take priority).
-    /// </summary>
-    public List<KeyBinding> KeyBindings { get; } = new();
-
-    /// <summary>
-    /// Processes global key bindings. Called after bubbling if the event is still unhandled.
-    /// </summary>
-    internal void ProcessKeyBindings(KeyEventArgs e)
-    {
-        if (e.Handled) return;
-
-        for (int i = 0; i < KeyBindings.Count; i++)
-        {
-            if (KeyBindings[i].TryHandle(e))
-                return;
-        }
-    }
-
     internal void ProcessAccessKeyDown(KeyEventArgs e) => AccessKeyManager.OnKeyDown(e);
 
     internal void ProcessAccessKeyUp(KeyEventArgs e) => AccessKeyManager.OnKeyUp(e);
@@ -2935,6 +2915,7 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         {
             DisposeAdorners();
             _popupManager.Dispose();
+            ClearCommandSources();
             return;
         }
 
@@ -2961,6 +2942,8 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         }
 
         OverlayLayer.Dispose();
+
+        ClearCommandSources();
 
         DisposeAdorners();
         _popupManager.Dispose();

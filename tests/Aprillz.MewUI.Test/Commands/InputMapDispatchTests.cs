@@ -169,6 +169,28 @@ public sealed class InputMapDispatchTests
     }
 
     [TestMethod]
+    public void TextEditGesture_CanBeRemappedWithoutLegacyKeyHandling()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("GDI backend is Windows-only."); return; }
+
+        var window = HeadlessWindow.Create();
+        var textBox = new TextBox { Text = "copy me" };
+        textBox.Select(0, textBox.Text.Length);
+        window.Content = textBox;
+        window.PerformLayout();
+        window.FocusManager.SetFocus(textBox);
+
+        var remapped = new Command("test.remappedCopy");
+        int executed = 0;
+        textBox.Commands.Bind(remapped, () => executed++);
+        textBox.InputMap.Bind(remapped, new KeyGesture(Key.C, ModifierKeys.Control));
+
+        window.SendKeyDown(Key.C, ModifierKeys.Control);
+
+        Assert.AreEqual(1, executed, "Ctrl+C must be resolved by the nearest InputMap");
+    }
+
+    [TestMethod]
     public void EffectiveGestureLookup_SkipsShadowedGesture()
     {
         if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("GDI backend is Windows-only."); return; }

@@ -34,6 +34,12 @@ internal sealed class CommandStateTracker
 
     public void Unregister(ICommandSource source) => _sources.Remove(source);
 
+    public void Clear()
+    {
+        _sources.Clear();
+        _evaluationScratch.Clear();
+    }
+
     public void EvaluateAll()
     {
         if (_sources.Count == 0)

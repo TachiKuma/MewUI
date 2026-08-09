@@ -210,8 +210,8 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     private void BindStandardEditCommands()
     {
-        // One shared handler set for keyboard defaults, menus and toolbars (doc: standard control
-        // migration). Direct key handling in OnKeyDown still runs first and shadows the input map.
+        // One shared handler set for keyboard defaults, menus and toolbars. Semantic edit gestures
+        // are resolved by InputMap; direct key handling is limited to caret/navigation mechanics.
         Commands.Bind(StandardCommands.Copy, this,
             static textBase => textBase.Copy(),
             static textBase => textBase._editor.Selection.Length > 0);
@@ -359,24 +359,6 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     {
         switch (e.Key)
         {
-            case Key.A:
-                SelectAll();
-                return true;
-            case Key.C:
-                Copy();
-                return true;
-            case Key.X:
-                Cut();
-                return true;
-            case Key.V:
-                Paste();
-                return true;
-            case Key.Z:
-                if (e.ShiftKey) Redo(); else Undo();
-                return true;
-            case Key.Y:
-                Redo();
-                return true;
             case Key.Home:
                 _editor.SetCaret(0, e.ShiftKey);
                 return true;
@@ -650,15 +632,13 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     private protected virtual void ShowDefaultTextContextMenu(Point positionInWindow)
     {
         var menu = _defaultContextMenu ??= new ContextMenu();
-        bool hasSelection = _editor.Selection.Length > 0;
-        bool canPaste = !IsReadOnly && TryGetClipboardText(out string clip) && !string.IsNullOrEmpty(clip);
         TextContextMenu.Show(menu, this, positionInWindow,
-            undo: new TextMenuCommand(Undo, !IsReadOnly && CanUndo),
-            redo: new TextMenuCommand(Redo, !IsReadOnly && CanRedo),
-            cut: new TextMenuCommand(Cut, !IsReadOnly && hasSelection),
-            copy: new TextMenuCommand(Copy, hasSelection),
-            paste: new TextMenuCommand(Paste, canPaste),
-            selectAll: new TextMenuCommand(SelectAll, _document.TextLength > 0));
+            StandardCommands.Undo,
+            StandardCommands.Redo,
+            StandardCommands.Cut,
+            StandardCommands.Copy,
+            StandardCommands.Paste,
+            StandardCommands.SelectAll);
     }
 
     private protected bool TrySetClipboardText(string text)

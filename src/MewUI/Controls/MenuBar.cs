@@ -13,7 +13,6 @@ public sealed class MenuBar : Control, IPopupOwner
 
     private readonly List<MenuItem> _items = new();
     private readonly List<Rect> _itemBounds = new();
-    private readonly List<KeyBinding> _registeredBindings = new();
     private readonly MenuTextLayoutCache _textLayouts = new();
     private int _hotIndex = -1;
     private int _openIndex = -1;
@@ -67,36 +66,13 @@ public sealed class MenuBar : Control, IPopupOwner
     protected override void OnVisualRootChanged(Element? oldRoot, Element? newRoot)
     {
         base.OnVisualRootChanged(oldRoot, newRoot);
-        UnregisterKeyBindings(oldRoot as Window);
-        RegisterKeyBindings(newRoot as Window);
+        UnregisterAccessKeys(oldRoot as Window);
+        RegisterAccessKeys(newRoot as Window);
     }
 
-    private void RegisterKeyBindings(Window? window)
+    private void RegisterAccessKeys(Window? window)
     {
         if (window == null) return;
-
-        foreach (var item in _items)
-            RegisterMenuItemBindings(window, item);
-
-        RegisterAccessKeys(window);
-    }
-
-    private void UnregisterKeyBindings(Window? window)
-    {
-        if (window == null) return;
-
-        if (_registeredBindings.Count > 0)
-        {
-            for (int i = 0; i < _registeredBindings.Count; i++)
-                window.KeyBindings.Remove(_registeredBindings[i]);
-            _registeredBindings.Clear();
-        }
-
-        window.AccessKeyManager.Unregister(this);
-    }
-
-    private void RegisterAccessKeys(Window window)
-    {
         for (int i = 0; i < _items.Count; i++)
         {
             var item = _items[i];
@@ -109,27 +85,10 @@ public sealed class MenuBar : Control, IPopupOwner
         }
     }
 
+    private void UnregisterAccessKeys(Window? window) => window?.AccessKeyManager.Unregister(this);
+
     private static string GetDisplayText(MenuItem item)
         => item.GetParsedText().displayText;
-
-    private void RegisterMenuItemBindings(Window window, MenuItem item)
-    {
-        if (item.Shortcut is { } gesture && item.Click is { } click)
-        {
-            var binding = new KeyBinding(gesture, click);
-            window.KeyBindings.Add(binding);
-            _registeredBindings.Add(binding);
-        }
-
-        if (item.SubMenu != null)
-        {
-            foreach (var entry in item.SubMenu.Items)
-            {
-                if (entry is MenuItem sub)
-                    RegisterMenuItemBindings(window, sub);
-            }
-        }
-    }
 
     /// <summary>
     /// Adds a menu item to the menu bar.
@@ -152,13 +111,13 @@ public sealed class MenuBar : Control, IPopupOwner
     {
         ArgumentNullException.ThrowIfNull(items);
         CloseOpenMenu();
-        UnregisterKeyBindings(FindVisualRoot() as Window);
+        UnregisterAccessKeys(FindVisualRoot() as Window);
         _items.Clear();
         for (int i = 0; i < items.Length; i++)
         {
             Add(items[i]);
         }
-        RegisterKeyBindings(FindVisualRoot() as Window);
+        RegisterAccessKeys(FindVisualRoot() as Window);
     }
 
     protected override Size MeasureContent(Size availableSize)
@@ -321,7 +280,7 @@ public sealed class MenuBar : Control, IPopupOwner
         popup.FontFamily = FontFamily;
         popup.FontSize = FontSize;
         popup.FontWeight = FontWeight;
-        popup.SetCapturedCommandTarget(target);
+        popup.SetCommandTarget(target);
 
         _openPopup = popup;
 

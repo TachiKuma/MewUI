@@ -144,4 +144,75 @@ public sealed class MenuCommandTargetTests
 
         Assert.IsTrue(item.IsEnabled, "the open menu is a tracked command source");
     }
+
+    [TestMethod]
+    public void CommandIcon_IsBuiltAtMenuSizeForEachPopupLifetime()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("GDI backend is Windows-only."); return; }
+
+        var window = HeadlessWindow.Create();
+        var owner = new Button { Width = 60, Height = 30 };
+        window.Content = owner;
+        window.PerformLayout();
+
+        var built = new List<FrameworkElement>();
+        var sizes = new List<double>();
+        var icon = new IconTemplate(size =>
+        {
+            sizes.Add(size);
+            var element = new Border();
+            built.Add(element);
+            return element;
+        });
+        var command = new Command("edit.copy", "Copy", icon);
+        owner.Commands.Bind(command, static () => { });
+
+        var menu = new ContextMenu().Apply(x => x.AddItem(command));
+        menu.ShowAt(owner, new Point(100, 100));
+        window.PerformLayout();
+
+        Assert.HasCount(1, built);
+        Assert.AreEqual(16, sizes[0]);
+        Assert.AreSame(menu, built[0].Parent);
+        Assert.AreEqual(16, built[0].Width);
+        Assert.AreEqual(16, built[0].Height);
+
+        var first = built[0];
+        menu.CloseTree(window);
+        Assert.IsNull(first.Parent, "closing the popup releases its materialized icon visual");
+
+        menu.ShowAt(owner, new Point(100, 100));
+        window.PerformLayout();
+
+        Assert.HasCount(2, built);
+        Assert.AreNotSame(first, built[1], "each popup lifetime receives an independent visual");
+        Assert.AreSame(menu, built[1].Parent);
+    }
+
+    [TestMethod]
+    public void MenuItemIcon_OverridesCommandIcon()
+    {
+        int commandBuilds = 0;
+        int overrideBuilds = 0;
+        var commandIcon = new IconTemplate(size =>
+        {
+            commandBuilds++;
+            return new Border();
+        });
+        var overrideIcon = new IconTemplate(size =>
+        {
+            overrideBuilds++;
+            return new Border();
+        });
+
+        var item = new MenuItem(new Command("test.icon", icon: commandIcon))
+        {
+            Icon = overrideIcon,
+        };
+
+        _ = item.ResolveIconTemplate()!.Build(16);
+
+        Assert.AreEqual(0, commandBuilds);
+        Assert.AreEqual(1, overrideBuilds);
+    }
 }

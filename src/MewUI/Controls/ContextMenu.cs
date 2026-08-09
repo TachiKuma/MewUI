@@ -7,7 +7,7 @@ namespace Aprillz.MewUI.Controls;
 /// <summary>
 /// A context menu popup control for displaying menu items.
 /// </summary>
-public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
+public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualTreeHost
 {
     // Owner context captured at ShowAt (or inherited from the parent menu / preset by MenuBar):
     // command items resolve CanExecute, execution and shortcut labels against it so popup focus
@@ -17,6 +17,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
 
     private const double SubMenuGlyphAreaWidth = 14;
     private const double ShortcutColumnGap = 12;
+    private const double IconTextGap = 8;
     private readonly ScrollBar _vBar;
     private readonly ScrollController _scroll = new();
     private readonly MenuTextLayoutCache _textLayouts = new();
@@ -30,6 +31,8 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
     private double _maxTextWidth;
     private double _maxShortcutWidth;
     private bool _hasAnyShortcut;
+    private readonly Dictionary<MenuItem, FrameworkElement> _materializedIcons = new();
+    private bool _hasAnyIcon;
 
     /// <summary>
     /// Gets the menu model.
@@ -117,18 +120,36 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
         };
     }
 
-    public void AddItem(string text, Action? onClick = null, bool isEnabled = true, KeyGesture? shortcut = null)
+    public void AddItem(Command command)
     {
-        Menu.Item(text, onClick, isEnabled, shortcut);
+        ArgumentNullException.ThrowIfNull(command);
+        Menu.Items.Add(new MenuItem(command));
         _textLayouts.Invalidate();
         InvalidateMeasure();
         InvalidateVisual();
     }
 
-    public void AddSubMenu(string text, Menu subMenu, bool isEnabled = true, KeyGesture? shortcut = null)
+    public void AddItem(string text, bool isEnabled = true)
+    {
+        Menu.Items.Add(new MenuItem(text) { IsEnabled = isEnabled });
+        _textLayouts.Invalidate();
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    public void AddItem(string text, Command command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        Menu.Items.Add(new MenuItem(text, command));
+        _textLayouts.Invalidate();
+        InvalidateMeasure();
+        InvalidateVisual();
+    }
+
+    public void AddSubMenu(string text, Menu subMenu, bool isEnabled = true)
     {
         ArgumentNullException.ThrowIfNull(subMenu);
-        Menu.SubMenu(text, subMenu, isEnabled, shortcut);
+        Menu.SubMenu(text, subMenu, isEnabled);
         _textLayouts.Invalidate();
         InvalidateMeasure();
         InvalidateVisual();
@@ -161,20 +182,17 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
         InvalidateVisual();
     }
 
-    private void ReevaluateCanClick()
-    {
-        foreach (var entry in Menu.Items)
-        {
-            if (entry is MenuItem item)
-                item.ReevaluateCanClick();
-        }
-    }
-
     /// <summary>
-    /// Presets the command target snapshot the next ShowAt resolves against; used by presenters
-    /// (e.g. MenuBar) whose semantic target is not the ShowAt owner.
+    /// Presets the command target snapshot the next <see cref="ShowAt"/> resolves against.
+    /// Use this for menus whose commands are bound to a standalone scope rather than the visual owner.
     /// </summary>
-    internal void SetCapturedCommandTarget(CommandTarget target) => _presetCommandTarget = target;
+    public void SetCommandTarget(CommandTarget target)
+    {
+        if (target.IsEmpty)
+            throw new ArgumentException("The command target cannot be empty.", nameof(target));
+
+        _presetCommandTarget = target;
+    }
 
     private void UpdateCommandPresentation(Window window)
     {
@@ -203,6 +221,49 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
         return false;
     }
 
+    private double ResolveIconSize()
+    {
+        double size = Theme.Metrics.ContextMenuIconSize;
+        return double.IsFinite(size) && size > 0 ? size : 16;
+    }
+
+    private void PrepareMaterializedIcons()
+    {
+        ClearMaterializedIcons();
+
+        double size = ResolveIconSize();
+        foreach (var entry in Items)
+        {
+            if (entry is not MenuItem item || item.ResolveIconTemplate() is not IconTemplate template)
+            {
+                continue;
+            }
+
+            var icon = template.Build(size);
+            icon.Width = size;
+            icon.Height = size;
+            icon.IsHitTestVisible = false;
+            icon.Parent = this;
+            _materializedIcons.Add(item, icon);
+        }
+
+        _hasAnyIcon = _materializedIcons.Count > 0;
+    }
+
+    private void ClearMaterializedIcons()
+    {
+        foreach (var icon in _materializedIcons.Values)
+        {
+            if (ReferenceEquals(icon.Parent, this))
+            {
+                icon.Parent = null;
+            }
+        }
+
+        _materializedIcons.Clear();
+        _hasAnyIcon = false;
+    }
+
     public void ShowAt(UIElement owner, Point positionInWindow, double? anchorTopY = null)
     {
         ArgumentNullException.ThrowIfNull(owner);
@@ -215,8 +276,8 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
 
         _capturedCommandTarget = _presetCommandTarget ?? CommandTarget.From(owner);
 
-        ReevaluateCanClick();
         UpdateCommandPresentation(window);
+        PrepareMaterializedIcons();
         CloseDescendants(window);
         _parentMenu = null;
 
@@ -273,6 +334,11 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
         {
             window.RegisterCommandSource(this);
         }
+
+        if (oldRoot != null && newRoot == null)
+        {
+            ClearMaterializedIcons();
+        }
     }
 
     void ICommandSource.EvaluateCommandState()
@@ -310,6 +376,13 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
         if (ItemPadding == oldTheme.Metrics.ItemPadding)
         {
             ItemPadding = newTheme.Metrics.ItemPadding;
+        }
+
+        if (oldTheme.Metrics.ContextMenuIconSize != newTheme.Metrics.ContextMenuIconSize &&
+            FindVisualRoot() is Window)
+        {
+            PrepareMaterializedIcons();
+            InvalidateMeasure();
         }
     }
 
@@ -350,6 +423,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
         if (_scroll.SetOffsetDip(1, valueDip))
         {
             _verticalOffset = _scroll.GetOffsetDip(1);
+            ArrangeMaterializedIcons();
             CloseSubMenu();
             InvalidateVisual();
         }
@@ -414,6 +488,11 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
 
         double maxWidth = Math.Ceiling(_maxTextWidth) + ItemPadding.HorizontalThickness;
 
+        if (_hasAnyIcon)
+        {
+            maxWidth += ResolveIconSize() + IconTextGap;
+        }
+
         if (_hasAnyShortcut)
         {
             maxWidth += ShortcutColumnGap + Math.Ceiling(_maxShortcutWidth);
@@ -463,6 +542,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
             _verticalOffset = 0;
             _vBar.Value = 0;
             _vBar.Arrange(Rect.Empty);
+            ArrangeMaterializedIcons();
             return;
         }
 
@@ -485,6 +565,34 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
             contentBounds.Y,
             t,
             contentBounds.Height));
+        ArrangeMaterializedIcons();
+    }
+
+    private void ArrangeMaterializedIcons()
+    {
+        if (!_hasAnyIcon || Bounds.IsEmpty)
+        {
+            return;
+        }
+
+        var contentBounds = GetItemViewportBounds();
+        double size = ResolveIconSize();
+        double y = contentBounds.Y - _verticalOffset;
+        foreach (var entry in Items)
+        {
+            double height = GetEntryHeight(entry);
+            if (entry is MenuItem item && _materializedIcons.TryGetValue(item, out var icon))
+            {
+                var paddedRow = new Rect(contentBounds.X, y, contentBounds.Width, height).Deflate(ItemPadding);
+                icon.Arrange(new Rect(
+                    paddedRow.X,
+                    paddedRow.Y + Math.Max(0, (paddedRow.Height - size) / 2),
+                    size,
+                    size));
+            }
+
+            y += height;
+        }
     }
 
     protected override void OnMouseDown(MouseEventArgs e)
@@ -529,6 +637,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
         {
             _verticalOffset = _scroll.GetOffsetDip(1);
             _vBar.Value = _verticalOffset;
+            ArrangeMaterializedIcons();
             CloseSubMenu();
             InvalidateVisual();
             e.Handled = true;
@@ -612,8 +721,6 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
 
     private void InvokeItem(MenuItem item)
     {
-        // A command item routes through the command system with the captured owner target;
-        // the legacy Click callback applies only to non-command items.
         if (item.Command is Command command)
         {
             if (FindVisualRoot() is Window window)
@@ -621,10 +728,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
                 window.CommandRouter.TryExecuteFromInput(command, _capturedCommandTarget, this);
             }
 
-            return;
         }
-
-        item.Click?.Invoke();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -744,8 +848,8 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
 
         // Sub-menus inherit the same target snapshot so nesting never re-targets commands.
         subMenuPopup._capturedCommandTarget = _capturedCommandTarget;
-        subMenuPopup.ReevaluateCanClick();
         subMenuPopup.UpdateCommandPresentation(window);
+        subMenuPopup.PrepareMaterializedIcons();
 
         var region = window.GetPopupPlacementRegion(ownerRowBounds);
         subMenuPopup.Measure(new Size(Math.Max(0, region.Width), Math.Max(0, region.Height)));
@@ -970,6 +1074,25 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
                 var paddedRow = row.Deflate(ItemPadding);
 
                 double textLeft = paddedRow.X;
+                if (_hasAnyIcon)
+                {
+                    if (_materializedIcons.TryGetValue(item, out var icon))
+                    {
+                        if (!item.IsEnabled)
+                        {
+                            context.BeginOpacity(0.5);
+                        }
+
+                        icon.Render(context);
+
+                        if (!item.IsEnabled)
+                        {
+                            context.EndOpacity();
+                        }
+                    }
+
+                    textLeft += ResolveIconSize() + IconTextGap;
+                }
                 double textRight = paddedRow.Right - chevronReserved;
                 if (_hasAnyShortcut)
                 {
@@ -1020,6 +1143,25 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource
         {
             _vBar.Render(context);
         }
+    }
+
+    bool IVisualTreeHost.VisitChildren(Func<Element, bool> visitor)
+    {
+        foreach (var icon in _materializedIcons.Values)
+        {
+            if (!visitor(icon))
+            {
+                return false;
+            }
+        }
+
+        return visitor(_vBar);
+    }
+
+    protected override void OnDispose()
+    {
+        ClearMaterializedIcons();
+        base.OnDispose();
     }
 
     private static TextFormat CreateMenuTextFormat(

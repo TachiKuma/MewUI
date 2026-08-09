@@ -4,8 +4,6 @@ using Aprillz.MewUI.Input;
 
 namespace MewUI.Test.Markup;
 
-#pragma warning disable CS0618 // Legacy fluent API remains covered for compatibility.
-
 [TestClass]
 public sealed class FluentExtensionCoverageTests
 {
@@ -145,6 +143,29 @@ public sealed class FluentExtensionCoverageTests
         _ = new DatePicker().BindSelectedDate(source, value => new DateTime(2000, 1, value), value => value?.Day ?? 1);
         _ = new ProgressRing().BindIsActive(source, value => value > 0);
     }
-}
 
-#pragma warning restore CS0618
+    [TestMethod]
+    public void CommandExtensions_SetAndBindSemanticCommands()
+    {
+        var first = new Command("test.first", "First");
+        var second = new Command("test.second", "Second");
+        var icon = new IconTemplate(size => new Border().Size(size));
+        var source = new ObservableValue<Command?>(first);
+
+        var button = new Button().BindCommand(source);
+        var item = new MenuItem().Command(first).Icon(icon);
+        var menu = new Menu().Item(first).Item("Second label", second);
+        var menuBar = new MenuBar().Item(first).Item("Second label", second);
+
+        Assert.AreSame(first, button.Command);
+        source.Value = second;
+        Assert.AreSame(second, button.Command);
+        Assert.AreSame(first, item.Command);
+        Assert.AreSame(icon, item.Icon);
+        Assert.AreEqual("First", item.GetParsedText().displayText);
+        Assert.AreSame(first, ((MenuItem)menu.Items[0]).Command);
+        Assert.AreSame(second, ((MenuItem)menu.Items[1]).Command);
+        Assert.AreSame(first, ((MenuItem)menuBar.Items[0]).Command);
+        Assert.AreSame(second, ((MenuItem)menuBar.Items[1]).Command);
+    }
+}

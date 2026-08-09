@@ -43,7 +43,9 @@ public sealed record class ThemeMetrics
         ScrollBarMinThumbLength = 14,
         ScrollWheelStep = 50,
         ScrollBarSmallChange = 24,
-        ScrollBarLargeChange = 120
+        ScrollBarLargeChange = 120,
+        ContextMenuIconSize = 16,
+        ToolBarIconSize = 24
     };
 
     /// <summary>
@@ -99,7 +101,6 @@ public sealed record class ThemeMetrics
     /// <summary>
     /// Gets the default large font size (in DIPs).
     /// </summary>
-    /// </summary>
     public required double FontSizeLarge { get; init; }
 
     /// <summary>
@@ -136,4 +137,14 @@ public sealed record class ThemeMetrics
     /// Gets the large-change amount used by scroll bars (in DIPs).
     /// </summary>
     public required double ScrollBarLargeChange { get; init; }
+
+    /// <summary>
+    /// Gets the command icon size used by context menus and menu-bar dropdowns (in DIPs).
+    /// </summary>
+    public double ContextMenuIconSize { get; init; } = 16;
+
+    /// <summary>
+    /// Gets the default command icon size reserved for toolbar presenters (in DIPs).
+    /// </summary>
+    public double ToolBarIconSize { get; init; } = 24;
 }

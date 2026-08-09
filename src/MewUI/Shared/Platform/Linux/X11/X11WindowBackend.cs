@@ -1690,7 +1690,6 @@ internal sealed class X11WindowBackend : IWindowBackend
                 WindowInputRouter.KeyDown(Window, args);
             }
 
-            Window.ProcessKeyBindings(args);
             Window.ProcessAccessKeyDown(args);
 
             if (!args.Handled && args.Key == Key.Tab)

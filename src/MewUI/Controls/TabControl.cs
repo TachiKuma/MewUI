@@ -861,6 +861,8 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
         }
 
         var menu = new ContextMenu();
+        var commandScope = new CommandScope();
+        menu.SetCommandTarget(CommandTarget.From(commandScope));
         for (int i = 0; i < _tabs.Count && i < _headers.Count; i++)
         {
             if (!_hiddenHeaders.Contains(_headers[i]))
@@ -870,10 +872,9 @@ public sealed class TabControl : Control, ISelector, IIndexedSelector, ILogicalT
 
             int index = i;
             var tab = _tabs[i];
-            menu.AddItem(
-                GetOverflowMenuText(tab, i),
-                () => CommitSelection(index),
-                tab.IsEnabled);
+            var command = new Command($"tab.select.{index}", GetOverflowMenuText(tab, i));
+            commandScope.Bind(command, () => CommitSelection(index), () => tab.IsEnabled);
+            menu.AddItem(command);
         }
 
         var buttonBounds = _overflowButton.Bounds;
