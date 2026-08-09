@@ -385,6 +385,14 @@ internal sealed class PopupManager
         // focus/close side effects that re-enter this manager, and a stale index would strand RemoveAt.
         var entry = _popups[index];
         _popups.RemoveAt(index);
+
+        // A Popup learns it closed from its own detach, which carries no reason; hand it the reason
+        // first. The owner notification below cannot do this - the popup element is not the owner.
+        if (entry.Element is Popup popup)
+        {
+            popup.NotifyClosing(kind);
+        }
+
         entry.Host?.Detach(entry);
 
         if (entry.Owner is IPopupOwner owner)

@@ -4922,6 +4922,62 @@ public static class ControlExtensions
 
     #endregion
 
+    #region Popup
+
+    /// <summary>
+    /// Sets the element shown in the popup surface.
+    /// </summary>
+    /// <typeparam name="T">Popup type.</typeparam>
+    /// <param name="popup">Target popup.</param>
+    /// <param name="content">Content element.</param>
+    /// <returns>The popup for chaining.</returns>
+    public static T Content<T>(this T popup, UIElement content) where T : Popup
+    {
+        popup.Content = content;
+        return popup;
+    }
+
+    /// <summary>
+    /// Sets whether the popup survives an outside press and a focus change.
+    /// </summary>
+    /// <typeparam name="T">Popup type.</typeparam>
+    /// <param name="popup">Target popup.</param>
+    /// <param name="staysOpen">Whether the popup stays open.</param>
+    /// <returns>The popup for chaining.</returns>
+    public static T StaysOpen<T>(this T popup, bool staysOpen = true) where T : Popup
+    {
+        popup.StaysOpen = staysOpen;
+        return popup;
+    }
+
+    /// <summary>
+    /// Adds a handler raised after the popup opens.
+    /// </summary>
+    /// <typeparam name="T">Popup type.</typeparam>
+    /// <param name="popup">Target popup.</param>
+    /// <param name="handler">Event handler.</param>
+    /// <returns>The popup for chaining.</returns>
+    public static T OnOpened<T>(this T popup, EventHandler handler) where T : Popup
+    {
+        popup.Opened += handler;
+        return popup;
+    }
+
+    /// <summary>
+    /// Adds a handler raised after the popup closes.
+    /// </summary>
+    /// <typeparam name="T">Popup type.</typeparam>
+    /// <param name="popup">Target popup.</param>
+    /// <param name="handler">Event handler.</param>
+    /// <returns>The popup for chaining.</returns>
+    public static T OnClosed<T>(this T popup, EventHandler<PopupClosedEventArgs> handler) where T : Popup
+    {
+        popup.Closed += handler;
+        return popup;
+    }
+
+    #endregion
+
     #region Calendar
 
     /// <summary>
