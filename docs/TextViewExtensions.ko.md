@@ -1,19 +1,47 @@
 # 텍스트 뷰 확장
 
-`MultiLineTextBox`와 `SyntaxViewer`는 컨트롤을 상속하거나 렌더링 코드를 수정하지 않고도 텍스트 표시를 확장할 수 있습니다. 검색 결과에 배경색을 칠하고, 오류 구간에 물결선을 긋고, 공백 문자를 기호로 바꿔 보여주고, 특정 줄을 접어서 숨기는 기능을 확장 객체를 등록하는 것만으로 추가합니다. MewvalonEdit 확장의 `TextEditor`도 같은 파이프라인을 사용하며 `editor.TextArea.TextView.Extensions`로 등록합니다.
+MewUI [텍스트 엔진](TextEngine.ko.md)은 문서 레이아웃과 선택적인 뷰 동작을 분리합니다. `MultiLineTextBox`, `SyntaxViewer`, MewvalonEdit은 같은 `TextViewExtensionPipeline`을 노출하므로 컨트롤을 상속하지 않고 syntax coloring, folding, generated marker, projected text, 사용자 정의 drawing layer를 추가할 수 있습니다.
+
+이 문서는 확장 API를 설명합니다. 레이아웃, 가상화, 캐시, 백엔드 동작은 [텍스트 엔진](TextEngine.ko.md)을 참고하십시오.
+
+## 확장 등록
+
+코어 텍스트 호스트는 파이프라인을 직접 노출합니다.
+
+```csharp
+var viewer = new SyntaxViewer();
+viewer.Extensions.Classifiers.Add(classifier);
+viewer.Extensions.Projections.Add(projection);
+viewer.InvalidateTextView();
+```
+
+`MultiLineTextBox.Extensions`와 `SyntaxViewer.Extensions`는 public입니다. MewvalonEdit은 `editor.TextArea.TextView.Extensions`를 통해 같은 파이프라인을 노출합니다.
+
+변경하려는 결과에 따라 확장 지점을 선택합니다.
+
+| 목적 | 계약 | 등록 위치 |
+| --- | --- | --- |
+| 범위의 전경색, 배경색, 밑줄, 취소선 | `ITextClassifier` | `Extensions.Classifiers` |
+| font, 크기, 굵기처럼 geometry에 영향을 주는 스타일 | `ITextLineTransformer` | `Extensions.Transformers` |
+| 문서 범위를 inline object로 치환 | `ITextElementGenerator` | `Extensions.ElementGenerators` |
+| 표시 텍스트를 바꾸고 offset을 매핑 | `ITextProjection` | `Extensions.Projections` |
+| 완전한 logical line을 visual surface에서 제외 | `ITextLineCollapser` | `Extensions.LineCollapsers` |
+| 뷰 stack에 임의의 도형이나 텍스트 그리기 | `ITextViewLayer` | 호스트의 `InsertLayer` |
+
+paint만 바꿀 때는 classifier를 사용합니다. glyph geometry나 wrapping이 바뀔 때만 transformer를 사용합니다. paint-only classification은 기존 layout geometry를 재사용할 수 있습니다.
 
 ## 첫 예제: 검색 하이라이트
 
-가장 흔한 확장은 "문자 범위에 색 입히기"입니다. `ITextClassifier`를 구현해 `Extensions.Classifiers`에 등록하면 됩니다.
+`ITextClassifier`는 projected display text, 그 텍스트의 logical source line, 두 좌표계를 연결하는 offset map을 받습니다. 출력하는 `TextPaintSpan` 범위는 줄 내부의 display offset입니다.
 
 ```csharp
 using Aprillz.MewUI.Text;
 
 sealed class SearchHighlighter : ITextClassifier
 {
-    private static readonly Color _matchColor = Color.FromArgb(88, 255, 214, 0);
+    private static readonly Color MatchColor = Color.FromArgb(88, 255, 214, 0);
 
-    public List<int> Matches { get; } = new();   // 문서 절대 오프셋
+    public List<int> Matches { get; } = []; // 문서 절대 오프셋
     public int QueryLength { get; set; }
 
     public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
@@ -24,13 +52,17 @@ sealed class SearchHighlighter : ITextClassifier
         foreach (int matchStart in Matches)
         {
             if (matchStart >= lineEnd) break;
-            int start = Math.Max(lineStart, matchStart);
-            int end = Math.Min(lineEnd, matchStart + QueryLength);
-            if (end > start)
+            int sourceStart = Math.Max(lineStart, matchStart) - lineStart;
+            int sourceEnd = Math.Min(lineEnd, matchStart + QueryLength) - lineStart;
+            if (sourceEnd <= sourceStart) continue;
+
+            int displayStart = context.OffsetMap.MapFromSource(sourceStart);
+            int displayEnd = context.OffsetMap.MapFromSource(sourceEnd);
+            if (displayEnd > displayStart)
             {
                 output.Add(new TextPaintSpan(
-                    new TextRange(start - lineStart, end - start),
-                    Background: _matchColor));
+                    new TextRange(displayStart, displayEnd - displayStart),
+                    Background: MatchColor));
             }
         }
     }
@@ -39,34 +71,17 @@ sealed class SearchHighlighter : ITextClassifier
 
 ```csharp
 var highlighter = new SearchHighlighter();
-editor.Extensions.Classifiers.Add(highlighter);
+viewer.Extensions.Classifiers.Add(highlighter);
 
-// 검색어가 바뀌면: Matches를 다시 채우고 다시 그리게 합니다.
-highlighter.Matches.Clear();
-// ... 문서 텍스트에서 매치 오프셋 수집 ...
-editor.InvalidateTextView();
+// 검색어나 match 목록이 바뀐 뒤 보이는 줄을 다시 구성합니다.
+viewer.InvalidateTextView();
 ```
 
-`Classify`는 화면에 보이는 줄에 대해서만 호출되므로, 매치 검색 같은 무거운 계산은 미리 해 두고 콜백에서는 결과 조회만 합니다. 세브론 이동까지 포함한 동작하는 예제가 갤러리 Inputs 페이지의 "Find Highlight" 카드에 있습니다 (`samples/MewUI.Gallery/GalleryView.Input.cs`).
+문서 전체 parsing이나 match 검색은 `Classify` 밖에서 수행하십시오. callback은 필요한 줄을 구성하는 중에 실행되므로 해당 줄과 겹치는 결과를 조회하는 일만 해야 합니다.
 
-## 어떤 확장을 쓰나
+## Paint span
 
-하고 싶은 일에 따라 등록하는 목록이 다릅니다. 모두 `Extensions` (`TextViewExtensionPipeline`) 아래에 있습니다.
-
-| 하고 싶은 일 | 확장 | 등록 목록 |
-| --- | --- | --- |
-| 문자 범위에 전경색/배경색/밑줄 | `ITextClassifier` | `Classifiers` |
-| 물결선, 괄호 강조 등 임의 드로잉 | `ITextAdornmentProvider` | `AdornmentProviders` |
-| 표시 텍스트 치환 (공백 기호, 접기 자리표시자) | `ITextProjection` | `Projections` |
-| 줄 안에 인라인 요소 삽입 | `ITextElementGenerator` | `ElementGenerators` |
-| 굵기/크기처럼 글자 배치가 변하는 스타일 | `ITextLineTransformer` | `Transformers` |
-| 특정 줄을 표시에서 제외 | `ITextLineCollapser` | `LineCollapsers` |
-
-색만 바꾸는 데는 분류기를 쓰고, 변환기는 글자 폭과 줄바꿈에 영향을 주는 변경에만 씁니다. 분류기의 색 변경은 레이아웃을 다시 계산하지 않습니다.
-
-## 색과 장식: TextPaintSpan
-
-분류기가 출력하는 `TextPaintSpan`은 줄 상대 오프셋의 범위와 스타일 묶음입니다.
+`TextPaintSpan`은 glyph layout을 변경하지 않고 paint를 바꿉니다.
 
 ```csharp
 public readonly record struct TextPaintSpan(
@@ -76,21 +91,25 @@ public readonly record struct TextPaintSpan(
     TextDecoration Decoration = TextDecoration.None);
 ```
 
-스팬이 겹치면 나중에 등록한 분류기가 이깁니다. 배경은 등록 순서대로 그려져 뒤가 위에 오고, 전경색도 나중 스팬이 덮어씁니다. 내장 하이라이팅과 함께 쓸 때의 우선순위도 등록 순서로 조절합니다.
+범위는 projected display text를 기준으로 합니다. classifier는 등록 순서대로 실행됩니다. span이 겹치면 나중 전경색이 우선하며, 배경과 decoration은 파이프라인 순서로 그려집니다.
 
-## 임의 드로잉: adornment
+## Geometry transform
 
-스팬으로 표현할 수 없는 모양(물결선, 테두리, 연결선)은 `ITextAdornmentProvider`가 줄마다 `ITextAdornment`를 내놓는 방식으로 그립니다. `Draw`는 줄 레이아웃(`TextLineLayout`)을 받으므로 문자 범위의 실제 위치를 조회해 정확한 좌표에 그릴 수 있습니다.
+`ITextLineTransformer`는 projection이 display text를 만든 뒤 `GeometryStyleRun`과 `InlineRun`을 추가할 수 있습니다. context에는 default style과 현재 `ITextOffsetMap`이 포함됩니다.
 
-`Layer`가 그리기 순서를 정합니다. 한 줄은 `Background` 장식, glyph와 페인트 스팬, `Text` 장식, `Foreground` 장식 순으로 그려집니다.
+더 큰 font, bold text, inline object처럼 측정 결과에 영향을 주는 변경에 transformer를 사용합니다. 전경색만 바꾸는 syntax color에 사용하면 불필요하게 geometry가 무효화됩니다.
 
-- `TextAdornmentLayer.Background`: glyph 아래. 블록 배경, 현재 줄 강조
-- `TextAdornmentLayer.Text`: glyph 바로 위
-- `TextAdornmentLayer.Foreground`: 최상단. 물결선, 취소선류 장식
+## Generated element
 
-## 표시 텍스트 치환: projection
+`ITextElementGenerator`는 줄 텍스트를 읽기 전에 문서 오프셋을 탐색합니다. 문서 범위를 `IInlineTextObject`로 치환하거나, 텍스트는 그대로 두고 범위만 장식하거나, 여러 logical line에 걸친 범위를 선택할 수 있습니다.
 
-`ITextProjection`은 줄의 표시 텍스트 자체를 바꿉니다. 탭/공백을 `·` 같은 기호로 치환하거나, 접힌 코드 구간을 `...` 자리표시자로 줄이는 데 씁니다.
+시작 logical line을 넘어가는 element는 하나의 visual line이 전체 source range를 덮게 합니다. 이 visual line에 포함된 뒤쪽 logical line은 `ITextLineCollapser`로 함께 숨겨야 합니다. 그렇지 않으면 독립된 줄로 다시 배치됩니다.
+
+generated object가 줄바꿈 가능한 공백을 대신한다면 `GeneratedTextElement.BreaksLine`을 설정합니다. 공백이 object로 바뀐 뒤에는 일반 line breaker가 source 문자만 보고 break opportunity를 알 수 없습니다.
+
+## Projection과 offset map
+
+`ITextProjection`은 classification과 geometry transform 전에 표시 텍스트를 바꿉니다.
 
 ```csharp
 public interface ITextProjection
@@ -98,22 +117,73 @@ public interface ITextProjection
     ProjectedText Project(in TextProjectionContext context);
 }
 
-public readonly record struct ProjectedText(ReadOnlyMemory<char> Text, ITextOffsetMap OffsetMap);
+public readonly record struct ProjectedText(
+    ReadOnlyMemory<char> Text,
+    ITextOffsetMap OffsetMap);
 ```
 
-projection은 반드시 `ITextOffsetMap`을 함께 반환해야 합니다. 표시 텍스트와 문서 텍스트의 오프셋을 서로 변환하는 맵으로, 길이가 변하지 않는 1:1 치환이면 `IdentityTextOffsetMap.Instance`를 그대로 쓰면 됩니다.
+모든 projection은 offset map을 반환해야 합니다. `MapFromSource`는 source-line offset을 display offset으로 바꾸고, `MapToSource`는 display offset을 source로 되돌립니다. 오프셋이 변하지 않는 일대일 치환에는 `IdentityTextOffsetMap.Instance`를 반환합니다.
 
-치환으로 길이가 변하면 표시 오프셋과 문서 오프셋이 어긋나므로, 문서 오프셋 기반 데이터(검색 매치, 진단 범위)를 그리는 분류기/장식은 컨텍스트로 전달되는 `OffsetMap`의 `MapFromSource`(문서에서 표시로)로 범위를 변환한 뒤 출력해야 합니다. 이렇게 하면 접기 같은 projection과 하이라이트가 올바르게 공존합니다.
+여러 projection은 등록 순서대로 실행되며 offset map도 합성됩니다. classifier와 transformer는 합성된 map을 받습니다. hit test와 caret geometry 역시 이 map을 사용하므로 표시 문자열 길이가 달라져도 문서 오프셋을 반환합니다.
 
-줄 전체를 숨기려면 projection이 아니라 `ITextLineCollapser`를 씁니다. 접기 기능은 보통 첫 줄을 자리표시자로 치환하는 projection과 후속 줄을 숨기는 collapser의 조합입니다.
+## 줄 접기
 
-## 언제 다시 그려지나
+`ITextLineCollapser.IsCollapsed`는 완전한 logical line을 visual surface에서 제외합니다. 일반적인 folding은 세 부분을 조합합니다.
 
-확장 콜백은 화면에 보이는 줄이 레이아웃될 때만 실행됩니다. 스크롤로 새 줄이 보이거나, 문서가 바뀌거나, `InvalidateTextView()`를 호출했을 때입니다. 이 실행 모델에서 두 가지 규칙이 나옵니다.
+1. element generator가 접을 문서 범위와 선택적인 placeholder object를 결정합니다.
+2. projection이나 inline object가 보이는 placeholder를 제공합니다.
+3. line collapser가 첫 visual line에 포함된 뒤쪽 logical line을 숨깁니다.
 
-- 문서가 바뀌면 뷰는 알아서 갱신됩니다. 확장이 캐시(파싱 결과, 매치 목록)를 들고 있다면 그 캐시만 문서 변경에 맞춰 갱신하면 됩니다. 두 컨트롤 모두 내용 변경과 문서 교체를 통지하는 `DocumentChanged` 이벤트를 제공하므로 캐시 갱신 시점으로 쓰면 됩니다.
-- 확장 자신의 상태가 바뀌었을 때(검색어 변경, 하이라이팅 규칙 교체, 등록 추가/제거)는 뷰가 알 수 없으므로 `InvalidateTextView()`를 직접 호출합니다.
+## 뷰 레이어
 
-콜백 안에서 문서 전체를 파싱하지 마십시오. 파싱은 문서 변경 시점에 한 번 해서 결과를 보관하고, 콜백은 줄과 교차하는 부분을 조회만 하는 구조가 맞습니다.
+`ITextViewLayer`는 뷰의 drawing stack에 임의의 내용을 그립니다.
 
-`MultiLineTextBox.Document`에 새 문서를 할당해도 확장 등록과 뷰는 유지되므로(caret, 선택, 스크롤, undo는 초기화) 문서 교체 시 확장을 다시 등록할 필요가 없습니다.
+```csharp
+sealed class GuideLayer : ITextViewLayer
+{
+    public void Draw(ITextRenderContext context, Rect viewportBounds)
+    {
+        var x = viewportBounds.X + 80;
+        context.Graphics.DrawLine(
+            new Point(x, viewportBounds.Y),
+            new Point(x, viewportBounds.Bottom),
+            Color.Gray,
+            1);
+    }
+}
+
+viewer.InsertLayer(
+    new GuideLayer(),
+    TextViewLayerAnchor.Text,
+    TextLayerPosition.Above);
+```
+
+기본 anchor는 `Background`, `Selection`, `Text`, `Caret`입니다. 레이어를 anchor의 `Below`나 `Above`에 삽입하거나, `Replace`로 해당 기본 drawing pass를 넘겨받을 수 있습니다.
+
+호스트는 레이어 결과를 캐시할 수 있으므로 `Draw`가 매 프레임 호출된다고 가정하면 안 됩니다. 레이어의 모양만 바뀌었다면 line layout을 다시 만들지 말고 `InvalidateLayer(anchor)`를 호출합니다.
+
+## 파이프라인 순서
+
+줄을 materialize할 때 뷰는 다음 순서로 처리합니다.
+
+1. collapsed line을 평가하고 문서 오프셋에서 element generator를 탐색합니다.
+2. 필요한 source slice를 읽습니다.
+3. projection을 등록 순서대로 적용하고 offset map을 합성합니다.
+4. projected text에 classifier를 실행합니다.
+5. generated object를 inline run으로 변환합니다.
+6. geometry transformer를 실행합니다.
+7. text layout을 생성하거나 재사용합니다.
+8. layer stack을 그립니다.
+
+줄 callback은 materialized line에 대해서만 실행됩니다. 매우 긴 logical line은 viewport slice로 전달될 수 있으므로, 확장 구현은 완전한 문서 줄을 받았다고 가정하지 말고 context의 offset과 length를 따라야 합니다.
+
+## 무효화
+
+변경 내용에 맞는 가장 좁은 무효화를 사용합니다.
+
+- 문서 편집은 영향을 받은 view state를 자동으로 무효화합니다.
+- 알려진 문서 범위의 semantic cache가 바뀌었다면 `InvalidateTextRange(offset, length)`를 호출합니다.
+- 등록 목록이나 전역 확장 상태가 바뀌었다면 `InvalidateTextView()`를 호출합니다. pipeline revision을 증가시키고 스크롤 위치를 초기화하지 않은 채 필요한 줄을 다시 구성합니다.
+- drawing만 바뀌고 line geometry는 그대로라면 `InvalidateLayer(anchor)`를 호출합니다.
+
+callback 안에서 materialized-line collection을 변경하지 마십시오. 줄 구성 중 요청된 범위 무효화는 현재 construction pass가 끝난 뒤 실행되도록 연기됩니다.

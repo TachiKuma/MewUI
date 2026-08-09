@@ -1,19 +1,47 @@
 # Text View Extensions
 
-`MultiLineTextBox` and `SyntaxViewer` can be extended without subclassing the control or touching its rendering code. Painting search results, drawing squiggles under error ranges, showing whitespace characters as visible marks, and folding lines away are all added by registering extension objects. The `TextEditor` in the MewvalonEdit extension uses the same pipeline; register through `editor.TextArea.TextView.Extensions`.
+The MewUI [text engine](TextEngine.md) separates document layout from optional view behavior. `MultiLineTextBox`, `SyntaxViewer`, and MewvalonEdit expose the same `TextViewExtensionPipeline`, so syntax coloring, folding, generated markers, projected text, and custom drawing layers do not require a control subclass.
+
+This document covers the extension API. Layout, virtualization, caching, and backend behavior are described in [Text Engine](TextEngine.md).
+
+## Registering extensions
+
+Core text hosts expose the pipeline directly:
+
+```csharp
+var viewer = new SyntaxViewer();
+viewer.Extensions.Classifiers.Add(classifier);
+viewer.Extensions.Projections.Add(projection);
+viewer.InvalidateTextView();
+```
+
+`MultiLineTextBox.Extensions` and `SyntaxViewer.Extensions` are public. MewvalonEdit exposes the same pipeline through `editor.TextArea.TextView.Extensions`.
+
+Choose the extension point by the kind of output it changes:
+
+| Goal | Contract | Registration |
+| --- | --- | --- |
+| Foreground, background, underline, or strike over a range | `ITextClassifier` | `Extensions.Classifiers` |
+| Font, size, weight, or another geometry-affecting style | `ITextLineTransformer` | `Extensions.Transformers` |
+| Replace a document range with an inline object | `ITextElementGenerator` | `Extensions.ElementGenerators` |
+| Replace the displayed text and map its offsets | `ITextProjection` | `Extensions.Projections` |
+| Remove complete logical lines from the visual surface | `ITextLineCollapser` | `Extensions.LineCollapsers` |
+| Draw arbitrary shapes or text in the view stack | `ITextViewLayer` | `InsertLayer` on the host |
+
+Use a classifier for paint-only changes. Use a transformer only when glyph geometry or wrapping must change. Paint-only classification can reuse the existing layout geometry.
 
 ## First example: search highlighting
 
-The most common extension is painting a color over a character range. Implement `ITextClassifier` and add it to `Extensions.Classifiers`.
+An `ITextClassifier` receives the projected display text, its logical source line, and the offset map between them. It outputs line-relative `TextPaintSpan` ranges.
 
 ```csharp
 using Aprillz.MewUI.Text;
 
 sealed class SearchHighlighter : ITextClassifier
 {
-    private static readonly Color _matchColor = Color.FromArgb(88, 255, 214, 0);
+    private static readonly Color MatchColor = Color.FromArgb(88, 255, 214, 0);
 
-    public List<int> Matches { get; } = new();   // absolute document offsets
+    public List<int> Matches { get; } = []; // absolute document offsets
     public int QueryLength { get; set; }
 
     public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
@@ -24,13 +52,17 @@ sealed class SearchHighlighter : ITextClassifier
         foreach (int matchStart in Matches)
         {
             if (matchStart >= lineEnd) break;
-            int start = Math.Max(lineStart, matchStart);
-            int end = Math.Min(lineEnd, matchStart + QueryLength);
-            if (end > start)
+            int sourceStart = Math.Max(lineStart, matchStart) - lineStart;
+            int sourceEnd = Math.Min(lineEnd, matchStart + QueryLength) - lineStart;
+            if (sourceEnd <= sourceStart) continue;
+
+            int displayStart = context.OffsetMap.MapFromSource(sourceStart);
+            int displayEnd = context.OffsetMap.MapFromSource(sourceEnd);
+            if (displayEnd > displayStart)
             {
                 output.Add(new TextPaintSpan(
-                    new TextRange(start - lineStart, end - start),
-                    Background: _matchColor));
+                    new TextRange(displayStart, displayEnd - displayStart),
+                    Background: MatchColor));
             }
         }
     }
@@ -39,34 +71,17 @@ sealed class SearchHighlighter : ITextClassifier
 
 ```csharp
 var highlighter = new SearchHighlighter();
-editor.Extensions.Classifiers.Add(highlighter);
+viewer.Extensions.Classifiers.Add(highlighter);
 
-// When the query changes: refill Matches and request a redraw.
-highlighter.Matches.Clear();
-// ... collect match offsets from the document text ...
-editor.InvalidateTextView();
+// Rebuild the visible lines after the query or match list changes.
+viewer.InvalidateTextView();
 ```
 
-`Classify` runs only for lines that are visible on screen, so keep heavy work such as match scanning precomputed and make the callback a lookup. A working example including chevron navigation is the "Find Highlight" card on the gallery Inputs page (`samples/MewUI.Gallery/GalleryView.Input.cs`).
+Keep document-wide work such as parsing and match scanning outside `Classify`. The callback runs while a required line is being built and should only look up results intersecting that line.
 
-## Choosing an extension
+## Paint spans
 
-The list to register in depends on what you want to do. All of them live under `Extensions` (`TextViewExtensionPipeline`).
-
-| Goal | Extension | List |
-| --- | --- | --- |
-| Foreground/background/underline over a character range | `ITextClassifier` | `Classifiers` |
-| Arbitrary drawing such as squiggles or bracket highlights | `ITextAdornmentProvider` | `AdornmentProviders` |
-| Replacing display text (whitespace marks, folding placeholders) | `ITextProjection` | `Projections` |
-| Inserting inline elements into a line | `ITextElementGenerator` | `ElementGenerators` |
-| Styles that change glyph layout, such as weight or size | `ITextLineTransformer` | `Transformers` |
-| Hiding whole lines from display | `ITextLineCollapser` | `LineCollapsers` |
-
-Use a classifier when only colors change and a transformer only for changes that affect glyph widths and wrapping. Classifier color changes do not re-run layout.
-
-## Colors and decorations: TextPaintSpan
-
-A classifier outputs `TextPaintSpan` values, each a line-relative range with a style bundle.
+`TextPaintSpan` changes paint without changing the glyph layout:
 
 ```csharp
 public readonly record struct TextPaintSpan(
@@ -76,21 +91,25 @@ public readonly record struct TextPaintSpan(
     TextDecoration Decoration = TextDecoration.None);
 ```
 
-Where spans overlap, the classifier registered later wins. Backgrounds are painted in registration order so later ones sit on top, and later foreground colors override earlier ones. Registration order is also how you prioritize against built-in highlighting.
+Ranges index the projected display text. Classifiers run in registration order. Later foreground values win where spans overlap, while backgrounds and decorations are painted in pipeline order.
 
-## Arbitrary drawing: adornments
+## Geometry transforms
 
-Shapes that spans cannot express (squiggles, borders, connectors) are drawn by an `ITextAdornmentProvider` that produces `ITextAdornment` objects per line. `Draw` receives the line layout (`TextLineLayout`), so it can query the actual geometry of a character range and draw at exact coordinates.
+`ITextLineTransformer` can add `GeometryStyleRun` and `InlineRun` values after projections have produced the display text. Its context includes the default style and the current `ITextOffsetMap`.
 
-`Layer` decides the drawing order. A line is drawn as `Background` adornments, glyphs with paint spans, `Text` adornments, then `Foreground` adornments.
+Use a transformer for changes that affect measurement, such as a larger font, bold text, or an inline object. Do not use it for a foreground-only syntax color; that would invalidate geometry unnecessarily.
 
-- `TextAdornmentLayer.Background`: below glyphs. Block backgrounds, current-line highlight
-- `TextAdornmentLayer.Text`: directly above glyphs
-- `TextAdornmentLayer.Foreground`: topmost. Squiggles and strikethrough-like decorations
+## Generated elements
 
-## Replacing display text: projections
+`ITextElementGenerator` scans document offsets before the line text is read. It can replace a document range with an `IInlineTextObject`, leave the text in place while decorating the range, or reach across multiple logical lines.
 
-An `ITextProjection` changes the display text of a line itself. Use it to substitute tabs/spaces with marks such as `·`, or to shorten a folded code region into a `...` placeholder.
+An element that reaches past its starting logical line makes the visual line cover that whole source range. The swallowed logical lines must also be hidden by an `ITextLineCollapser`; otherwise they would be laid out again as independent lines.
+
+Set `GeneratedTextElement.BreaksLine` when the generated object stands in for whitespace after which wrapping is allowed. Once whitespace becomes an object, the ordinary line breaker can no longer infer that opportunity from the source character.
+
+## Projections and offset maps
+
+`ITextProjection` replaces the displayed text before classification and geometry transformation:
 
 ```csharp
 public interface ITextProjection
@@ -98,22 +117,73 @@ public interface ITextProjection
     ProjectedText Project(in TextProjectionContext context);
 }
 
-public readonly record struct ProjectedText(ReadOnlyMemory<char> Text, ITextOffsetMap OffsetMap);
+public readonly record struct ProjectedText(
+    ReadOnlyMemory<char> Text,
+    ITextOffsetMap OffsetMap);
 ```
 
-A projection must return an `ITextOffsetMap` along with the text. The map converts between display offsets and document offsets; for 1:1 substitutions that keep the length, return `IdentityTextOffsetMap.Instance` as is.
+Every projection must return an offset map. `MapFromSource` converts a source-line offset to a display offset; `MapToSource` converts a display offset back to the source. Return `IdentityTextOffsetMap.Instance` for a one-to-one substitution whose offsets do not change.
 
-When a substitution changes the length, display offsets and document offsets diverge. Classifiers and adornments that draw document-offset data (search matches, diagnostic ranges) must convert their ranges with `MapFromSource` (document to display) on the `OffsetMap` passed in their context before producing output. This keeps highlights correct while projections such as folding are active.
+Multiple projections run in registration order and their maps are composed. Classifiers and transformers receive the composed map. Hit testing and caret geometry use it to return document offsets even when displayed text has a different length.
 
-To hide whole lines, use `ITextLineCollapser` rather than a projection. A folding feature is typically the combination of a projection that replaces the first line with a placeholder and a collapser that hides the following lines.
+## Collapsing lines
 
-## When things are redrawn
+`ITextLineCollapser.IsCollapsed` removes a complete logical line from the visual surface. Folding normally combines three pieces:
 
-Extension callbacks run only when a visible line is laid out: when scrolling reveals new lines, when the document changes, or when `InvalidateTextView()` is called. Two rules follow from this execution model.
+1. an element generator chooses the folded document range and optional placeholder object;
+2. a projection or inline object supplies the visible placeholder;
+3. a line collapser hides the logical lines covered by the first visual line.
 
-- When the document changes, the view refreshes itself. If your extension holds a cache (parse results, match lists), update only that cache on document changes. Both controls provide a `DocumentChanged` event that reports content changes and document replacement, which is the right trigger for cache updates.
-- When the extension's own state changes (a new query, replaced highlighting rules, registrations added or removed), the view cannot know, so call `InvalidateTextView()` yourself.
+## View layers
 
-Do not parse the whole document inside a callback. Parse once when the document changes, keep the result, and make the callback a lookup of the part intersecting the line.
+An `ITextViewLayer` paints arbitrary content in the view's draw stack:
 
-Assigning a new document to `MultiLineTextBox.Document` keeps the extension registrations and the view (caret, selection, scroll, and undo reset), so there is no need to re-register extensions on document replacement.
+```csharp
+sealed class GuideLayer : ITextViewLayer
+{
+    public void Draw(ITextRenderContext context, Rect viewportBounds)
+    {
+        var x = viewportBounds.X + 80;
+        context.Graphics.DrawLine(
+            new Point(x, viewportBounds.Y),
+            new Point(x, viewportBounds.Bottom),
+            Color.Gray,
+            1);
+    }
+}
+
+viewer.InsertLayer(
+    new GuideLayer(),
+    TextViewLayerAnchor.Text,
+    TextLayerPosition.Above);
+```
+
+The built-in anchors are `Background`, `Selection`, `Text`, and `Caret`. A layer can be inserted `Below` or `Above` an anchor, or use `Replace` to take ownership of that built-in pass.
+
+Layers may be cached by the host and are not guaranteed to run on every frame. When only layer appearance changed, call `InvalidateLayer(anchor)` instead of rebuilding line layouts.
+
+## Pipeline order
+
+For a line that must be materialized, the view performs these operations:
+
+1. evaluate collapsed lines and scan element generators over document offsets;
+2. read the required source slice;
+3. apply projections in registration order and compose their offset maps;
+4. run classifiers over the projected text;
+5. convert generated objects to inline runs;
+6. run geometry transformers;
+7. create or reuse the text layout;
+8. draw the layer stack.
+
+Only materialized lines execute the line callbacks. Long logical lines may be supplied as viewport slices, so extensions must honor the offsets and lengths in their contexts rather than assume that they received a complete document line.
+
+## Invalidation
+
+Use the narrowest invalidation that matches the change:
+
+- Document edits invalidate the affected view state automatically.
+- Call `InvalidateTextRange(offset, length)` when cached semantic data changed for a known document range.
+- Call `InvalidateTextView()` after changing registrations or global extension state. It increments the pipeline revision and rebuilds the required lines without resetting the reader's scroll position.
+- Call `InvalidateLayer(anchor)` when drawing changed but line geometry did not.
+
+Do not mutate the materialized-line collection from inside a callback. A range invalidation requested while lines are being built is deferred and applied after the current construction pass.
