@@ -33,6 +33,13 @@ public sealed class TextAreaDefaultInputHandler : TextAreaInputHandler
             () => textArea.Document.UndoStack.Redo(),
             () => textArea.Document.UndoStack.CanRedo));
 
+        // Insert switches between inserting and overwriting, and only when the options allow it: the
+        // key is a common accident, so the original leaves the switch off until a host asks for it.
+        Editing.AddBinding(new TextAreaKeyBinding(
+            new KeyGesture(Key.Insert),
+            () => textArea.OverstrikeMode = !textArea.OverstrikeMode,
+            () => textArea.Options.AllowToggleOverstrikeMode));
+
         // Rectangle editing: the surface holds an empty selection while a rectangle is active, so
         // these claim the keys ahead of it and drive the rectangle instead. With no rectangle the
         // CanExecute declines and the surface behaves as always.

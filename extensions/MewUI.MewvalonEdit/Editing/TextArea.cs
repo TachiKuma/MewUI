@@ -271,8 +271,30 @@ public sealed class TextArea : MewObject, ITextEditorComponent
 
     public void ReplaceSelection(string? text) => _editor.Surface.ReplaceSelection(text);
 
-    /// <summary>Inserts text as if typed, replacing the selection.</summary>
-    public void PerformTextInput(string text) => _editor.InsertTextInput(text ?? string.Empty);
+    /// <summary>
+    /// Inserts text as if typed, replacing the selection. In overstrike mode a character typed over
+    /// existing text takes the place of the one in front of the caret, which the original does by
+    /// selecting that character first; a line ending is always inserted, and so is anything typed at
+    /// the end of a line, because there is nothing there to take the place of.
+    /// </summary>
+    public void PerformTextInput(string text)
+    {
+        text ??= string.Empty;
+        if (OverstrikeMode && Selection.IsEmpty && text is not ("\n" or "\r" or "\r\n"))
+        {
+            var line = Document.GetLineByOffset(Caret.Offset);
+            if (Caret.Offset < line.EndOffset)
+            {
+                int next = TextUtilities.GetNextCaretPosition(
+                    Document, Caret.Offset, Aprillz.MewUI.Text.LogicalDirection.Forward, CaretPositioningMode.Normal);
+                if (next > Caret.Offset && next <= line.EndOffset)
+                {
+                    _editor.Select(Caret.Offset, next - Caret.Offset);
+                }
+            }
+        }
+        _editor.InsertTextInput(text);
+    }
 
     /// <summary>Collapses the selection to the caret.</summary>
     public void ClearSelection() => Selection = EmptySelection;

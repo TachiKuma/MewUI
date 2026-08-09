@@ -20,6 +20,9 @@ public class TextEditorOptions : MewObject
     public static readonly MewProperty<bool> EnableRectangularSelectionProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(EnableRectangularSelection), true);
 
+    public static readonly MewProperty<bool> AllowToggleOverstrikeModeProperty =
+        MewProperty<bool>.Register<TextEditorOptions>(nameof(AllowToggleOverstrikeMode), false);
+
     public static readonly MewProperty<bool> ShowSpacesProperty =
         MewProperty<bool>.Register<TextEditorOptions>(nameof(ShowSpaces), false);
 
@@ -105,6 +108,13 @@ public class TextEditorOptions : MewObject
     {
         get => GetValue(EnableRectangularSelectionProperty);
         set => SetValue(EnableRectangularSelectionProperty, value);
+    }
+
+    /// <summary>Whether Insert switches the editor between inserting and overwriting.</summary>
+    public virtual bool AllowToggleOverstrikeMode
+    {
+        get => GetValue(AllowToggleOverstrikeModeProperty);
+        set => SetValue(AllowToggleOverstrikeModeProperty, value);
     }
 
     public virtual bool ShowSpaces
