@@ -70,7 +70,7 @@ public class TextEditor : Control, ITextEditorComponent
             CornerRadius = 0
         };
         _surface.KeyDown += OnSurfaceKeyDown;
-        _surface.KeyUp += e => TextArea!.HandleKeyUp(e);
+        _surface.KeyUp += OnSurfaceKeyUp;
         _surface.TextCommitted += OnTextCommitted;
         _surface.TextInput += OnSurfaceTextInput;
         _surface.MouseDown += OnSurfaceMouseDown;
@@ -962,6 +962,22 @@ public class TextEditor : Control, ITextEditorComponent
     }
 
     /// <summary>
+    /// Re-asks the element under the pointer with the modifiers a key press just changed, for an
+    /// element that answers differently under them. A link asked with Control is a hand, so holding
+    /// the key over one has to change the cursor without the pointer moving, and letting go of it
+    /// has to change the cursor back.
+    /// </summary>
+    private void RefreshCursorForModifiers(ModifierKeys modifiers)
+    {
+        if (_lastCursorModifiers == modifiers)
+        {
+            return;
+        }
+        _lastCursorModifiers = modifiers;
+        InvalidateCursorIfMouseWithinTextView();
+    }
+
+    /// <summary>
     /// Takes the pointer out of the way of what is being typed. It comes back the moment the
     /// pointer moves, which is where <see cref="UpdateCursor"/> takes over again.
     /// </summary>
@@ -1026,6 +1042,8 @@ public class TextEditor : Control, ITextEditorComponent
     /// </summary>
     private void OnSurfaceKeyDown(KeyEventArgs e)
     {
+        RefreshCursorForModifiers(e.Modifiers);
+
         // Ahead of everything the editor does with the key: a stacked handler exists to take the
         // keyboard away from the editor, which it cannot do after the editor has acted.
         TextArea.HandleKeyDown(e);
@@ -1052,6 +1070,12 @@ public class TextEditor : Control, ITextEditorComponent
         }
         e.Handled = true;
         _surface.ReplaceSelection(newLine);
+    }
+
+    private void OnSurfaceKeyUp(KeyEventArgs e)
+    {
+        RefreshCursorForModifiers(e.Modifiers);
+        TextArea.HandleKeyUp(e);
     }
 
     /// <summary>

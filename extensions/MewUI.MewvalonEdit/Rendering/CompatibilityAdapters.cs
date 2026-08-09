@@ -256,7 +256,7 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
         }
 
         built.RelativeTextOffset = offset - context.ScanStartOffset;
-        CurrentLine(context.ScanStartOffset).Add(built);
+        Record(context.ScanStartOffset, built);
         // Only the columns the element paints become the object; the rest of its visual text is laid
         // out normally, which is how a tab marker paints a glyph and still reaches its tab stop.
         return new GeneratedTextElement(
@@ -269,18 +269,23 @@ internal sealed class ElementGeneratorAdapter(TextEditor editor)
     private void BeginLine(int lineStart)
     {
         ResetScansIfStale();
-        _scans[lineStart] = new CachedScan(0, []);
+        _scans[lineStart] = new CachedScan(LineLength(lineStart), []);
     }
 
-    private List<VisualLineElement> CurrentLine(int lineStart)
+    private void Record(int lineStart, VisualLineElement element)
     {
         if (!_scans.TryGetValue(lineStart, out var scan))
         {
-            scan = new CachedScan(0, []);
-            _scans[lineStart] = scan;
+            scan = new CachedScan(LineLength(lineStart), []);
         }
-        return scan.Elements;
+        scan.Elements.Add(element);
+        // An element standing in for a folded range reaches past the line the scan started on, and
+        // the offset lookup has to keep covering it.
+        int end = element.RelativeTextOffset + element.DocumentLength;
+        _scans[lineStart] = scan.Length >= end ? scan : new CachedScan(end, scan.Elements);
     }
+
+    private int LineLength(int lineStart) => editor.Document.GetLineByOffset(lineStart).Length;
 
     private void WithGenerators(int lineStart, Action<VisualLineElementGenerator> action)
     {
