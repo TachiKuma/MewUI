@@ -11,7 +11,8 @@ namespace Aprillz.MewUI.Rendering;
 /// </summary>
 public abstract class GraphicsContextBase : IGraphicsContext
 {
-    public virtual ITextRenderContext Text => TextServices.GetRenderContext(this);
+    /// <summary>Frame-bound text drawing surface; one shared implementation, not a backend specialization point.</summary>
+    public ITextRenderContext Text => TextServices.GetRenderContext(this);
 
     private static readonly EnvDebugLogger _stateLogger = new("MEWUI_GRAPHICS_DEBUG", "[GraphicsContextBase]");
     

@@ -20,10 +20,10 @@ public sealed class TextViewPipelineContractTests
             new TextPaintSpan(new TextRange(4, 2), Background: Color.FromHex("#00FF00"))
         ];
 
-        Assert.AreEqual(early, LegacyTextRenderContext.GetSpanForeground(spans, 1));
-        Assert.AreEqual(late, LegacyTextRenderContext.GetSpanForeground(spans, 4));
-        Assert.AreEqual(late, LegacyTextRenderContext.GetSpanForeground(spans, 8));
-        Assert.IsNull(LegacyTextRenderContext.GetSpanForeground(spans, 9));
+        Assert.AreEqual(early, ManagedTextRenderContext.GetSpanForeground(spans, 1));
+        Assert.AreEqual(late, ManagedTextRenderContext.GetSpanForeground(spans, 4));
+        Assert.AreEqual(late, ManagedTextRenderContext.GetSpanForeground(spans, 8));
+        Assert.IsNull(ManagedTextRenderContext.GetSpanForeground(spans, 9));
     }
 
     [TestMethod]

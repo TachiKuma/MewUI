@@ -15,9 +15,6 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
 {
     private const int D2DERR_RECREATE_TARGET = unchecked((int)0x8899000C);
     private const int D2DERR_WRONG_RESOURCE_DOMAIN = unchecked((int)0x88990015);
-    private Direct2DTextRenderContext? _newTextRenderContext;
-
-    public override ITextRenderContext Text => _newTextRenderContext ??= new Direct2DTextRenderContext(this);
 
     // Far beyond any render target, so a clip using it bounds only the other axis.
     private const float UNBOUNDED_CLIP_EXTENT = 1 << 20;
@@ -469,8 +466,6 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
 
     protected override void OnDispose()
     {
-        _newTextRenderContext?.Dispose();
-        _newTextRenderContext = null;
         FlushSolidBrushes();
         FlushGradientStops();
         CollectionPool.Return(_solidBrushes);

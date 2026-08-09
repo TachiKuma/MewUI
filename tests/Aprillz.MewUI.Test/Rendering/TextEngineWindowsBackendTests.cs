@@ -108,7 +108,7 @@ public sealed class TextEngineWindowsBackendTests
         using var factory = new Direct2DGraphicsFactory();
         using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(320, 48, 1));
         using var context = factory.CreateContext(surface);
-        var renderContext = (Direct2DTextRenderContext)context.Text;
+        var renderContext = (ManagedTextRenderContext)context.Text;
         context.BeginFrame(surface);
         for (int index = 0; index < 192; index++)
         {
@@ -124,7 +124,7 @@ public sealed class TextEngineWindowsBackendTests
         }
         context.EndFrame();
 
-        Assert.AreEqual(128, renderContext.CachedRunCount,
+        Assert.AreEqual(128, renderContext.CachedLayoutCount,
             "Direct2D text-layout realizations grew beyond the bounded cache capacity.");
     }
 
@@ -242,7 +242,7 @@ public sealed class TextEngineWindowsBackendTests
             context.EndFrame();
             if (factory is Direct2DGraphicsFactory)
             {
-                nativeRealization = ((Direct2DTextRenderContext)context.Text).CachedLayouts.First();
+                nativeRealization = ((ManagedTextRenderContext)context.Text).CachedLayouts.First();
             }
         }
 

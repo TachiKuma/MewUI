@@ -96,7 +96,7 @@ public sealed class TextEngineTier0Tests
 
         context.BeginFrame(surface);
         context.Clear(Color.Transparent);
-        var textSurface = (LegacyTextRenderContext)context.Text;
+        var textSurface = (ManagedTextRenderContext)context.Text;
         textSurface.Draw(layout, new Point(4, 4), new TextDrawOptions(Color.White));
         int realizationCount = textSurface.CachedLayoutCount;
         TextPaintSpan[] paint =
@@ -163,7 +163,7 @@ public sealed class TextEngineTier0Tests
 
         context.BeginFrame(surface);
         context.Clear(Color.Transparent);
-        var renderContext = (LegacyTextRenderContext)context.Text;
+        var renderContext = (ManagedTextRenderContext)context.Text;
         renderContext.Draw(layout, new Point(4, 4), new TextDrawOptions(Color.White, paint));
         int realizationCount = renderContext.CachedLayoutCount;
         renderContext.Draw(layout, new Point(4, 24), new TextDrawOptions(Color.White));
@@ -240,7 +240,7 @@ public sealed class TextEngineTier0Tests
     }
 
     [TestMethod]
-    public void LegacyRealizationCache_BoundsDistinctLayouts()
+    public void RealizationCache_BoundsDistinctLayouts()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -251,7 +251,7 @@ public sealed class TextEngineTier0Tests
         using var factory = new GdiGraphicsFactory();
         using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(320, 48, 1));
         using var context = factory.CreateContext(surface);
-        var renderContext = (LegacyTextRenderContext)context.Text;
+        var renderContext = (ManagedTextRenderContext)context.Text;
         context.BeginFrame(surface);
         for (int index = 0; index < 192; index++)
         {
@@ -262,7 +262,7 @@ public sealed class TextEngineTier0Tests
         context.EndFrame();
 
         Assert.AreEqual(128, renderContext.CachedLayoutCount,
-            "Legacy text realizations grew beyond the bounded cache capacity.");
+            "Text run realizations grew beyond the bounded cache capacity.");
     }
 
     private static TextLayoutRequest CreateRequest(string text, TextWrapping wrapping, double maxWidth)
