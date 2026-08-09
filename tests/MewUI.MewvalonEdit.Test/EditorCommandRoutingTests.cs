@@ -30,7 +30,7 @@ public sealed class EditorCommandRoutingTests
 
         bool undone = window.CommandRouter.ExecuteAsync(StandardCommands.Undo).GetAwaiter().GetResult();
 
-        Assert.IsTrue(undone, "The router found no undo binding for the focused editor.");
+        Assert.IsTrue(undone, "The router found no undo handler for the focused editor.");
         Assert.AreEqual("hello", editor.Text);
         Assert.IsTrue(editor.Document.UndoStack.CanRedo,
             "The document's stack must have performed the undo; a redo living elsewhere means the surface history took it.");

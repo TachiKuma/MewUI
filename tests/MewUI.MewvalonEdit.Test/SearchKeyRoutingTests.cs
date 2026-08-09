@@ -91,7 +91,7 @@ public sealed class SearchKeyRoutingTests
         panel.Open();
         panel.SearchPattern = "cat";
         int windowF3Hits = 0;
-        window.InputMap.Bind(new KeyGesture(Key.F3), () => windowF3Hits++);
+        window.InputMap.Map(new KeyGesture(Key.F3), () => windowF3Hits++);
 
         SendKey(window, Key.Escape);
         Assert.IsTrue(panel.IsClosed, "Escape did not close the panel.");
@@ -155,7 +155,7 @@ public sealed class SearchKeyRoutingTests
         panel.Uninstall();
 
         int windowFindHits = 0;
-        window.InputMap.Bind(new KeyGesture(Key.F, ModifierKeys.Primary), () => windowFindHits++);
+        window.InputMap.Map(new KeyGesture(Key.F, ModifierKeys.Primary), () => windowFindHits++);
         window.FocusManager.SetFocus(editor.Surface);
 
         SendKey(window, Key.F, ModifierKeys.Control);

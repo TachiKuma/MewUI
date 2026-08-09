@@ -89,22 +89,22 @@ public class TextEditor : Control, ITextEditorComponent
         // The surface's own scope routes undo to its TextBase history; this editor's undo truth is
         // the document's UndoStack (the keyboard path already intercepts it before the surface),
         // so the command path (menus, toolbars) must hit the same stack.
-        _surface.Commands.Unbind(StandardCommands.Undo);
-        _surface.Commands.Bind(StandardCommands.Undo, this,
+        _surface.Commands.Unregister(StandardCommands.Undo);
+        _surface.Commands.Register(StandardCommands.Undo, this,
             static editor => editor.Document.UndoStack.Undo(),
             static editor => !editor.IsReadOnly && editor.Document.UndoStack.CanUndo);
-        _surface.Commands.Unbind(StandardCommands.Redo);
-        _surface.Commands.Bind(StandardCommands.Redo, this,
+        _surface.Commands.Unregister(StandardCommands.Redo);
+        _surface.Commands.Register(StandardCommands.Redo, this,
             static editor => editor.Document.UndoStack.Redo(),
             static editor => !editor.IsReadOnly && editor.Document.UndoStack.CanRedo);
         // Copy and Cut likewise: while a rectangle is active the surface selection is empty, so
         // the command path must read the rectangle's column text instead.
-        _surface.Commands.Unbind(StandardCommands.Copy);
-        _surface.Commands.Bind(StandardCommands.Copy, this,
+        _surface.Commands.Unregister(StandardCommands.Copy);
+        _surface.Commands.Register(StandardCommands.Copy, this,
             static editor => editor.CopySelectionCommand(),
             static editor => editor.HasCopyableSelection());
-        _surface.Commands.Unbind(StandardCommands.Cut);
-        _surface.Commands.Bind(StandardCommands.Cut, this,
+        _surface.Commands.Unregister(StandardCommands.Cut);
+        _surface.Commands.Register(StandardCommands.Cut, this,
             static editor => editor.CutSelectionCommand(),
             static editor => !editor.IsReadOnly && editor.HasCopyableSelection());
         UpdateBuiltInElementGenerators();

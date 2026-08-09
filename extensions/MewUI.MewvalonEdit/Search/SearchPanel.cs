@@ -39,12 +39,12 @@ public sealed class SearchPanel : ITextClassifier
         // still expects Ctrl+F to reach it. The editor's scope and map cover the whole subtree, so
         // the keys work from the surface, the search box and the margins alike - the area the
         // original's routed commands covered.
-        editor.Commands.Bind(SearchCommands.Find, panel, static panel => panel.Open());
-        editor.Commands.Bind(SearchCommands.FindNext, panel,
+        editor.Commands.Register(SearchCommands.Find, panel, static panel => panel.Open());
+        editor.Commands.Register(SearchCommands.FindNext, panel,
             static panel => panel.FindNext(), static panel => !panel.IsClosed);
-        editor.Commands.Bind(SearchCommands.FindPrevious, panel,
+        editor.Commands.Register(SearchCommands.FindPrevious, panel,
             static panel => panel.FindPrevious(), static panel => !panel.IsClosed);
-        editor.InputMap.Bind(SearchCommands.Find, new KeyGesture(Key.F, ModifierKeys.Primary));
+        editor.InputMap.Map(SearchCommands.Find, new KeyGesture(Key.F, ModifierKeys.Primary));
         // An installed panel starts open, so the walk keys start bound as well.
         panel.BindOpenGestures();
         return panel;
@@ -89,16 +89,16 @@ public sealed class SearchPanel : ITextClassifier
     /// </summary>
     private void BindOpenGestures()
     {
-        _editor.InputMap.Bind(SearchCommands.FindNext, new KeyGesture(Key.F3));
-        _editor.InputMap.Bind(SearchCommands.FindPrevious, new KeyGesture(Key.F3, ModifierKeys.Shift));
-        _editor.InputMap.Bind(new KeyGesture(Key.Escape), Close);
+        _editor.InputMap.Map(SearchCommands.FindNext, new KeyGesture(Key.F3));
+        _editor.InputMap.Map(SearchCommands.FindPrevious, new KeyGesture(Key.F3, ModifierKeys.Shift));
+        _editor.InputMap.Map(new KeyGesture(Key.Escape), Close);
     }
 
     private void UnbindOpenGestures()
     {
-        _editor.InputMap.Unbind(SearchCommands.FindNext);
-        _editor.InputMap.Unbind(SearchCommands.FindPrevious);
-        _editor.InputMap.Unbind(new KeyGesture(Key.Escape));
+        _editor.InputMap.Unmap(SearchCommands.FindNext);
+        _editor.InputMap.Unmap(SearchCommands.FindPrevious);
+        _editor.InputMap.Unmap(new KeyGesture(Key.Escape));
     }
 
     /// <summary>Hides the panel and drops its results, so nothing stays highlighted.</summary>
@@ -132,10 +132,10 @@ public sealed class SearchPanel : ITextClassifier
         }
         Close();
         _uninstalled = true;
-        _editor.InputMap.Unbind(SearchCommands.Find);
-        _editor.Commands.Unbind(SearchCommands.Find);
-        _editor.Commands.Unbind(SearchCommands.FindNext);
-        _editor.Commands.Unbind(SearchCommands.FindPrevious);
+        _editor.InputMap.Unmap(SearchCommands.Find);
+        _editor.Commands.Unregister(SearchCommands.Find);
+        _editor.Commands.Unregister(SearchCommands.FindNext);
+        _editor.Commands.Unregister(SearchCommands.FindPrevious);
         _editor.Surface.Extensions.Classifiers.Remove(this);
         _document.Changed -= OnDocumentChanged;
         _editor.DocumentChanged -= OnEditorDocumentChanged;
