@@ -10,6 +10,7 @@ public class CompletionWindow : CompletionWindowBase
 {
     private const double DESCRIPTION_MAX_WIDTH = 320;
     private const double DESCRIPTION_MAX_HEIGHT = 300;
+    private const double DESCRIPTION_GAP = 4;
 
     private readonly Border _descriptionFrame;
     private readonly Popup _descriptionPopup;
@@ -117,11 +118,20 @@ public class CompletionWindow : CompletionWindowBase
             return;
         }
 
+        // Level with the selected row rather than the top of the list, and clear of the window by a
+        // gap: the anchor keeps the window's horizontal extent and takes the row's vertical one.
+        var row = CompletionList.GetSelectedRowBounds();
+        var anchor = new Rect(
+            PlacedBounds.X,
+            row.Height > 0 ? row.Y : PlacedBounds.Y,
+            PlacedBounds.Width + DESCRIPTION_GAP,
+            row.Height > 0 ? row.Height : PlacedBounds.Height);
+
         // Owned by the list frame, which is what the original anchors its tooltip to, so the panel
         // inherits the font the list already corrected away from the editor's monospace.
         DescriptionBounds = _descriptionPopup.IsOpen
-            ? _descriptionPopup.MoveTo(PlacedBounds, PopupAnchorSide.Right)
-            : _descriptionPopup.ShowAt(Root, PlacedBounds, PopupAnchorSide.Right);
+            ? _descriptionPopup.MoveTo(anchor, PopupAnchorSide.Right)
+            : _descriptionPopup.ShowAt(Root, anchor, PopupAnchorSide.Right);
     }
 
     /// <summary>The completion list used in this window.</summary>

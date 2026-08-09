@@ -292,6 +292,32 @@ public sealed class CompletionList
     /// </summary>
     internal event Action? VisibleItemsChanged;
 
+    /// <summary>
+    /// The selected row's rectangle in window coordinates, or the whole list when the row cannot be
+    /// placed. The rows are uniform, so the row follows from the index while every row fits; once
+    /// the list scrolls, where the row sits depends on an offset the list does not expose and the
+    /// caller falls back to the list itself.
+    /// </summary>
+    internal Rect GetSelectedRowBounds()
+    {
+        var bounds = _listBox.Bounds;
+        int selected = _listBox.SelectedIndex;
+        if (selected < 0 || bounds.Height <= 0 || _itemHeight <= 0)
+        {
+            return bounds;
+        }
+
+        double rows = _visibleItems.Count * _itemHeight;
+        double chrome = bounds.Height - rows;
+        if (chrome < 0)
+        {
+            return bounds;
+        }
+
+        double top = bounds.Y + chrome / 2 + selected * _itemHeight;
+        return new Rect(bounds.X, top, bounds.Width, _itemHeight);
+    }
+
     private int GetMatchQuality(string itemText, string query)
     {
         if (itemText is null)

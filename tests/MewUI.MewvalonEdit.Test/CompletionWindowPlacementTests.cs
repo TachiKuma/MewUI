@@ -91,17 +91,25 @@ public sealed class CompletionWindowPlacementTests
 
         var (editor, _) = CreateEditorInWindow("");
         var completion = new CompletionWindow(editor.TextArea);
-        completion.CompletionList.CompletionData.Add(new CompletionData("Described", "what it does"));
+        for (int index = 0; index < 5; index++)
+        {
+            completion.CompletionList.CompletionData.Add(new CompletionData($"Described{index}", $"what {index} does"));
+        }
         completion.CompletionList.CompletionData.Add(new CompletionData("Bare"));
         completion.Show();
 
-        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[0];
+        // A row well down the list, so lining up with it is not the same as lining up with the top.
+        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[3];
+        Assert.IsGreaterThan(completion.PlacedBounds.Y, completion.DescriptionBounds.Y,
+            "the description sat at the top of the list rather than beside the selected row");
         Assert.IsTrue(completion.DescriptionPopup.IsOpen, "the described item showed no description");
         Assert.IsGreaterThan(0, completion.DescriptionBounds.Width, "the description panel measured to nothing");
-        Assert.AreEqual(completion.PlacedBounds.Right, completion.DescriptionBounds.X,
-            "the description did not open against the right edge of the list");
+        Assert.AreEqual(completion.PlacedBounds.Right + 4, completion.DescriptionBounds.X, 1.0,
+            "the description did not open beside the list with its gap");
+        Assert.AreEqual(completion.CompletionList.GetSelectedRowBounds().Y, completion.DescriptionBounds.Y, 1.0,
+            "the description did not line up with the selected row");
 
-        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[1];
+        completion.CompletionList.SelectedItem = completion.CompletionList.CompletionData[^1];
         Assert.IsFalse(completion.DescriptionPopup.IsOpen, "an item without a description kept the panel up");
 
         completion.Close();
