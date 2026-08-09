@@ -291,8 +291,13 @@ public sealed class SearchPanel : ITextClassifier
     /// <summary>A found match is selected and brought on screen, or finding it changed nothing.</summary>
     private void SelectResult(SearchResult result)
     {
-        _editor.Select(result.Offset, result.Length);
+        // The caret ends at the start of the match, as the original leaves it. Selecting forwards
+        // would leave it at the end, and the walk keys off where the match begins.
+        _editor.Select(result.EndOffset, 0);
+        _editor.MoveCaret(result.Offset, extendSelection: true);
         _editor.TextArea.Caret.BringCaretToView();
+        // The reader is typing in the search box, so the editor does not hold the keyboard.
+        _editor.TextArea.Caret.Show();
     }
 
     public int ReplaceAll(string? replacement)

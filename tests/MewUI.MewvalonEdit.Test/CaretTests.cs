@@ -4,8 +4,8 @@ using Aprillz.MewUI.MewvalonEdit.Document;
 namespace Aprillz.MewUI.MewvalonEdit.Test;
 
 /// <summary>
-/// What the editor's own caret answers. The painting itself is not covered here: a caret is drawn
-/// only while the surface has focus, and focus needs a window this project does not build.
+/// What the editor's own caret answers. Whether the caret follows the keyboard is covered where a
+/// window exists to move focus in; here it is only the switch itself.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
@@ -16,13 +16,13 @@ public sealed class CaretTests
     {
         var caret = new TextEditor { Text = "abc" }.TextArea.Caret;
 
-        Assert.IsTrue(caret.IsVisible, "A caret starts out drawn.");
-
-        caret.Hide();
-        Assert.IsFalse(caret.IsVisible);
+        Assert.IsFalse(caret.IsVisible, "An editor no one is typing in draws no caret.");
 
         caret.Show();
         Assert.IsTrue(caret.IsVisible);
+
+        caret.Hide();
+        Assert.IsFalse(caret.IsVisible);
     }
 
     [TestMethod]

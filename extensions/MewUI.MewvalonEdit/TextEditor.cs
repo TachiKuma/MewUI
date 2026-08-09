@@ -71,6 +71,8 @@ public class TextEditor : Control, ITextEditorComponent
         };
         _surface.KeyDown += OnSurfaceKeyDown;
         _surface.KeyUp += OnSurfaceKeyUp;
+        _surface.GotFocus += () => TextArea!.Caret.Show();
+        _surface.LostFocus += () => TextArea!.Caret.Hide();
         _surface.TextCommitted += OnTextCommitted;
         _surface.TextInput += OnSurfaceTextInput;
         _surface.MouseDown += OnSurfaceMouseDown;

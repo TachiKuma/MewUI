@@ -19,7 +19,10 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
     {
         ArgumentNullException.ThrowIfNull(context);
         var surface = textArea.Editor.Surface;
-        if (!textArea.Caret.IsVisible || !surface.IsFocused || !surface.CaretVisible)
+        // Focus is not asked about here: the caret follows Show/Hide, and those follow focus on their
+        // own. That is what lets a search put the caret on its match while the reader is still typing
+        // in the search box.
+        if (!textArea.Caret.IsVisible || !surface.CaretVisible)
         {
             return;
         }

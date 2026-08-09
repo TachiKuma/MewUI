@@ -558,7 +558,8 @@ public sealed class Caret(TextArea textArea)
     internal const double MINIMUM_DISTANCE_TO_VIEW_BORDER = 30;
 
     private Color? _caretBrush;
-    private bool _isVisible = true;
+    // An editor no one is typing in draws no caret; taking the focus is what turns it on.
+    private bool _isVisible;
     private int _visualColumnOverride = -1;
     private int _visualColumnOverrideOffset = -1;
 
@@ -623,10 +624,14 @@ public sealed class Caret(TextArea textArea)
     /// <summary>Whether the caret is drawn at all, apart from the blink it follows while shown.</summary>
     public bool IsVisible => _isVisible;
 
-    /// <summary>Draws the caret again after a <see cref="Hide"/>.</summary>
+    /// <summary>
+    /// Draws the caret again after a <see cref="Hide"/>, whether or not the editor holds the
+    /// keyboard: a search selecting its match shows where the reader is while the search box has it.
+    /// Taking the keyboard away hides it again.
+    /// </summary>
     public void Show() => SetVisible(true);
 
-    /// <summary>Stops drawing the caret until <see cref="Show"/>, as a drag over the text does.</summary>
+    /// <summary>Stops drawing the caret until <see cref="Show"/>, as losing the keyboard does.</summary>
     public void Hide() => SetVisible(false);
 
     /// <summary>Scrolls the smallest amount that brings the caret into view.</summary>
