@@ -20,15 +20,15 @@ public sealed class TextAreaDefaultInputHandler : TextAreaInputHandler
         // Claimed here rather than left to the editing surface, which has the same shortcuts: the
         // original-file marker counts undo steps, and a step taken behind the stack's back would
         // leave the count pointing at a state the document is no longer in.
-        Editing.AddBinding(new KeyBinding(
+        Editing.AddBinding(new TextAreaKeyBinding(
             new KeyGesture(Key.Z, ModifierKeys.Primary),
             () => textArea.Document.UndoStack.Undo(),
             () => textArea.Document.UndoStack.CanUndo));
-        Editing.AddBinding(new KeyBinding(
+        Editing.AddBinding(new TextAreaKeyBinding(
             new KeyGesture(Key.Z, ModifierKeys.Primary | ModifierKeys.Shift),
             () => textArea.Document.UndoStack.Redo(),
             () => textArea.Document.UndoStack.CanRedo));
-        Editing.AddBinding(new KeyBinding(
+        Editing.AddBinding(new TextAreaKeyBinding(
             new KeyGesture(Key.Y, ModifierKeys.Primary),
             () => textArea.Document.UndoStack.Redo(),
             () => textArea.Document.UndoStack.CanRedo));
@@ -38,13 +38,13 @@ public sealed class TextAreaDefaultInputHandler : TextAreaInputHandler
         // CanExecute declines and the surface behaves as always.
         bool RectangleHasText() => textArea.Selection is RectangleSelection rectangle && rectangle.Length > 0;
         void DeleteRectangle() => ((RectangleSelection)textArea.Selection).ReplaceSelectionWithText(string.Empty);
-        Editing.AddBinding(new KeyBinding(new KeyGesture(Key.Backspace), DeleteRectangle, RectangleHasText));
-        Editing.AddBinding(new KeyBinding(new KeyGesture(Key.Delete), DeleteRectangle, RectangleHasText));
-        Editing.AddBinding(new KeyBinding(
+        Editing.AddBinding(new TextAreaKeyBinding(new KeyGesture(Key.Backspace), DeleteRectangle, RectangleHasText));
+        Editing.AddBinding(new TextAreaKeyBinding(new KeyGesture(Key.Delete), DeleteRectangle, RectangleHasText));
+        Editing.AddBinding(new TextAreaKeyBinding(
             new KeyGesture(Key.C, ModifierKeys.Primary),
             () => textArea.CopyRectangleSelection(),
             RectangleHasText));
-        Editing.AddBinding(new KeyBinding(
+        Editing.AddBinding(new TextAreaKeyBinding(
             new KeyGesture(Key.X, ModifierKeys.Primary),
             () =>
             {
@@ -54,7 +54,7 @@ public sealed class TextAreaDefaultInputHandler : TextAreaInputHandler
                 }
             },
             RectangleHasText));
-        Editing.AddBinding(new KeyBinding(
+        Editing.AddBinding(new TextAreaKeyBinding(
             new KeyGesture(Key.V, ModifierKeys.Primary),
             () =>
             {
@@ -67,7 +67,7 @@ public sealed class TextAreaDefaultInputHandler : TextAreaInputHandler
 
         // The box-selection keys, as the original binds them on the caret-navigation handler.
         void AddBoxBinding(Key key, ModifierKeys modifiers, CaretMovementType direction)
-            => CaretNavigation.AddBinding(new KeyBinding(
+            => CaretNavigation.AddBinding(new TextAreaKeyBinding(
                 new KeyGesture(key, modifiers),
                 () => CaretNavigationCommandHandler.MoveCaretBoxSelection(textArea, direction)));
         const ModifierKeys ALT_SHIFT = ModifierKeys.Alt | ModifierKeys.Shift;

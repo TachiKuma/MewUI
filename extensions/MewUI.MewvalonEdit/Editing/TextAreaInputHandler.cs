@@ -50,13 +50,54 @@ public abstract class TextAreaStackedInputHandler(TextArea textArea) : ITextArea
 }
 
 /// <summary>
+/// A gesture bound to an action, answered at the preview stage before the editing surface acts on
+/// the key.
+/// </summary>
+/// <remarks>
+/// The extension owns this type rather than using the core shortcut binding: these run ahead of
+/// the surface, which is a stage the command system's post-bubble input map cannot express, and
+/// the dependency would tie the editor to a core type that exists for window-wide shortcuts.
+/// </remarks>
+public sealed class TextAreaKeyBinding
+{
+    public TextAreaKeyBinding(KeyGesture gesture, Action execute, Func<bool>? canExecute = null)
+    {
+        Gesture = gesture;
+        Execute = execute ?? throw new ArgumentNullException(nameof(execute));
+        CanExecute = canExecute;
+    }
+
+    /// <summary>The gesture that triggers this binding.</summary>
+    public KeyGesture Gesture { get; }
+
+    /// <summary>The action to run when the gesture matches.</summary>
+    public Action Execute { get; }
+
+    /// <summary>Decides whether the binding runs. A binding that declines leaves the key unclaimed.</summary>
+    public Func<bool>? CanExecute { get; set; }
+
+    /// <summary>Runs the binding when the gesture matches and it can execute, claiming the key.</summary>
+    public bool TryHandle(KeyEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        if (Gesture.Matches(e) && (CanExecute?.Invoke() ?? true))
+        {
+            Execute();
+            e.Handled = true;
+            return true;
+        }
+        return false;
+    }
+}
+
+/// <summary>
 /// The ordinary input handler: a set of key bindings plus nested handlers that attach and detach
 /// with it. The original keeps commands and gestures in two collections because WPF routes them
-/// separately; a MewUI <see cref="KeyBinding"/> already carries both, so there is one collection.
+/// separately; a <see cref="TextAreaKeyBinding"/> already carries both, so there is one collection.
 /// </summary>
 public class TextAreaInputHandler : ITextAreaInputHandler
 {
-    private readonly List<KeyBinding> _keyBindings = [];
+    private readonly List<TextAreaKeyBinding> _keyBindings = [];
     private readonly List<ITextAreaInputHandler> _nestedInputHandlers = [];
 
     public TextAreaInputHandler(TextArea textArea)
@@ -67,12 +108,12 @@ public class TextAreaInputHandler : ITextAreaInputHandler
     public bool IsAttached { get; private set; }
 
     /// <summary>Bindings this handler answers with while it is attached.</summary>
-    public IReadOnlyList<KeyBinding> KeyBindings => _keyBindings;
+    public IReadOnlyList<TextAreaKeyBinding> KeyBindings => _keyBindings;
 
     /// <summary>Handlers that attach and detach together with this one.</summary>
     public IReadOnlyList<ITextAreaInputHandler> NestedInputHandlers => _nestedInputHandlers;
 
-    public void AddBinding(KeyBinding binding)
+    public void AddBinding(TextAreaKeyBinding binding)
     {
         ArgumentNullException.ThrowIfNull(binding);
         _keyBindings.Add(binding);
@@ -80,9 +121,9 @@ public class TextAreaInputHandler : ITextAreaInputHandler
 
     /// <summary>Binds a gesture to an action, which is the shape almost every caller wants.</summary>
     public void AddBinding(KeyGesture gesture, Action execute)
-        => AddBinding(new KeyBinding(gesture, execute));
+        => AddBinding(new TextAreaKeyBinding(gesture, execute));
 
-    public bool RemoveBinding(KeyBinding binding) => _keyBindings.Remove(binding);
+    public bool RemoveBinding(TextAreaKeyBinding binding) => _keyBindings.Remove(binding);
 
     public void AddNestedInputHandler(ITextAreaInputHandler handler)
     {
