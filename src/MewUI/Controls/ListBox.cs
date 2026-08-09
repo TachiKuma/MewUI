@@ -250,6 +250,15 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
         => TryGetItemIndexAtCore(position, out index);
 
     /// <summary>
+    /// The item's rectangle in this control's coordinate space, spanning the item's full width.
+    /// False when the index is out of range or the list cannot say where the item sits, which a
+    /// variable-height list answers for an item it has not measured yet. The rectangle can fall
+    /// outside the viewport; intersect it with <see cref="UIElement.Bounds"/> for the visible part.
+    /// </summary>
+    public bool TryGetItemBounds(int index, out Rect bounds)
+        => TryMapItemIndexToBounds(index, _presenter, out bounds);
+
+    /// <summary>
     /// Attempts to find the item index for a mouse event routed by the window input router.
     /// </summary>
     public bool TryGetItemIndexAt(MouseEventArgs e, out int index)
