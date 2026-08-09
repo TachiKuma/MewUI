@@ -116,6 +116,31 @@ public sealed class CompletionWindowPlacementTests
     }
 
     [TestMethod]
+    public void AnEmptyListShowsWhatEmptyTemplateBuilds()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var (editor, window) = CreateEditorInWindow("");
+        var completion = new CompletionWindow(editor.TextArea);
+        completion.CompletionList.EmptyTemplate = new DelegateControlTemplate<ContentControl>(
+            static (_, _) => new TextBlock { Text = "No suggestions" });
+        completion.CompletionList.CompletionData.Add(new CompletionData("Described"));
+        completion.Show();
+        window.PerformLayout();
+
+        double withRows = completion.PlacedBounds.Height;
+
+        // A query nothing matches empties the list.
+        editor.TextArea.PerformTextInput("zzz");
+        window.PerformLayout();
+
+        Assert.IsEmpty(completion.CompletionList.VisibleItems, "the query still matched something");
+        Assert.AreNotEqual(withRows, completion.PlacedBounds.Height,
+            "the window kept the height of the rows it no longer shows");
+        completion.Close();
+    }
+
+    [TestMethod]
     public void ALongListStopsAtTheWindowCap()
     {
         if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }

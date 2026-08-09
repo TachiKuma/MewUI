@@ -11,6 +11,7 @@ namespace Aprillz.MewUI.MewvalonEdit.CodeCompletion;
 public class CompletionList : Control
 {
     private const string PART_LIST = "PART_List";
+    private const string PART_EMPTY = "PART_Empty";
 
     private readonly List<ICompletionData> _completionData = [];
     private List<ICompletionData> _visibleItems;
@@ -20,10 +21,16 @@ public class CompletionList : Control
     private double _itemHeight = 18;
     // The rows live in a template part, so the list owns the selection itself and the part shows it.
     private ListBox? _listBox;
+    private ContentControl? _emptyHost;
     private int _selectedIndex = -1;
 
     public static readonly MewProperty<bool> IsFilteringProperty =
         MewProperty<bool>.Register<CompletionList>(nameof(IsFiltering), true);
+
+    public static readonly MewProperty<ControlTemplate?> EmptyTemplateProperty =
+        MewProperty<ControlTemplate?>.Register<CompletionList>(nameof(EmptyTemplate), null,
+            MewPropertyOptions.AffectsLayout,
+            static (self, _, _) => self.ApplyEmptyState());
 
     public CompletionList()
     {
@@ -41,7 +48,11 @@ public class CompletionList : Control
     {
         var listBox = new ListBox();
         context.Register(PART_LIST, listBox);
-        return listBox;
+        // Holds whatever EmptyTemplate builds. Collapsed while there are rows, so it costs a
+        // measure of nothing until a list actually comes up empty.
+        var empty = new ContentControl { IsVisible = false };
+        context.Register(PART_EMPTY, empty);
+        return new Grid().Children(listBox, empty);
     }
 
     /// <inheritdoc/>
@@ -49,6 +60,8 @@ public class CompletionList : Control
     {
         base.OnApplyTemplate();
         _listBox = GetTemplateChild<ListBox>(PART_LIST);
+        _emptyHost = GetTemplateChild<ContentControl>(PART_EMPTY);
+        ApplyEmptyState();
         if (_listBox is null)
         {
             return;
@@ -129,6 +142,35 @@ public class CompletionList : Control
     {
         get => GetValue(IsFilteringProperty);
         set => SetValue(IsFilteringProperty, value);
+    }
+
+    /// <summary>
+    /// Built and shown in place of the rows while the list has nothing to offer, so a caller can
+    /// say why. Nothing is shown while this is null, which is what the original documents. The
+    /// template is applied to a presenter the list owns, so build against
+    /// <see cref="ContentControl"/>.
+    /// </summary>
+    public ControlTemplate? EmptyTemplate
+    {
+        get => GetValue(EmptyTemplateProperty);
+        set => SetValue(EmptyTemplateProperty, value);
+    }
+
+    private void ApplyEmptyState()
+    {
+        if (_emptyHost is null)
+        {
+            return;
+        }
+
+        var template = EmptyTemplate;
+        bool empty = template is not null && _visibleItems.Count == 0;
+        _emptyHost.Template = empty ? template : null;
+        _emptyHost.IsVisible = empty;
+        if (_listBox is not null)
+        {
+            _listBox.IsVisible = !empty;
+        }
     }
 
     /// <summary>The list completion data can be added to.</summary>
@@ -360,6 +402,7 @@ public class CompletionList : Control
     {
         _visibleItems = items;
         PublishVisibleItems();
+        ApplyEmptyState();
         VisibleItemsChanged?.Invoke();
     }
 
