@@ -1,5 +1,6 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
+using Aprillz.MewUI.Rendering;
 
 namespace Aprillz.MewUI.Gallery;
 
@@ -326,69 +327,126 @@ partial class GalleryView
         var shortcutLog = new TextBlock()
             .FontSize(11)
             .TextWrapping(TextWrapping.Wrap)
-            .Text("Press a shortcut key (e.g. (Ctrl or Cmd)+N, (Ctrl or Cmd)+S, ...)");
+            .Text("Focus the TextBox inside the highlighted scope, then press a shortcut.");
 
         void OnShortcut(string action) => shortcutLog.Text = $"[{DateTime.Now:HH:mm:ss.fff}] {action}";
 
+        var inputScope = new Border()
+            .BorderThickness(2)
+            .CornerRadius(6)
+            .Padding(8)
+            .WithTheme((theme, border) => border.BorderBrush(theme.Palette.Accent));
+
+        var scopeState = new TextBlock().FontSize(11).Bold();
+        scopeState.Bind(
+            TextBlock.TextProperty,
+            inputScope,
+            UIElement.IsFocusWithinProperty,
+            active => active
+                ? "Gallery local InputMap scope — ACTIVE"
+                : "Gallery local InputMap scope — INACTIVE");
+
+        inputScope.Child(
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    scopeState,
+                    CreateMenu(window.Commands, inputScope.InputMap, OnShortcut),
+                    new TextBlock()
+                        .FontSize(11)
+                        .TextWrapping(TextWrapping.Wrap)
+                        .Text("The menu handlers live in Window.Commands. Shortcut gestures live only in this bordered InputMap scope."),
+                    new TextBox()
+                        .Placeholder("Focus here: Ctrl/Cmd + N, S, numpad + or -"),
+                    shortcutLog));
+
         return Card(
-                "MenuBar (Multi-depth, AccessKeys + Shortcuts)",
+                "MenuBar (Command scope vs InputMap scope)",
                 new StackPanel()
                     .Width(290)
                     .Vertical()
                     .Spacing(8)
                     .Children(
-                        CreateMenu(OnShortcut),
-
                         new TextBlock()
                             .FontSize(11)
                             .TextWrapping(TextWrapping.Wrap)
-                            .Text("Hover to switch menus while a popup is open. Submenus supported."),
-
-                        shortcutLog
+                            .Text("Focus inside the border to activate its local shortcuts. Move focus to NavigationView or another card to leave the scope."),
+                        inputScope
                     )
             );
     }
 
-    public static MenuBar CreateMenu(Action<string> OnShortcut)
+    public static MenuBar CreateMenu(Element commandHost, Action<string> onShortcut)
+        => CreateMenu(commandHost.Commands, commandHost.InputMap, onShortcut);
+
+    private static MenuBar CreateMenu(CommandScope commands, InputMap inputMap, Action<string> onShortcut)
     {
         var p = ModifierKeys.Primary;
+        IconTemplate MenuIcon(string name)
+        {
+            var all = IconResource.GetAll();
+            var entry = Array.Find(all, x => x.Name == name) ?? all[0];
+            var geometry = PathGeometry.Parse(entry.PathData);
+            geometry.Freeze();
+            return new IconTemplate(size =>
+            {
+                var icon = new PathShape()
+                    .Data(geometry)
+                    .Size(size)
+                    .Stretch(Stretch.Uniform);
+                icon.Bind(Shape.FillProperty, icon, TextElement.ForegroundProperty,
+                    (Color color) => (Brush)new SolidColorBrush(color));
+                return icon;
+            });
+        }
+
+        Command MenuCommand(string id, string text, string message, KeyGesture? gesture = null, IconTemplate? icon = null)
+        {
+            var command = new Command($"gallery.menu.{id}", text, icon);
+            commands.Bind(command, () => onShortcut(message));
+            if (gesture is KeyGesture keyGesture)
+                inputMap.Bind(command, keyGesture);
+            return command;
+        }
+
         var fileMenu = new Menu()
-            .Item("_New", () => OnShortcut("File > New document created"), shortcut: new KeyGesture(Key.N, p))
-            .Item("_Open...", () => OnShortcut("File > Open file dialog"), shortcut: new KeyGesture(Key.O, p))
-            .Item("_Save", () => OnShortcut("File > Document saved"), shortcut: new KeyGesture(Key.S, p))
-            .Item("Save _As...", () => OnShortcut("File > Save As dialog"))
+            .Item(MenuCommand("file.new", "_New", "File > New document created", new KeyGesture(Key.N, p)))
+            .Item(MenuCommand("file.open", "_Open...", "File > Open file dialog", new KeyGesture(Key.O, p)))
+            .Item(MenuCommand("file.save", "_Save", "File > Document saved", new KeyGesture(Key.S, p)))
+            .Item(MenuCommand("file.saveAs", "Save _As...", "File > Save As dialog"))
             .Separator()
             .SubMenu("_Export", new Menu()
-                .Item("_PNG", () => OnShortcut("File > Export > PNG format"))
-                .Item("_JPEG", () => OnShortcut("File > Export > JPEG format"))
+                .Item(MenuCommand("file.export.png", "_PNG", "File > Export > PNG format"))
+                .Item(MenuCommand("file.export.jpeg", "_JPEG", "File > Export > JPEG format"))
                 .SubMenu("_Advanced", new Menu()
-                    .Item("With _metadata", () => OnShortcut("File > Export > Advanced > Include metadata"))
-                    .Item("_Optimized", () => OnShortcut("File > Export > Advanced > Optimized output"))
+                    .Item(MenuCommand("file.export.metadata", "With _metadata", "File > Export > Advanced > Include metadata"))
+                    .Item(MenuCommand("file.export.optimized", "_Optimized", "File > Export > Advanced > Optimized output"))
                 )
             )
             .Separator()
-            .Item("E_xit", () => OnShortcut("File > Exit application"));
+            .Item(MenuCommand("file.exit", "E_xit", "File > Exit application"));
 
         var editMenu = new Menu()
-            .Item("_Undo", () => OnShortcut("Edit > Undo last action"), shortcut: new KeyGesture(Key.Z, p))
-            .Item("_Redo", () => OnShortcut("Edit > Redo last action"), shortcut: new KeyGesture(Key.Y, p))
+            .Item(MenuCommand("edit.undo", "_Undo", "Edit > Undo last action", new KeyGesture(Key.Z, p)))
+            .Item(MenuCommand("edit.redo", "_Redo", "Edit > Redo last action", new KeyGesture(Key.Y, p)))
             .Separator()
-            .Item("Cu_t", () => OnShortcut("Edit > Cut to clipboard"), shortcut: new KeyGesture(Key.X, p))
-            .Item("_Copy", () => OnShortcut("Edit > Copy to clipboard"), shortcut: new KeyGesture(Key.C, p))
-            .Item("_Paste", () => OnShortcut("Edit > Paste from clipboard"), shortcut: new KeyGesture(Key.V, p))
+            .Item(MenuCommand("edit.cut", "Cu_t", "Edit > Cut to clipboard", new KeyGesture(Key.X, p), MenuIcon("cut_regular")))
+            .Item(MenuCommand("edit.copy", "_Copy", "Edit > Copy to clipboard", new KeyGesture(Key.C, p), MenuIcon("copy_regular")))
+            .Item(MenuCommand("edit.paste", "_Paste", "Edit > Paste from clipboard", new KeyGesture(Key.V, p), MenuIcon("clipboard_paste_regular")))
             .Separator()
             .SubMenu("_Find", new Menu()
-                .Item("_Find...", () => OnShortcut("Edit > Find > Open find dialog"), shortcut: new KeyGesture(Key.F, p))
-                .Item("Find _Next", () => OnShortcut("Edit > Find > Find next occurrence"), shortcut: new KeyGesture(Key.F3))
-                .Item("_Replace...", () => OnShortcut("Edit > Find > Open replace dialog"), shortcut: new KeyGesture(Key.H, p))
+                .Item(MenuCommand("edit.find", "_Find...", "Edit > Find > Open find dialog", new KeyGesture(Key.F, p)))
+                .Item(MenuCommand("edit.findNext", "Find _Next", "Edit > Find > Find next occurrence", new KeyGesture(Key.F3)))
+                .Item(MenuCommand("edit.replace", "_Replace...", "Edit > Find > Open replace dialog", new KeyGesture(Key.H, p)))
             );
 
         var viewMenu = new Menu()
-            .Item("_Toggle Sidebar", () => OnShortcut("View > Toggle sidebar visibility"))
+            .Item(MenuCommand("view.toggleSidebar", "_Toggle Sidebar", "View > Toggle sidebar visibility"))
             .SubMenu("_Zoom", new Menu()
-                .Item("Zoom _In", () => OnShortcut("View > Zoom > Zoom in"), shortcut: new KeyGesture(Key.Add, p))
-                .Item("Zoom _Out", () => OnShortcut("View > Zoom > Zoom out"), shortcut: new KeyGesture(Key.Subtract, p))
-                .Item("_Reset", () => OnShortcut("View > Zoom > Reset to 100%"), shortcut: new KeyGesture(Key.D0, p))
+                .Item(MenuCommand("view.zoomIn", "Zoom _In", "View > Zoom > Zoom in", new KeyGesture(Key.Add, p)))
+                .Item(MenuCommand("view.zoomOut", "Zoom _Out", "View > Zoom > Zoom out", new KeyGesture(Key.Subtract, p)))
+                .Item(MenuCommand("view.zoomReset", "_Reset", "View > Zoom > Reset to 100%", new KeyGesture(Key.D0, p)))
             );
         var menu = new MenuBar()
                             .Height(28)
@@ -530,9 +588,15 @@ partial class GalleryView
         string? result = null;
         TextBox input = null!;
         Window dialog = null!;
+        var acceptCommand = new Command("gallery.dialog.accept", "OK");
 
         await new Window()
             .Ref(out dialog)
+            .Apply(w => w.Commands.Bind(acceptCommand, () =>
+            {
+                result = input.Text;
+                dialog.Close();
+            }, () => !string.IsNullOrWhiteSpace(input.Text)))
             .Title(title)
             .FitContentHeight(300, 300)
             .Padding(12)
@@ -553,12 +617,7 @@ partial class GalleryView
                             .Children(
                                 new Button()
                                     .Content("OK")
-                                    .OnCanClick(() => !string.IsNullOrWhiteSpace(input.Text))
-                                    .OnClick(() =>
-                                    {
-                                        result = input.Text;
-                                        dialog.Close();
-                                    }),
+                                    .Command(acceptCommand),
                                 new Button()
                                     .Content("Cancel")
                                     .OnClick(dialog.Close)
