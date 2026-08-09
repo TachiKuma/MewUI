@@ -2987,13 +2987,18 @@ public partial class Window : ContentControl, ILayoutRoundingHost
 
         _popupManager.NotifyThemeChanged(oldTheme, newTheme);
 
+        // The whole adorner subtree, as the content walk above does: an adorner carries its own
+        // controls, and notifying only the adorner leaves everything it holds on the old theme.
         var adorners = _adorners.ToArray();
         for (int i = 0; i < adorners.Length; i++)
         {
-            if (adorners[i].Element is FrameworkElement fe)
+            VisitVisualTree(adorners[i].Element, e =>
             {
-                fe.NotifyThemeChanged(oldTheme, newTheme);
-            }
+                if (e is FrameworkElement c)
+                {
+                    c.NotifyThemeChanged(oldTheme, newTheme);
+                }
+            });
         }
 
         ThemeChanged?.Invoke(oldTheme, newTheme);
@@ -3104,10 +3109,13 @@ public partial class Window : ContentControl, ILayoutRoundingHost
 
         for (int i = 0; i < _adorners.Count; i++)
         {
-            if (_adorners[i].Element is FrameworkElement fe)
+            VisitVisualTree(_adorners[i].Element, e =>
             {
-                fe.NotifyDpiChanged(oldDpi, newDpi);
-            }
+                if (e is FrameworkElement c)
+                {
+                    c.NotifyDpiChanged(oldDpi, newDpi);
+                }
+            });
 
             _adorners[i].Element.ClearDpiCacheDeep();
         }
