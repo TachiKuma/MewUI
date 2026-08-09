@@ -3,7 +3,7 @@ using Aprillz.MewUI.Input;
 namespace Aprillz.MewUI;
 
 /// <summary>
-/// Owns the run-scoped mutable state of a single <see cref="Application.Run"/> (the window registry and
+/// Owns the run-scoped mutable state of a single <see cref="Application.Run(Window)"/> (the window registry and
 /// main-window identity) and tears the per-run state down in a fixed order when the run ends, so no
 /// window or drag reference survives into the next run.
 /// </summary>

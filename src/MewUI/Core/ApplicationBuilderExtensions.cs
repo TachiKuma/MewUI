@@ -91,6 +91,21 @@ public static class ApplicationBuilderExtensions
     }
 
     /// <summary>
+    /// Configures the callback invoked on the UI thread after the dispatcher is installed and before
+    /// the main window is shown. Calling this method again replaces the previously configured callback.
+    /// When no main window factory is configured, <see cref="ApplicationBuilder.Run()"/> starts the
+    /// application without a main window.
+    /// </summary>
+    public static ApplicationBuilder OnStartup(this ApplicationBuilder builder, Action startup)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(startup);
+
+        builder.Startup = startup;
+        return builder;
+    }
+
+    /// <summary>
     /// Throws a <see cref="PlatformNotSupportedException"/> with an optional custom message.
     /// </summary>
     public static ApplicationBuilder ThrowPlatformNotSupported(this ApplicationBuilder builder, string? message = null)

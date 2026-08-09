@@ -142,7 +142,47 @@ var window = new Window()
 Application.Run(window);
 ```
 
-### 2.2 Theme configuration
+Use the startup overload when initialization must run after dispatcher installation but before the window is shown.
+
+```csharp
+Application.Run(window, () =>
+{
+    // The Dispatcher and UI SynchronizationContext are installed,
+    // and the window has not been shown yet.
+    InitializeServices();
+});
+```
+
+### 2.2 Starting without a main window
+
+`Application.Run(Action)` starts the dispatcher and platform message loop without creating or showing a main window. The required startup callback runs once on the UI thread after dispatcher installation. It may show ordinary windows immediately or from later dispatcher work.
+
+```csharp
+Application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+Application.Run(() =>
+{
+    RegisterGlobalHotkey(() =>
+        Application.Current.Dispatcher!.BeginInvoke(
+            () => new PaletteWindow().Show()));
+});
+```
+
+Windowless execution does not set `OnExplicitShutdown` automatically. Set it explicitly when closing the last palette or utility window must leave the process running.
+
+With the builder, configure `OnStartup` and omit the main window factory.
+
+```csharp
+Application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+Application.Create()
+    .OnStartup(RegisterGlobalHotkey)
+    .Run();
+```
+
+When both `BuildMainWindow(...)` and `OnStartup(...)` are configured, startup runs before the factory-created main window is shown. Calling `OnStartup` again replaces the previous callback.
+
+### 2.3 Theme configuration
 For ThemeVariant/Accent/ThemeSeed/ThemeMetrics configuration, see:
 
 - [Theme documentation](Theme.md)
@@ -231,10 +271,18 @@ window.Closed += () => SaveWindowPlacement();
 ```
 
 ### 5.2 When the application exits
-The message loop exits when the **last window** closes; `Application.Run(...)` then returns.
-Closing the main window alone does not exit the app while other windows are still open.
+`Application.ShutdownMode` decides whether closing a window terminates the message loop.
 
-If closing the main window should quit the app, show secondary windows with the main window as their owner (`tools.Show(main)`) so they close together, or close them from the main window's `Closed` handler.
+- `OnLastWindowClose` (the default): exits when the last window closes. This also applies to a window opened after `Application.Run(Action)` started without one.
+- `OnMainWindowClose`: exits when the main window passed to `Application.Run(Window)` closes. `Application.Run(Action)` has no main-window identity, so closing windows cannot trigger this mode.
+- `OnExplicitShutdown`: window closes never exit the loop; the application waits for `Application.Quit()`.
+
+Set the policy before `Run`.
+
+```csharp
+Application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+Application.Run(StartBackgroundApplication);
+```
 
 ### 5.3 Application.Quit
 `Application.Quit()` terminates the message loop immediately:
@@ -360,4 +408,4 @@ Application.DispatcherUnhandledException += e =>
 - The core flow is: **pre-run configuration → Run → message loop**
 - Theme/RenderLoop should be decided before Run
 - A Window only acquires native resources at Show time
-- The app exits when the last window closes; `Window.Close()` is the graceful (cancellable) path, `Application.Quit()` is the immediate one
+- By default the app exits when the last window closes; select another lifetime with `ShutdownMode`. `Window.Close()` is the graceful (cancellable) path, while `Application.Quit()` is immediate

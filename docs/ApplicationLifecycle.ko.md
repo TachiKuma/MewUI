@@ -141,7 +141,47 @@ var window = new Window()
 Application.Run(window);
 ```
 
-### 2.2 테마 설정 안내
+startup 콜백이 필요하면 창 표시 전에 실행되는 오버로드를 사용한다.
+
+```csharp
+Application.Run(window, () =>
+{
+    // Dispatcher와 UI SynchronizationContext가 설치된 상태이고,
+    // window는 아직 표시되지 않았다.
+    InitializeServices();
+});
+```
+
+### 2.2 메인 창 없이 시작
+
+`Application.Run(Action)`은 메인 창을 만들거나 표시하지 않고 dispatcher와 플랫폼 메시지 루프를 시작한다. startup은 필수이며 dispatcher 설치 후 UI 스레드에서 한 번 호출된다. startup이나 이후 dispatcher 작업에서 일반 `Window.Show()`를 호출해 창을 열 수 있다.
+
+```csharp
+Application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+Application.Run(() =>
+{
+    RegisterGlobalHotkey(() =>
+        Application.Current.Dispatcher!.BeginInvoke(
+            () => new PaletteWindow().Show()));
+});
+```
+
+백그라운드 실행에서 `OnExplicitShutdown`은 자동으로 설정되지 않는다. 팔레트 같은 마지막 창을 닫아도 프로세스를 유지해야 한다면 사용자가 위 예제처럼 명시해야 한다.
+
+빌더에서는 `OnStartup`을 설정하고 main window factory를 생략한다.
+
+```csharp
+Application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+Application.Create()
+    .OnStartup(RegisterGlobalHotkey)
+    .Run();
+```
+
+`BuildMainWindow(...)`와 `OnStartup(...)`을 함께 설정하면 startup 호출 후 factory가 만든 메인 창을 표시한다. `OnStartup`을 여러 번 호출하면 마지막 콜백이 이전 설정을 대체한다.
+
+### 2.3 테마 설정 안내
 ThemeVariant/Accent/ThemeSeed/ThemeMetrics 설정은 아래 문서를 참고한다.
 
 - [Theme 문서](Theme.ko.md)
@@ -230,10 +270,18 @@ window.Closed += () => SaveWindowPlacement();
 ```
 
 ### 5.2 애플리케이션이 종료되는 시점
-메시지 루프는 **마지막 창**이 닫힐 때 종료되고, 이어서 `Application.Run(...)`이 반환된다.
-다른 창이 열려 있는 동안에는 메인 창만 닫아도 앱이 종료되지 않는다.
+창이 닫힐 때 메시지 루프를 종료할지는 `Application.ShutdownMode`가 결정한다.
 
-메인 창을 닫으면 앱이 종료되게 하려면, 보조 창을 메인 창을 owner로 하여 표시(`tools.Show(main)`)해 함께 닫히게 하거나, 메인 창의 `Closed` 핸들러에서 보조 창을 닫는다.
+- `OnLastWindowClose`(기본값): 마지막 창이 닫히면 종료한다. 메인 창 없이 시작했더라도 나중에 연 마지막 창을 닫으면 종료한다.
+- `OnMainWindowClose`: `Application.Run(Window)`에 전달한 메인 창이 닫히면 종료한다. `Application.Run(Action)`에는 main window identity가 없으므로 이 모드에서 창 닫힘에 의한 자동 종료가 발생하지 않는다.
+- `OnExplicitShutdown`: 창 닫힘으로 종료하지 않고 `Application.Quit()`을 기다린다.
+
+설정은 `Run` 전에 지정한다.
+
+```csharp
+Application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+Application.Run(StartBackgroundApplication);
+```
 
 ### 5.3 Application.Quit
 `Application.Quit()`는 메시지 루프를 즉시 종료한다:
@@ -359,4 +407,4 @@ Application.DispatcherUnhandledException += e =>
 - **Run 전 설정 → Run → 메시지 루프**가 핵심 흐름
 - Theme/RenderLoop은 Run 전에 결정
 - Window는 Show 시점에만 실제 플랫폼 리소스를 갖는다
-- 앱은 마지막 창이 닫힐 때 종료된다. `Window.Close()`가 정상(취소 가능) 경로, `Application.Quit()`는 즉시 종료 경로
+- 기본적으로 마지막 창이 닫힐 때 종료되며 `ShutdownMode`로 수명을 선택한다. `Window.Close()`가 정상(취소 가능) 경로, `Application.Quit()`는 즉시 종료 경로

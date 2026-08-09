@@ -291,53 +291,58 @@ public sealed class MacOSPlatformHost : IPlatformHost
         }
     }
 
-    public void Run(Application app, Window mainWindow)
+    public void Run(Application app, Window? mainWindow)
     {
         ArgumentNullException.ThrowIfNull(app);
-        ArgumentNullException.ThrowIfNull(mainWindow);
 
         _app = app;
         var previousContext = SynchronizationContext.Current;
-        _dispatcher = new MacOSDispatcher();
-
-        // Ensure dispatcher wake can break the event wait.
-        _dispatcher.SetWake(() =>
+        try
         {
-            // Only interrupt the OS wait when the loop is actually parked. A UI-thread post while the loop
-            // is active is picked up by the pre-park recheck below, so no wake event is needed (and posting
-            // one would linger in the event queue and cause a spurious extra wakeup).
-            if (Volatile.Read(ref _parked) != 0)
+            _dispatcher = new MacOSDispatcher();
+
+            // Ensure dispatcher wake can break the event wait.
+            _dispatcher.SetWake(() =>
             {
-                MacOSInterop.PostWakeEvent();
+                // Only interrupt the OS wait when the loop is actually parked. A UI-thread post while the loop
+                // is active is picked up by the pre-park recheck below, so no wake event is needed (and posting
+                // one would linger in the event queue and cause a spurious extra wakeup).
+                if (Volatile.Read(ref _parked) != 0)
+                {
+                    MacOSInterop.PostWakeEvent();
+                }
+            });
+
+            MacOSInterop.EnsureApplicationInitialized();
+            _lastSystemTheme = GetSystemThemeVariant();
+            if (app.ThemeMode == ThemeVariant.System)
+            {
+                MacOSInterop.TrySetThemeChangedCallback(OnSystemThemeChanged);
             }
-        });
+            else
+            {
+                MacOSInterop.TrySetThemeChangedCallback(null);
+            }
 
-        MacOSInterop.EnsureApplicationInitialized();
-        _lastSystemTheme = GetSystemThemeVariant();
-        if (app.ThemeMode == ThemeVariant.System)
-        {
-            MacOSInterop.TrySetThemeChangedCallback(OnSystemThemeChanged);
+            _running = true;
+            app.Dispatcher = _dispatcher;
+            // Install the dispatcher as the SynchronizationContext so await continuations return to the UI thread.
+            SynchronizationContext.SetSynchronizationContext(_dispatcher);
+
+            // Note: Window backend will create NSWindow on Show().
+            app.OnHostLoopStarting(mainWindow);
+
+            // Basic manual event loop (NSApplication without calling [NSApp run]).
+            PumpLoop(null);
         }
-        else
+        finally
         {
+            app.Dispatcher = null;
+            _dispatcher = null;
+            _app = null;
             MacOSInterop.TrySetThemeChangedCallback(null);
+            SynchronizationContext.SetSynchronizationContext(previousContext);
         }
-
-        _running = true;
-        app.Dispatcher = _dispatcher;
-        // Install the dispatcher as the SynchronizationContext so await continuations return to the UI thread.
-        SynchronizationContext.SetSynchronizationContext(_dispatcher);
-
-        // Note: Window backend will create NSWindow on Show().
-        mainWindow.Show();
-
-        // Basic manual event loop (NSApplication without calling [NSApp run]).
-        PumpLoop(null);
-
-        app.Dispatcher = null;
-        _app = null;
-        MacOSInterop.TrySetThemeChangedCallback(null);
-        SynchronizationContext.SetSynchronizationContext(previousContext);
     }
 
     /// <summary>

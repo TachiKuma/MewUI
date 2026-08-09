@@ -67,7 +67,7 @@ public sealed class ProgressBarThemeTests
         public uint GetDpiForWindow(nint windowHandle) => 96;
         public bool EnablePerMonitorDpiAwareness() => false;
         public int GetSystemMetricsForDpi(int nIndex, uint dpi) => 0;
-        public void Run(Application app, Window mainWindow) => onRun?.Invoke(app, mainWindow);
+        public void Run(Application app, Window? mainWindow) => onRun?.Invoke(app, mainWindow!);
         public void Quit(Application app) { }
         public void DoEvents() { }
         public void Dispose() { }

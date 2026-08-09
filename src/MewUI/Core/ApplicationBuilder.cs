@@ -11,6 +11,13 @@ public sealed class ApplicationBuilder
     public Func<Window>? MainWindowFactory { get; set; }
 
     /// <summary>
+    /// Gets the callback invoked on the UI thread after the dispatcher is installed and before the
+    /// main window is shown. A configured callback without a main window factory starts without a
+    /// main window.
+    /// </summary>
+    internal Action? Startup { get; set; }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="ApplicationBuilder"/> class.
     /// </summary>
     /// <param name="options">Application options.</param>
@@ -26,7 +33,8 @@ public sealed class ApplicationBuilder
     public AppOptions Options { get; }
 
     /// <summary>
-    /// Applies configured options and runs the application using <see cref="MainWindowFactory"/>.
+    /// Applies configured options and runs the application. When no <see cref="MainWindowFactory"/>
+    /// is configured, a startup callback is required and the application runs without a main window.
     /// </summary>
     public void Run()
     {
@@ -34,9 +42,10 @@ public sealed class ApplicationBuilder
         {
             throw new InvalidOperationException("ApplicationBuilder cannot be used after Application is running.");
         }
-        if (MainWindowFactory == null)
+        if (MainWindowFactory == null && Startup == null)
         {
-            throw new InvalidOperationException("Main window is not configured. Use UseMainWindow(...) or Run<TWindow>().");
+            throw new InvalidOperationException(
+                "Application startup is not configured. Use BuildMainWindow(...), OnStartup(...), or Run<TWindow>().");
         }
 
         // 1. Platform setup - establishes platform font and system theme detection.
@@ -44,10 +53,16 @@ public sealed class ApplicationBuilder
         // 2. Theme/options - user overrides applied on top of platform defaults.
         ApplyOptions();
 
-        var mainWindow = MainWindowFactory();
-        ArgumentNullException.ThrowIfNull(mainWindow);
-
-        Application.Run(mainWindow);
+        if (MainWindowFactory != null)
+        {
+            var mainWindow = MainWindowFactory();
+            ArgumentNullException.ThrowIfNull(mainWindow);
+            RunApplication(mainWindow);
+        }
+        else
+        {
+            Application.Run(Startup!);
+        }
     }
 
     /// <summary>
@@ -68,7 +83,7 @@ public sealed class ApplicationBuilder
 
         _ = Application.DefaultPlatformHost;
         ApplyOptions();
-        Application.Run(mainWindow);
+        RunApplication(mainWindow);
     }
 
     /// <summary>
@@ -83,7 +98,19 @@ public sealed class ApplicationBuilder
 
         _ = Application.DefaultPlatformHost;
         ApplyOptions();
-        Application.Run(new TWindow());
+        RunApplication(new TWindow());
+    }
+
+    private void RunApplication(Window mainWindow)
+    {
+        if (Startup != null)
+        {
+            Application.Run(mainWindow, Startup);
+        }
+        else
+        {
+            Application.Run(mainWindow);
+        }
     }
 
     private void ApplyOptions()

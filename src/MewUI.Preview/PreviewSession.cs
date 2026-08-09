@@ -29,7 +29,7 @@ internal sealed class PreviewSession : IDisposable
     private bool _wrapperIsComponentHost;
     private Action? _requestWake;
     private List<PreviewTargetScanner.TargetDescriptor>? _targets;
-    private string _activeTargetId = PreviewTargetScanner.MAIN_WINDOW_ID;
+    private string _activeTargetId = string.Empty;
     private IRenderSurface? _surface;
     private int _surfaceWidthPx;
     private int _surfaceHeightPx;
@@ -42,12 +42,16 @@ internal sealed class PreviewSession : IDisposable
     private double _clientDpi;
     private bool _closingOwnedWindow;
 
-    public void Start(Application app, Window mainWindow, Action requestWake)
+    public void Start(Application app, Window? mainWindow, Action requestWake)
     {
         _app = app;
         _mainWindow = mainWindow;
         _activeWindow = mainWindow;
-        BlockUserClose(mainWindow);
+        _activeTargetId = mainWindow != null ? PreviewTargetScanner.MAIN_WINDOW_ID : string.Empty;
+        if (mainWindow != null)
+        {
+            BlockUserClose(mainWindow);
+        }
         _requestWake = requestWake;
         MewUiHotReload.DeltaApplied += OnDeltaApplied;
         _channel = new PreviewChannel(OnChannelMessage, OnChannelConnected);
@@ -77,7 +81,7 @@ internal sealed class PreviewSession : IDisposable
         if (ReferenceEquals(_activeWindow, window))
         {
             _activeWindow = _mainWindow;
-            _activeTargetId = PreviewTargetScanner.MAIN_WINDOW_ID;
+            _activeTargetId = _mainWindow != null ? PreviewTargetScanner.MAIN_WINDOW_ID : string.Empty;
             if (_activeWindow != null)
             {
                 ApplyClientDpi(_activeWindow);
@@ -195,7 +199,7 @@ internal sealed class PreviewSession : IDisposable
         {
             _pendingAckSeq = 0;
             SendTargets();
-            SendStatus($"Previewing {_activeTargetId}");
+            SendStatus(_activeWindow != null ? $"Previewing {_activeTargetId}" : "No active preview target");
             if (_activeWindow != null)
             {
                 MarkDirty(_activeWindow);
@@ -498,7 +502,7 @@ internal sealed class PreviewSession : IDisposable
         if (_targets == null)
         {
             long start = Stopwatch.GetTimestamp();
-            _targets = PreviewTargetScanner.Scan();
+            _targets = PreviewTargetScanner.Scan(mainWindowAvailable: _mainWindow != null);
             long elapsedMs = (Stopwatch.GetTimestamp() - start) * 1000 / Stopwatch.Frequency;
             PreviewTrace.Log($"target scan {elapsedMs}ms ({_targets.Count} targets)");
         }
@@ -533,7 +537,7 @@ internal sealed class PreviewSession : IDisposable
             return;
         }
 
-        _targets ??= PreviewTargetScanner.Scan();
+        _targets ??= PreviewTargetScanner.Scan(mainWindowAvailable: _mainWindow != null);
         var descriptor = _targets.Find(target => string.Equals(target.Id, id, StringComparison.Ordinal));
         if (descriptor == null)
         {
@@ -577,7 +581,7 @@ internal sealed class PreviewSession : IDisposable
         catch (Exception ex)
         {
             _activeWindow = _mainWindow;
-            _activeTargetId = PreviewTargetScanner.MAIN_WINDOW_ID;
+            _activeTargetId = _mainWindow != null ? PreviewTargetScanner.MAIN_WINDOW_ID : string.Empty;
             SendStatus($"Failed to open target {id}: {ex.Message}", hasError: true, exceptionDetail: ex.ToString());
         }
         finally
@@ -698,7 +702,7 @@ internal sealed class PreviewSession : IDisposable
             {
                 // Component wrappers recreate the instance so helper-method edits are reflected
                 // even when the OnBuild override itself did not change.
-                _targets ??= PreviewTargetScanner.Scan();
+                _targets ??= PreviewTargetScanner.Scan(mainWindowAvailable: _mainWindow != null);
                 var descriptor = _targets.Find(target => string.Equals(target.Id, _activeTargetId, StringComparison.Ordinal));
                 if (descriptor is { Type: not null, Available: true } && !typeof(Window).IsAssignableFrom(descriptor.Type))
                 {

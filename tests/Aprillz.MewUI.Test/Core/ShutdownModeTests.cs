@@ -7,6 +7,7 @@ namespace MewUI.Test.Core;
 /// run loop now lives in Application (one owner, ShutdownMode-aware) instead of each platform host.
 /// </summary>
 [TestClass]
+[DoNotParallelize]
 public sealed class ShutdownModeTests
 {
     [TestMethod]
@@ -36,6 +37,6 @@ public sealed class ShutdownModeTests
     public void Default_IsOnLastWindowClose()
     {
         // Process-level default matches the pre-existing behavior (quit when the last window closes).
-        Assert.AreEqual(ShutdownMode.OnLastWindowClose, ShutdownMode.OnLastWindowClose);
+        Assert.AreEqual(ShutdownMode.OnLastWindowClose, Application.ShutdownMode);
     }
 }

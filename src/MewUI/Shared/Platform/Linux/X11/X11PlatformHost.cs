@@ -117,7 +117,7 @@ public sealed class X11PlatformHost : IPlatformHost
         _windows.Remove(window);
     }
 
-    public void Run(Application app, Window mainWindow)
+    public void Run(Application app, Window? mainWindow)
     {
         _running = true;
         _app = app;
@@ -125,64 +125,63 @@ public sealed class X11PlatformHost : IPlatformHost
         EnsureDisplay();
 
         var previousContext = SynchronizationContext.Current;
-        var dispatcher = CreateDispatcher(0);
-        _dispatcher = dispatcher as LinuxDispatcher;
-        app.Dispatcher = dispatcher;
-        SynchronizationContext.SetSynchronizationContext(dispatcher as SynchronizationContext);
-        _dispatcher?.SetWake(SignalWake);
-
-        // GNOME/Wayland doesn't provide X11 notifications for theme changes.
-        // Best-effort: listen to gsettings notifications and wake the loop.
-        if (_gsettingsThemeMonitor == null)
+        try
         {
-            _gsettingsThemeMonitor = new LinuxGSettingsMonitor("org.gnome.desktop.interface");
-            _gsettingsThemeMonitor.Start(() =>
+            var dispatcher = CreateDispatcher(0);
+            _dispatcher = dispatcher as LinuxDispatcher;
+            app.Dispatcher = dispatcher;
+            SynchronizationContext.SetSynchronizationContext(dispatcher as SynchronizationContext);
+            _dispatcher?.SetWake(SignalWake);
+
+            // GNOME/Wayland doesn't provide X11 notifications for theme changes.
+            // Best-effort: listen to gsettings notifications and wake the loop.
+            if (_gsettingsThemeMonitor == null)
             {
-                Interlocked.Exchange(ref _systemThemeDirty, 1);
-                SignalWake();
-            });
-        }
-
-        // Show after dispatcher is ready so timers/postbacks work immediately (WPF-style dispatcher lifetime).
-        mainWindow.Show();
-
-        // Very simple single-display loop (from the main window).
-        if (!_windows.TryGetValue(mainWindow.Handle, out var mainBackend))
-        {
-            throw new InvalidOperationException("X11 main window backend not registered.");
-        }
-
-        PumpLoop(null);
-
-        // Application.Quit exits the loop with windows still alive; their GL and input-method
-        // teardown talks to the X server, so it must run BEFORE XCloseDisplay frees the Display.
-        // Backends cache the display pointer, making a later teardown a use-after-free.
-        foreach (var backend in _windows.Values.ToArray())
-        {
-            try { backend.Dispose(); } catch { }
-        }
-        _windows.Clear();
-
-        if (Display != 0)
-        {
-            FreeCursorCache();   // release shared cursors before the display goes away
-            try
-            {
-                NativeX11.XCloseDisplay(Display);
+                _gsettingsThemeMonitor = new LinuxGSettingsMonitor("org.gnome.desktop.interface");
+                _gsettingsThemeMonitor.Start(() =>
+                {
+                    Interlocked.Exchange(ref _systemThemeDirty, 1);
+                    SignalWake();
+                });
             }
-            catch
-            {
-            }
-            Display = 0;
-        }
 
-        CloseWakePipe();
-        _gsettingsThemeMonitor?.Dispose();
-        _gsettingsThemeMonitor = null;
-        _dispatcher = null;
-        _app = null;
-        app.Dispatcher = null;
-        SynchronizationContext.SetSynchronizationContext(previousContext);
+            // Start after dispatcher is ready so timers/postbacks work immediately.
+            app.OnHostLoopStarting(mainWindow);
+
+            PumpLoop(null);
+        }
+        finally
+        {
+            // Application.Quit exits the loop with windows still alive; their GL and input-method
+            // teardown talks to the X server, so it must run BEFORE XCloseDisplay frees the Display.
+            // Backends cache the display pointer, making a later teardown a use-after-free.
+            foreach (var backend in _windows.Values.ToArray())
+            {
+                try { backend.Dispose(); } catch { }
+            }
+            _windows.Clear();
+
+            if (Display != 0)
+            {
+                FreeCursorCache();   // release shared cursors before the display goes away
+                try
+                {
+                    NativeX11.XCloseDisplay(Display);
+                }
+                catch
+                {
+                }
+                Display = 0;
+            }
+
+            CloseWakePipe();
+            _gsettingsThemeMonitor?.Dispose();
+            _gsettingsThemeMonitor = null;
+            _dispatcher = null;
+            _app = null;
+            app.Dispatcher = null;
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
     }
 
     /// <summary>

@@ -159,7 +159,7 @@ public sealed class Win32PlatformHost : IPlatformHost
         _windows.Remove(hwnd);
     }
 
-    public void Run(Application app, Window mainWindow)
+    public void Run(Application app, Window? mainWindow)
     {
         try
         {
@@ -182,7 +182,7 @@ public sealed class Win32PlatformHost : IPlatformHost
             }
 
             // Show after dispatcher is ready so timers/postbacks work immediately (WPF-style dispatcher lifetime).
-            mainWindow.Show();
+            app.OnHostLoopStarting(mainWindow);
 
             PumpLoop(null);
         }

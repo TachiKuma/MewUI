@@ -29,10 +29,12 @@ public sealed class Application
     // Run-scoped state (window registry, main-window identity) and its ordered teardown. Non-null only
     // for the duration of a Run; created at run start, disposed at run end.
     private ApplicationRuntime? _runtime;
+    private Action? _startup;
 
     /// <summary>
     /// Determines when the run loop ends automatically as windows close. Process-level policy; set
-    /// before <see cref="Run"/>. Defaults to <see cref="MewUI.ShutdownMode.OnLastWindowClose"/>.
+    /// before <see cref="Run(Window)"/> or <see cref="Run(Action)"/>. Defaults to
+    /// <see cref="MewUI.ShutdownMode.OnLastWindowClose"/>.
     /// </summary>
     public static ShutdownMode ShutdownMode { get; set; } = ShutdownMode.OnLastWindowClose;
     private readonly ThemeManager _themeManager;
@@ -256,7 +258,7 @@ public sealed class Application
     /// </summary>
     /// <summary>
     /// Gets the default graphics factory (the pre-<see cref="Current"/> reference). Rendering code that may run
-    /// before <see cref="Run"/> uses this as a fallback. The setter is internal - backends register the factory.
+    /// before <see cref="Run(Window)"/> uses this as a fallback. The setter is internal - backends register the factory.
     /// </summary>
     public static IGraphicsFactory DefaultGraphicsFactory
     {
@@ -309,6 +311,33 @@ public sealed class Application
     /// </summary>
     public static void Run(Window mainWindow)
     {
+        ArgumentNullException.ThrowIfNull(mainWindow);
+        RunInternal(mainWindow, startup: null);
+    }
+
+    /// <summary>
+    /// Runs the application with the specified main window and invokes <paramref name="startup"/>
+    /// on the UI thread after the dispatcher is installed and before the window is shown.
+    /// </summary>
+    public static void Run(Window mainWindow, Action startup)
+    {
+        ArgumentNullException.ThrowIfNull(mainWindow);
+        ArgumentNullException.ThrowIfNull(startup);
+        RunInternal(mainWindow, startup);
+    }
+
+    /// <summary>
+    /// Runs the application without a main window and invokes <paramref name="startup"/> on the UI
+    /// thread after the dispatcher is installed and before the platform message loop begins.
+    /// </summary>
+    public static void Run(Action startup)
+    {
+        ArgumentNullException.ThrowIfNull(startup);
+        RunInternal(mainWindow: null, startup);
+    }
+
+    private static void RunInternal(Window? mainWindow, Action? startup)
+    {
         if (_current != null)
         {
             throw new InvalidOperationException("Application is already running.");
@@ -328,9 +357,13 @@ public sealed class Application
                 app = new Application(host);
                 _current = app;
                 app._runtime = new ApplicationRuntime();
+                app._startup = startup;
                 _ = app.Theme;
-                app._runtime.SetMainWindow(mainWindow);
-                app.RegisterWindow(mainWindow);
+                if (mainWindow != null)
+                {
+                    app._runtime.SetMainWindow(mainWindow);
+                    app.RegisterWindow(mainWindow);
+                }
                 app.RunCore(mainWindow);
             }
             finally
@@ -339,6 +372,7 @@ public sealed class Application
                 {
                     if (app != null)
                     {
+                        app._startup = null;
                         // Ordered teardown of run-scoped state (drag reset then registry clear).
                         app._runtime?.Dispose();
                         app._runtime = null;
@@ -437,7 +471,14 @@ public sealed class Application
             _ => remainingWindows == 0,
         };
 
-    private void RunCore(Window mainWindow)
+    internal void OnHostLoopStarting(Window? mainWindow)
+    {
+        var startup = Interlocked.Exchange(ref _startup, null);
+        startup?.Invoke();
+        mainWindow?.Show();
+    }
+
+    private void RunCore(Window? mainWindow)
     {
         PlatformHost.Run(this, mainWindow);
 

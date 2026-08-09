@@ -234,7 +234,7 @@ public sealed class ApplicationFailureRecoveryTests
         public bool EnablePerMonitorDpiAwareness() => false;
         public int GetSystemMetricsForDpi(int nIndex, uint dpi) => 0;
 
-        public void Run(Application app, Window mainWindow)
+        public void Run(Application app, Window? mainWindow)
         {
             RunningApplication = app;
             if (throwFromRun)
@@ -242,7 +242,7 @@ public sealed class ApplicationFailureRecoveryTests
                 throw new InvalidOperationException("run failure");
             }
 
-            onRun?.Invoke(app, mainWindow);
+            onRun?.Invoke(app, mainWindow!);
         }
 
         public bool QuitCalled { get; private set; }
