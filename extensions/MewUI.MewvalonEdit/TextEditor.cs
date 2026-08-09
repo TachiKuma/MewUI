@@ -16,6 +16,12 @@ public class TextEditor : Control, ITextEditorComponent
     private const string PART_MARGIN_HOST = "PART_MarginHost";
     private const string PART_OVERLAY_HOST = "PART_OverlayHost";
 
+    static TextEditor()
+    {
+        // So Focus() reaches the editor at all; OnGotFocus hands it on to the surface.
+        FocusableProperty.OverrideDefaultValue<TextEditor>(true);
+    }
+
     private readonly MultiLineTextBox _surface;
     private readonly LineNumberMargin _lineNumberMargin;
     private readonly System.Collections.ObjectModel.ObservableCollection<AbstractMargin> _leftMargins = [];
@@ -585,6 +591,19 @@ public class TextEditor : Control, ITextEditorComponent
 
 
     internal MultiLineTextBox Surface => _surface;
+
+    /// <summary>
+    /// Hands the keyboard to the surface that carries the document. The editor is a templated
+    /// control around that surface, so focusing the editor itself would leave typing nowhere to go.
+    /// </summary>
+    protected override void OnGotFocus()
+    {
+        base.OnGotFocus();
+        if (!_surface.IsFocused)
+        {
+            _surface.Focus();
+        }
+    }
 
     /// <summary>Pixel density the text is laid out at. Generated elements measure at the same one.</summary>
     internal uint EditorDpi => GetDpi();
