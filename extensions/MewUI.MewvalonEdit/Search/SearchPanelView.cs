@@ -5,17 +5,21 @@ using Aprillz.MewUI.Text;
 namespace Aprillz.MewUI.MewvalonEdit.Search;
 
 /// <summary>
-/// The panel the reader types into. AvalonEdit puts the same row of controls in an adorner over the
-/// text area; here it is a child of the editor's overlay layer, which is what that layer is for.
+/// The panel the reader types into, floating over the text area on the window's adorner layer as
+/// the original does.
 /// </summary>
 internal sealed class SearchPanelView
 {
     private readonly SearchPanel _panel;
     private readonly TextBox _patternBox;
+    private readonly ObservableValue<string> _patternSource;
     private readonly TextBlock _status;
 
-    /// <summary>The element put on the editor's overlay layer.</summary>
+    /// <summary>The element the adorner carries over the editor.</summary>
     public Border Root { get; }
+
+    /// <summary>The message shown below the panel, on an adorner of its own.</summary>
+    public Border MessageRoot { get; }
 
     public SearchPanelView(SearchPanel panel)
     {
@@ -38,11 +42,23 @@ internal sealed class SearchPanelView
             root.FontFamily(theme.Metrics.FontFamily).FontSize(theme.Metrics.FontSize);
         });
         _patternBox = new TextBox().Width(160).Placeholder("Find");
-        _patternBox.TextChanged += value =>
+        // Bound rather than assigned from the changed event, and validated on the way back to the
+        // source: a pattern that cannot be searched with makes the conversion throw, the binding
+        // reports that as a validation error, and the box goes into its invalid state - which is how
+        // the reader sees the trouble while still typing. The original arrives at the same state
+        // through a validation rule on this box's binding.
+        _patternSource = new ObservableValue<string>(panel.SearchPattern);
+        _patternSource.Changed += () =>
         {
-            _panel.SearchPattern = value;
+            _panel.SearchPattern = _patternSource.Value;
             UpdateStatus();
         };
+        _patternBox.Bind(
+            TextBox.TextProperty,
+            _patternSource,
+            static value => value,
+            value => { _panel.ValidatePattern(value); return value; },
+            BindingMode.TwoWay);
         // The panel floats on the window's adorner layer, so keys pressed in it never pass through
         // the editor and its map. It carries the whole set itself, which is why the original gives
         // its search layer a key handler of its own rather than leaving them to the text area.
@@ -52,9 +68,30 @@ internal sealed class SearchPanelView
         Root.InputMap.Map(new KeyGesture(Key.F3, ModifierKeys.Shift), () => { _panel.FindPrevious(); UpdateStatus(showPatternError: true); });
         Root.InputMap.Map(new KeyGesture(Key.Escape), _panel.Close);
 
+        // The message hangs below the panel on its own adorner rather than joining the panel, so
+        // saying something does not resize the controls under the reader's hands. The original
+        // places its message view against the search box for the same reason.
         new TextBlock()
             .Ref(out _status)
-            .Bind(TextBlock.IsVisibleProperty, _status, TextBlock.TextProperty, x => x.Length > 0);
+            .TextWrapping(TextWrapping.Wrap);
+        MessageRoot = new Border
+        {
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(6),
+            Padding = new Thickness(8, 4, 8, 4),
+            MaxWidth = 280,
+            BorderThickness = 1,
+            IsVisible = false,
+            Child = _status
+        };
+        MessageRoot.WithTheme(static (theme, root) =>
+        {
+            root.CornerRadius = theme.Metrics.ControlCornerRadius;
+            root.Background = theme.Palette.ContainerBackground;
+            root.BorderBrush = theme.Palette.ControlBorder;
+            root.FontFamily(theme.Metrics.FontFamily).FontSize(theme.Metrics.FontSize);
+        });
 
         var matchCase = OptionToggle(
             new TextBlock().Text("Aa"),
@@ -90,8 +127,7 @@ internal sealed class SearchPanelView
                     .Horizontal()
                     .Spacing(6)
                     .Children(
-                        matchCase, wholeWords, useRegex),
-                _status);
+                        matchCase, wholeWords, useRegex));
     }
 
     /// <summary>A search option as a compact toggle, its meaning carried by the tooltip.</summary>
@@ -128,24 +164,43 @@ internal sealed class SearchPanelView
     /// <summary>Puts the caret in the search box and selects what is there, as reopening should.</summary>
     public void Reactivate()
     {
-        _patternBox.Text = _panel.SearchPattern;
+        _patternSource.Value = _panel.SearchPattern;
         _patternBox.Focus();
         _patternBox.SelectAll();
     }
 
     /// <summary>
-    /// What the status line says. A pattern is invalid most of the way through being typed, so the
-    /// reason only appears once the reader asks to search, which is when the original raises it too.
+    /// What the status line says. While a pattern is being typed only the box's invalid state shows
+    /// the trouble; the reason is spelled out once the reader asks to search, which is where the
+    /// original reads it off the box as well.
     /// </summary>
     public void UpdateStatus(bool showPatternError = false)
     {
-        if (showPatternError && _panel.PatternError is string error)
+        string message;
+        if (showPatternError && PatternError() is string error)
         {
-            _status.Text = _panel.Localization.ErrorText + error;
-            return;
+            message = _panel.Localization.ErrorText + error;
         }
-        _status.Text = _panel.Results.Count == 0 && _panel.SearchPattern.Length > 0
-            ? _panel.Localization.NoMatchesFoundText
-            : string.Empty;
+        else
+        {
+            message = _panel.Results.Count == 0 && _panel.SearchPattern.Length > 0
+                ? _panel.Localization.NoMatchesFoundText
+                : string.Empty;
+        }
+        _status.Text = message;
+        MessageRoot.IsVisible = message.Length > 0;
+    }
+
+    /// <summary>
+    /// Why the pattern cannot be searched with: what the box rejected while it was typed, or what
+    /// the panel hit when an option change put the stored pattern out of use.
+    /// </summary>
+    private string? PatternError()
+    {
+        foreach (var error in _patternBox.ValidationErrors)
+        {
+            return error.Message;
+        }
+        return _panel.PatternError;
     }
 }

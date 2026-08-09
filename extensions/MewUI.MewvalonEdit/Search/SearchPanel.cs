@@ -20,6 +20,7 @@ public sealed class SearchPanel : ITextClassifier
     private bool _strategyIsExplicit;
     private SearchPanelView? _view;
     private Adorner? _adorner;
+    private Adorner? _messageAdorner;
     private bool _uninstalled;
     private bool _suspendDocumentRefresh;
 
@@ -74,7 +75,7 @@ public sealed class SearchPanel : ITextClassifier
         bool wasClosed = IsClosed;
         IsClosed = false;
         _view ??= new SearchPanelView(this);
-        ShowAdorner(_view.Root);
+        ShowAdorner(_view);
         if (wasClosed)
         {
             BindOpenGestures();
@@ -127,18 +128,47 @@ public sealed class SearchPanel : ITextClassifier
     /// with the editor without joining its layout or being clipped by its frame. A panel opened
     /// before the editor reaches a window waits for it.
     /// </summary>
-    private void ShowAdorner(UIElement content)
+    private void ShowAdorner(SearchPanelView view)
     {
-        _adorner ??= new Adorner(_editor, content);
+        _adorner ??= new Adorner(_editor, view.Root);
         _editor.ShowAdorner(_adorner);
+        // The message rides a second adorner under the panel, so it can appear and go without
+        // resizing the controls the reader is using.
+        _messageAdorner ??= new BelowPanelAdorner(_editor, view.Root, view.MessageRoot);
+        _editor.ShowAdorner(_messageAdorner);
     }
 
     private void HideAdorner()
     {
+        if (_messageAdorner is Adorner message)
+        {
+            _editor.HideAdorner(message);
+            _messageAdorner = null;
+        }
         if (_adorner is Adorner adorner)
         {
             _editor.HideAdorner(adorner);
             _adorner = null;
+        }
+    }
+
+    /// <summary>
+    /// Places its child directly under the panel rather than over the editor it adorns, which is
+    /// where the original puts the message it shows beside the search box.
+    /// </summary>
+    private sealed class BelowPanelAdorner(UIElement adorned, UIElement panel, UIElement child)
+        : Adorner(adorned, child)
+    {
+        protected override void ArrangeContent(Rect bounds)
+        {
+            var above = panel.Bounds;
+            var slot = above.Height > 0
+                ? new Rect(bounds.X, above.Bottom, bounds.Width, Math.Max(0, bounds.Bottom - above.Bottom))
+                : bounds;
+            for (int index = 0; index < Children.Count; index++)
+            {
+                Children[index].Arrange(slot);
+            }
         }
     }
 
@@ -171,6 +201,21 @@ public sealed class SearchPanel : ITextClassifier
             _searchPattern = value;
             Refresh();
         }
+    }
+
+    /// <summary>
+    /// Throws when the pattern cannot be searched with under the current options. The box a reader
+    /// types into validates through this, so an unfinished regular expression puts it in its invalid
+    /// state; the original reaches the same state through a validation rule on that box's binding.
+    /// </summary>
+    /// <exception cref="SearchPatternException">The pattern cannot be searched with.</exception>
+    public void ValidatePattern(string? pattern)
+    {
+        if (_strategyIsExplicit || string.IsNullOrEmpty(pattern))
+        {
+            return;
+        }
+        SearchStrategyFactory.Create(pattern, !MatchCase, WholeWords, SearchMode);
     }
 
     public bool MatchCase
