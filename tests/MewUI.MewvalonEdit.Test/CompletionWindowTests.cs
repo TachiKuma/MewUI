@@ -2,7 +2,10 @@ using Aprillz.MewUI;
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.MewvalonEdit;
 using Aprillz.MewUI.MewvalonEdit.CodeCompletion;
+using Aprillz.MewUI.MewvalonEdit.Document;
 using Aprillz.MewUI.MewvalonEdit.Editing;
+using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Resources;
 
 namespace MewUI.MewvalonEdit.Test;
 
@@ -197,6 +200,34 @@ public sealed class CompletionWindowTests
 
         Assert.IsFalse(first.IsOpen);
         Assert.IsTrue(second.IsOpen);
+    }
+
+    [TestMethod]
+    public void AnEntryCarriesTheIconTheRowDraws()
+    {
+        var withImage = new CompletionData("WithImage", image: new StubImageSource());
+        Assert.IsNotNull(withImage.Image);
+
+        // An implementation predating the icon must still compile and report none.
+        ICompletionData without = new MinimalCompletionData();
+        Assert.IsNull(without.Image, "the icon must default to none rather than force every implementation to supply one");
+    }
+
+    private sealed class StubImageSource : IImageSource
+    {
+        public IImage CreateImage(IGraphicsFactory factory) => throw new NotSupportedException();
+    }
+
+    private sealed class MinimalCompletionData : ICompletionData
+    {
+        public string Text => "Minimal";
+        public object? Content => Text;
+        public object? Description => null;
+        public double Priority => 0;
+
+        public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
+        {
+        }
     }
 
     private sealed class PassiveStackedHandler(TextArea textArea) : TextAreaStackedInputHandler(textArea);

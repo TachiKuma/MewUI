@@ -44,9 +44,11 @@ public class CompletionList : Control
         });
     }
 
+    private const double ICON_SIZE = 16;
+
     private static Element BuildTemplate(CompletionList owner, ControlTemplateContext context)
     {
-        var listBox = new ListBox();
+        var listBox = new ListBox { ItemTemplate = CreateRowTemplate() };
         context.Register(PART_LIST, listBox);
         // Holds whatever EmptyTemplate builds. Collapsed while there are rows, so it costs a
         // measure of nothing until a list actually comes up empty.
@@ -54,6 +56,31 @@ public class CompletionList : Control
         context.Register(PART_EMPTY, empty);
         return new Grid().Children(listBox, empty);
     }
+
+    /// <summary>
+    /// An icon slot beside the entry's text, as in the original. The slot keeps its width whether
+    /// or not the entry carries an icon, so the text of every row starts at the same place.
+    /// </summary>
+    private static IDataTemplate CreateRowTemplate() => new DelegateTemplate<ICompletionData>(
+        build: static _ =>
+        {
+            var icon = new Image
+            {
+                Width = ICON_SIZE,
+                Height = ICON_SIZE,
+                Margin = new Thickness(0, 0, 2, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var text = new TextBlock().CenterVertical();
+            return new StackPanel().Horizontal().Children(icon, text);
+        },
+        bind: static (view, item, _, _) =>
+        {
+            var row = (StackPanel)view;
+            ((Image)row.Children[0]).Source = item.Image;
+            ((TextBlock)row.Children[1]).Text = item.Content as string ?? item.Text;
+        },
+        unbind: static (view, _, _, _) => ((Image)((StackPanel)view).Children[0]).Source = null);
 
     /// <inheritdoc/>
     protected override void OnApplyTemplate()
