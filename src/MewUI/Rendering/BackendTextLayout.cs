@@ -1,10 +1,9 @@
 namespace Aprillz.MewUI.Rendering;
 
 /// <summary>
-/// Text layout measurement result produced by <see cref="IGraphicsContext.CreateTextLayout"/>.
-/// Pure managed result. Backend may attach a native handle internally for rendering.
+/// Backend-private text run measurement and native-handle carrier.
 /// </summary>
-public sealed class TextLayout
+internal sealed class BackendTextLayout
 {
     private NativeHandleLease? _backendLease;
 
@@ -33,7 +32,7 @@ public sealed class TextLayout
         Interlocked.Exchange(ref _backendLease, null)?.Release();
     }
 
-    ~TextLayout() => ReleaseBackendHandle();
+    ~BackendTextLayout() => ReleaseBackendHandle();
 }
 
 internal sealed class NativeHandleLease(nint handle, Action<nint> release)

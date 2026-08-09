@@ -1,6 +1,7 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Rendering;
+using MewUI.Test.Infrastructure;
 
 namespace MewUI.Test.Binding;
 
@@ -447,25 +448,13 @@ public sealed class BindingErrorTransportTests
             BindingErrorStage.SourceValidation,
             new InvalidOperationException("validation failed"));
 
-    private sealed class BorderRecordingContext : MeasureGraphicsContextBase, IGraphicsContext
+    private sealed class BorderRecordingContext : NoOpGraphicsContext, IGraphicsContext
     {
         public Color? BorderColor { get; private set; }
 
         public List<Color> BorderColors { get; } = [];
 
         public override double DpiScale => 1;
-
-        public override Size MeasureText(ReadOnlySpan<char> text, IFont font)
-            => new(text.Length * 7, 14);
-
-        public override Size MeasureText(ReadOnlySpan<char> text, IFont font, double maxWidth)
-            => new(Math.Min(text.Length * 7, maxWidth), 14);
-
-        public override TextLayout? CreateTextLayout(
-            ReadOnlySpan<char> text,
-            TextFormat format,
-            in TextLayoutConstraints constraints)
-            => null;
 
         void IGraphicsContext.DrawRoundedRectangle(
             Rect rect,

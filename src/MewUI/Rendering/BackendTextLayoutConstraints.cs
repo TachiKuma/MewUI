@@ -11,4 +11,4 @@ namespace Aprillz.MewUI.Rendering;
 /// • <c>MeasureText(text, font)</c>: <c>Rect(0, 0, PositiveInfinity, 0)</c>.
 /// </para>
 /// </summary>
-public readonly record struct TextLayoutConstraints(Rect Bounds);
+internal readonly record struct BackendTextLayoutConstraints(Rect Bounds);

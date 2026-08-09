@@ -962,8 +962,8 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         }
     }
 
-    public override TextLayout? CreateTextLayout(ReadOnlySpan<char> text,
-        TextFormat format, in TextLayoutConstraints constraints)
+    public override BackendTextLayout? CreateBackendTextLayout(ReadOnlySpan<char> text,
+        BackendTextFormat format, in BackendTextLayoutConstraints constraints)
     {
         if (text.IsEmpty)
         {
@@ -1041,10 +1041,10 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
             height += -metrics.top;
         }
 
-        var measured = new Size(TextMeasurePolicy.ApplyWidthPadding(metrics.widthIncludingTrailingWhitespace), height);
+        var measured = new Size(metrics.widthIncludingTrailingWhitespace, height);
         double effectiveMaxWidth = bounds.Width > 0 && !double.IsPositiveInfinity(bounds.Width) ? bounds.Width : measured.Width;
 
-        var result = new TextLayout
+        var result = new BackendTextLayout
         {
             MeasuredSize = measured,
             EffectiveBounds = bounds,
@@ -1057,8 +1057,8 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         return result;
     }
 
-    public override void DrawTextLayout(ReadOnlySpan<char> text,
-        TextFormat format, TextLayout layout, Color color)
+    public override void DrawBackendTextLayout(ReadOnlySpan<char> text,
+        BackendTextFormat format, BackendTextLayout layout, Color color)
     {
         if (layout == null)
         {
@@ -1446,120 +1446,6 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
         D2D1VTable.FillEllipse((ID2D1RenderTarget*)_renderTarget, ellipse, brush);
     }
 
-    protected override void DrawTextCore(ReadOnlySpan<char> text, Rect bounds, IFont font, Color color,
-        TextAlignment horizontalAlignment = TextAlignment.Left,
-        TextAlignment verticalAlignment = TextAlignment.Top,
-        TextWrapping wrapping = TextWrapping.NoWrap,
-        TextTrimming trimming = TextTrimming.None)
-    {
-        if (_renderTarget == 0 || text.IsEmpty)
-        {
-            return;
-        }
-
-        if (_clipBoundsWorld.HasValue && bounds.Width < 100_000)
-        {
-            var clip = _clipBoundsWorld.Value;
-            var wv = Vector2.Transform(new Vector2((float)bounds.X, (float)bounds.Y), _transform);
-            if (wv.X + bounds.Width <= clip.X || wv.X >= clip.Right ||
-                wv.Y + bounds.Height <= clip.Y || wv.Y >= clip.Bottom)
-            {
-                return;
-            }
-        }
-
-        if (font is not DirectWriteFont dwFont)
-        {
-            throw new ArgumentException("Font must be a DirectWriteFont", nameof(font));
-        }
-
-        // Use cached native format when available, fall back to temporary (mirrors CreateTextLayout).
-        nint textFormat;
-        bool ownFormat;
-        if (_textFormatCache != null)
-        {
-            textFormat = _textFormatCache.GetOrCreate(_dwriteFactory, dwFont, horizontalAlignment, verticalAlignment, wrapping);
-            ownFormat = false;
-        }
-        else
-        {
-            textFormat = CreateDWriteTextFormat(dwFont, horizontalAlignment, verticalAlignment, wrapping);
-            ownFormat = true;
-        }
-        if (textFormat == 0)
-        {
-            return;
-        }
-
-        // Build layout rect so that width/height are converted to float independently of position,
-        // avoiding float precision loss from (float)(X+W) - (float)X != (float)W.
-        float left = (float)bounds.X;
-        float top = (float)bounds.Y;
-        float w = (float)bounds.Width;
-        float h = (float)bounds.Height;
-        var layoutRect = new D2D1_RECT_F(left, top, left + w, top + h);
-
-        nint textLayout = 0;
-        try
-        {
-            nint brush = GetSolidBrush(color);
-            var options = _textPixelSnap
-                ? D2D1_DRAW_TEXT_OPTIONS.CLIP | _colorFontOption
-                : D2D1_DRAW_TEXT_OPTIONS.NO_SNAP | D2D1_DRAW_TEXT_OPTIONS.CLIP | _colorFontOption;
-
-            if (trimming == TextTrimming.CharacterEllipsis)
-            {
-                int hr = DWriteVTable.CreateGdiCompatibleTextLayout((IDWriteFactory*)_dwriteFactory, text, textFormat,
-                    w, h, (float)DpiScale, useGdiNatural: false, out textLayout);
-                if (hr >= 0 && textLayout != 0)
-                {
-                    ApplyCustomFontFallback(textLayout);
-                    // Trimming sign depends only on the format, so it is cached alongside it
-                    // when the format cache is available; otherwise built and released per call.
-                    nint trimmingSign = 0;
-                    bool ownTrimmingSign = false;
-                    if (_textFormatCache != null)
-                    {
-                        trimmingSign = _textFormatCache.GetOrCreateTrimmingSign(_dwriteFactory, textFormat);
-                    }
-                    else
-                    {
-                        DWriteVTable.CreateEllipsisTrimmingSign((IDWriteFactory*)_dwriteFactory, textFormat, out trimmingSign);
-                        ownTrimmingSign = true;
-                    }
-                    try
-                    {
-                        var dwriteTrimming = new DWRITE_TRIMMING { granularity = DWRITE_TRIMMING_GRANULARITY.CHARACTER };
-                        DWriteVTable.SetTrimming(textLayout, dwriteTrimming, trimmingSign);
-                        var rtLayout = _deviceContext != 0 ? _deviceContext : _renderTarget;
-                        D2D1VTable.DrawTextLayout((ID2D1RenderTarget*)rtLayout,
-                            new D2D1_POINT_2F(left, top), textLayout, brush, options);
-                    }
-                    finally
-                    {
-                        if (ownTrimmingSign)
-                        {
-                            ComHelpers.Release(trimmingSign);
-                        }
-                    }
-                    return;
-                }
-            }
-
-            // Use ID2D1DeviceContext (D2D 1.1) when available - required for ENABLE_COLOR_FONT.
-            var rt = _deviceContext != 0 ? _deviceContext : _renderTarget;
-            D2D1VTable.DrawText((ID2D1RenderTarget*)rt, text, textFormat, layoutRect, brush, options);
-        }
-        finally
-        {
-            ComHelpers.Release(textLayout);
-            if (ownFormat)
-            {
-                ComHelpers.Release(textFormat);
-            }
-        }
-    }
-
     protected override void DrawImageCore(IImage image, Rect destRect) =>
         DrawImageCore(image, destRect, new Rect(0, 0, image.PixelWidth, image.PixelHeight));
 
@@ -1644,7 +1530,7 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
     }
 
     // PathGeometry re-tessellation cache (report-shared-rendering.md #8, rendering-abstraction
-    // #4): PathGeometry is mutable and neutral-layer generic (unlike TextLayout, which is an
+    // #4): PathGeometry is mutable and neutral-layer generic (unlike BackendTextLayout, which is an
     // immutable, backend-created result with a single BackendHandle slot), and the same
     // instance is drawn with either fill rule depending on call site. Route chosen: a
     // conservative keyed cache local to this backend context (ConditionalWeakTable<PathGeometry,
@@ -1852,7 +1738,7 @@ internal sealed unsafe class Direct2DGraphicsContext : GraphicsContextBase
                 height += -metrics.top;
             }
 
-            return new Size(TextMeasurePolicy.ApplyWidthPadding(metrics.widthIncludingTrailingWhitespace), height);
+            return new Size(metrics.widthIncludingTrailingWhitespace, height);
         }
         finally
         {

@@ -1,5 +1,5 @@
 using Aprillz.MewUI.Rendering;
-using Aprillz.MewUI.Controls.Text;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -13,7 +13,7 @@ public sealed class MenuBar : Control, IPopupOwner
 
     private readonly MenuBarItemCollection _items = new();
     private readonly List<Rect> _itemBounds = new();
-    private readonly MenuTextLayoutCache _textLayouts = new();
+    private readonly MenuTextLayouts _textLayouts = new();
     private int _hotIndex = -1;
     private int _openIndex = -1;
     private ContextMenu? _openPopup;
@@ -144,8 +144,9 @@ public sealed class MenuBar : Control, IPopupOwner
 
     protected override Size MeasureContent(Size availableSize)
     {
-        using var measure = BeginTextMeasurement();
-        var format = CreateMenuTextFormat(measure.Font, TextAlignment.Left, TextAlignment.Center);
+        var factory = GetGraphicsFactory();
+        var style = GetTextRunStyle();
+        uint dpi = GetDpi();
 
         double w = Padding.HorizontalThickness;
         double maxH = 0;
@@ -155,7 +156,7 @@ public sealed class MenuBar : Control, IPopupOwner
         {
             var item = _items[i];
             var text = GetDisplayText(item);
-            var textSize = _textLayouts.Measure(measure.Context, text, format, double.PositiveInfinity);
+            var textSize = _textLayouts.Measure(factory, text, dpi, in style);
             var itemW = textSize.Width + (ItemHorizontalPadding * 2);
             var itemH = textSize.Height + (ItemVerticalPadding * 2);
 
@@ -174,8 +175,9 @@ public sealed class MenuBar : Control, IPopupOwner
 
     protected override void ArrangeContent(Rect bounds)
     {
-        using var measure = BeginTextMeasurement();
-        var format = CreateMenuTextFormat(measure.Font, TextAlignment.Left, TextAlignment.Center);
+        var factory = GetGraphicsFactory();
+        var style = GetTextRunStyle();
+        uint dpi = GetDpi();
 
         _itemBounds.Clear();
         double x = bounds.X + Padding.Left;
@@ -188,7 +190,7 @@ public sealed class MenuBar : Control, IPopupOwner
         {
             var item = _items[i];
             var text = GetDisplayText(item);
-            var textSize = _textLayouts.Measure(measure.Context, text, format, double.PositiveInfinity);
+            var textSize = _textLayouts.Measure(factory, text, dpi, in style);
             var itemW = textSize.Width + (ItemHorizontalPadding * 2);
             var itemH = Math.Min(innerH, textSize.Height + (ItemVerticalPadding * 2));
 
@@ -359,8 +361,9 @@ public sealed class MenuBar : Control, IPopupOwner
         var bounds = GetSnappedBorderBounds(Bounds);
         context.FillRectangle(bounds, Background);
 
-        var font = GetFont();
-        var format = CreateMenuTextFormat(font, TextAlignment.Left, TextAlignment.Center);
+        var factory = GetGraphicsFactory();
+        var style = GetTextRunStyle();
+        uint dpi = GetDpi();
 
         for (int i = 0; i < _itemBounds.Count && i < _items.Count; i++)
         {
@@ -393,11 +396,12 @@ public sealed class MenuBar : Control, IPopupOwner
             var textRect = row.Deflate(new Thickness(ItemHorizontalPadding, 0, ItemHorizontalPadding, 0));
             var showAccessKeys = GetValue(Window.ShowAccessKeysProperty);
             var parsed = item.GetParsedText();
-            var layout = _textLayouts.EnsureRenderLayout(context, parsed.displayText, format, textRect);
+            var layout = _textLayouts.GetOrCreate(
+                factory, parsed.displayText, dpi, in style, textRect.Width, textRect.Height);
             if (layout != null)
             {
-                var metrics = _textLayouts.GetUnderlineMetrics(context, parsed.displayText, parsed.underlineIndex, format, layout);
-                AccessKeyRenderer.DrawParsed(context, parsed.displayText, parsed.underlineIndex, textRect, format, layout, fg, showAccessKeys, GetDpi() / 96.0, metrics);
+                MenuTextLayouts.Draw(
+                    context, layout, textRect, fg, showAccessKeys, parsed.underlineIndex);
             }
         }
 
@@ -412,19 +416,6 @@ public sealed class MenuBar : Control, IPopupOwner
             context.FillRectangle(rect, Theme.Palette.ControlBorder);
         }
     }
-
-    private static TextFormat CreateMenuTextFormat(
-        IFont font,
-        TextAlignment horizontalAlignment,
-        TextAlignment verticalAlignment)
-        => new()
-        {
-            Font = font,
-            HorizontalAlignment = horizontalAlignment,
-            VerticalAlignment = verticalAlignment,
-            Wrapping = TextWrapping.NoWrap,
-            Trimming = TextTrimming.None
-        };
 
     protected override void OnMewPropertyChanged(MewProperty property)
     {

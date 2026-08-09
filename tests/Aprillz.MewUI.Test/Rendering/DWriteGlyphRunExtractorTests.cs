@@ -2,6 +2,7 @@ using Aprillz.MewUI;
 using Aprillz.MewUI.Native.DirectWrite;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Rendering.Direct2D;
+using Aprillz.MewUI.Text;
 
 namespace MewUI.Test.Rendering;
 
@@ -27,33 +28,24 @@ public sealed class DWriteGlyphRunExtractorTests
         context.BeginFrame(surface);
         try
         {
-            var format = new TextFormat
-            {
-                Font = font,
-                HorizontalAlignment = TextAlignment.Left,
-                VerticalAlignment = TextAlignment.Top,
-                Wrapping = TextWrapping.NoWrap,
-                Trimming = TextTrimming.None
-            };
-            var constraints = new TextLayoutConstraints(new Rect(0, 0, 400, 80));
-            var layout = context.CreateTextLayout(text, format, in constraints);
+            using var run = ((ITextBackendRenderContext)context).CreateRun(text, font, 400, 80);
 
-            Assert.IsNotNull(layout);
-            Assert.AreNotEqual(0, layout.BackendHandle);
+            Assert.IsNotNull(run);
+            Assert.AreNotEqual(0, run.NativeHandle);
 
-            var runs = DWriteGlyphRunExtractor.Capture(layout.BackendHandle);
+            var runs = DWriteGlyphRunExtractor.Capture(run.NativeHandle);
 
             Assert.IsNotEmpty(runs);
             Assert.AreEqual(text.Length, runs.Sum(run => checked((int)run.TextLength)));
             Assert.IsGreaterThanOrEqualTo(2, runs.Select(run => run.FaceIndex).Distinct().Count(),
                 "The mixed Latin/Hangul/emoji sample should preserve fallback face boundaries.");
-            foreach (var run in runs)
+            foreach (var capturedRun in runs)
             {
-                Assert.IsGreaterThan(0, run.GlyphIndices.Length);
-                Assert.HasCount(run.GlyphIndices.Length, run.Advances);
-                Assert.HasCount(run.GlyphIndices.Length, run.Offsets);
-                Assert.HasCount(checked((int)run.TextLength), run.ClusterMap);
-                Assert.IsGreaterThan(0, run.Advances.Sum());
+                Assert.IsGreaterThan(0, capturedRun.GlyphIndices.Length);
+                Assert.HasCount(capturedRun.GlyphIndices.Length, capturedRun.Advances);
+                Assert.HasCount(capturedRun.GlyphIndices.Length, capturedRun.Offsets);
+                Assert.HasCount(checked((int)capturedRun.TextLength), capturedRun.ClusterMap);
+                Assert.IsGreaterThan(0, capturedRun.Advances.Sum());
             }
         }
         finally

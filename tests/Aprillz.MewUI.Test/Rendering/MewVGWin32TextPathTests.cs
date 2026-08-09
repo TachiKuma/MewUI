@@ -2,6 +2,7 @@ extern alias MewVGWin32;
 
 using Aprillz.MewUI;
 using Aprillz.MewUI.Rendering;
+using MewUI.Test.Infrastructure;
 
 using MewVGWin32GraphicsFactory = MewVGWin32::Aprillz.MewUI.Rendering.MewVG.MewVGWin32GraphicsFactory;
 
@@ -32,20 +33,10 @@ public sealed class MewVGWin32TextPathTests
 
         context.BeginFrame(surface);
         context.Clear(Color.Transparent);
-        var format = new TextFormat
-        {
-            Font = font,
-            HorizontalAlignment = TextAlignment.Left,
-            VerticalAlignment = TextAlignment.Top,
-            Wrapping = TextWrapping.NoWrap,
-            Trimming = TextTrimming.None
-        };
-        var constraints = new TextLayoutConstraints(new Rect(4, 4, width - 8, height - 8));
-        var layout = context.CreateTextLayout(text, format, in constraints);
-
-        Assert.IsNotNull(layout);
+        var bounds = new Rect(4, 4, width - 8, height - 8);
+        var layout = TextTestHarness.CreateLayout(factory, text.AsMemory(), font, bounds);
         Assert.IsGreaterThan(0, layout.MeasuredSize.Width);
-        context.DrawTextLayout(text, format, layout, Color.White);
+        TextTestHarness.Draw(context, layout, bounds, Color.White);
         context.EndFrame();
 
         var pixels = ((ICpuPixelSurface)surface).GetReadOnlyPixelSpan();

@@ -2,14 +2,12 @@ using System;
 using System.Collections.Generic;
 using Aprillz.MewUI;
 using Aprillz.MewUI.Rendering;
+using MewUI.Test.Infrastructure;
 
 namespace MewUI.Test.Rendering;
 
 /// <summary>
-/// A centred DrawText and a centred DrawTextLayout must put ink on the same pixel rows: controls
-/// swap between the two (an editor replacing its label, a placeholder replacing a document), so any
-/// divergence shows up as text jumping. Compares first/last ink rows per backend across DPI scales
-/// and box heights.
+/// A retained layout and an immediately-created layout must put centered ink on the same pixel rows.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
@@ -20,7 +18,7 @@ public sealed class TextDrawPathParityTests
     private const int HEIGHT_PX = 64;
 
     [TestMethod]
-    public void Direct2D_DrawText_MatchesDrawTextLayout()
+    public void Direct2D_RetainedAndImmediateLayoutsMatch()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -33,7 +31,7 @@ public sealed class TextDrawPathParityTests
     }
 
     [TestMethod]
-    public void Gdi_DrawText_MatchesDrawTextLayout()
+    public void Gdi_RetainedAndImmediateLayoutsMatch()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -55,18 +53,18 @@ public sealed class TextDrawPathParityTests
             {
                 double boxHeight = 20 + hStep;
                 var viaLayout = InkRows(factory, scale, boxHeight, useLayout: true);
-                var viaDrawText = InkRows(factory, scale, boxHeight, useLayout: false);
-                if (viaLayout != viaDrawText)
+                var viaImmediate = InkRows(factory, scale, boxHeight, useLayout: false);
+                if (viaLayout != viaImmediate)
                 {
                     mismatches.Add(
                         $"scale={scale:0.##} boxH={boxHeight}: layout[{viaLayout.Top}..{viaLayout.Bottom}] " +
-                        $"drawText[{viaDrawText.Top}..{viaDrawText.Bottom}]");
+                        $"immediate[{viaImmediate.Top}..{viaImmediate.Bottom}]");
                 }
             }
         }
 
         Assert.IsEmpty(mismatches,
-            $"DrawText ink diverges from DrawTextLayout in {mismatches.Count} of 30 cases: {string.Join("; ", mismatches)}");
+            $"Immediate layout ink diverges from retained layout in {mismatches.Count} of 30 cases: {string.Join("; ", mismatches)}");
     }
 
     private static (int Top, int Bottom) InkRows(IGraphicsFactory factory, double scale, double boxHeightDip, bool useLayout)
@@ -78,28 +76,16 @@ public sealed class TextDrawPathParityTests
             context.Clear(Color.FromArgb(255, 255, 255, 255));
 
             using var font = factory.CreateFont("Segoe UI", 12, (uint)Math.Round(scale * 96));
-            var format = new TextFormat
-            {
-                Font = font,
-                HorizontalAlignment = TextAlignment.Left,
-                VerticalAlignment = TextAlignment.Center,
-                Wrapping = TextWrapping.NoWrap,
-                Trimming = TextTrimming.None,
-            };
-
             var box = new Rect(2, 2, 240, boxHeightDip);
             if (useLayout)
             {
-                var layout = context.CreateTextLayout(TEXT, format, new TextLayoutConstraints(box));
-                if (layout != null)
-                {
-                    layout.EffectiveBounds = box;
-                    context.DrawTextLayout(TEXT, format, layout, Color.FromArgb(255, 0, 0, 0));
-                }
+                var layout = TextTestHarness.CreateLayout(
+                    factory, TEXT.AsMemory(), font, box, dpi: (uint)Math.Round(scale * 96));
+                TextTestHarness.Draw(context, layout, box, Color.FromArgb(255, 0, 0, 0), TextAlignment.Center);
             }
             else
             {
-                context.DrawText(TEXT, box, font, Color.FromArgb(255, 0, 0, 0),
+                TextTestHarness.Draw(context, factory, TEXT, box, font, Color.FromArgb(255, 0, 0, 0),
                     TextAlignment.Left, TextAlignment.Center, TextWrapping.NoWrap);
             }
 

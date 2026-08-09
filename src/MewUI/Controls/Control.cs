@@ -1,4 +1,5 @@
 using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -79,8 +80,6 @@ public abstract class Control : TextElement
 
     #endregion
 
-    private IFont? _font;
-    private uint _fontDpi;
     private Point _lastMousePositionInWindow;
 
     // VisualState system fields
@@ -867,8 +866,6 @@ public abstract class Control : TextElement
 
     protected override void OnThemeChanged(Theme oldTheme, Theme newTheme)
     {
-        _font?.Dispose();
-        _font = null;
         base.OnThemeChanged(oldTheme, newTheme);
 
         // Re-resolve style with new theme's palette colors.
@@ -911,23 +908,7 @@ public abstract class Control : TextElement
     #endregion
 
     /// <summary>
-    /// Handles font cache invalidation when font MewProperty values change.
-    /// </summary>
-    protected override void OnMewPropertyChanged(MewProperty property)
-    {
-        if (property.Id == FontFamilyProperty.Id ||
-            property.Id == FontSizeProperty.Id ||
-            property.Id == FontWeightProperty.Id)
-        {
-            _font?.Dispose();
-            _font = null;
-        }
-
-        base.OnMewPropertyChanged(property);
-    }
-
-    /// <summary>
-    /// Invalidates the cached font when an inherited font property changes on an ancestor.
+    /// Notifies controls when an inherited font property changes on an ancestor.
     /// Called by the inheritance propagation system.
     /// </summary>
     internal void InvalidateFontCache(MewProperty property)
@@ -936,8 +917,6 @@ public abstract class Control : TextElement
             property.Id == FontSizeProperty.Id ||
             property.Id == FontWeightProperty.Id)
         {
-            _font?.Dispose();
-            _font = null;
             OnFontCacheInvalidated(property);
         }
     }
@@ -946,43 +925,59 @@ public abstract class Control : TextElement
     {
     }
 
-    protected TextMeasurementScope BeginTextMeasurement()
-    {
-        var factory = GetGraphicsFactory();
-        var context = factory.CreateMeasurementContext(GetDpi());
-        var font = GetFont(factory);
-        return new TextMeasurementScope(factory, context, font);
-    }
+    /// <summary>Returns this control's inherited font properties in text-engine form.</summary>
+    protected TextRunStyle GetTextRunStyle()
+        => new(FontFamily, FontSize, FontWeight);
 
-    /// <summary>
-    /// Gets or creates the font for this control. Validates the cached font against
-    /// current property values (which may be inherited from ancestors).
-    /// </summary>
-    protected IFont GetFont(IGraphicsFactory factory)
+    protected Size MeasureEngineText(
+        ReadOnlySpan<char> text,
+        double maxWidth = double.PositiveInfinity,
+        TextWrapping wrapping = TextWrapping.NoWrap)
     {
-        var family = FontFamily;
-        var size = FontSize;
-        var weight = FontWeight;
-        var dpi = GetDpi();
-
-        if (_font != null && _fontDpi == dpi &&
-            _font.Family == family && _font.Size.Equals(size) && _font.Weight == weight)
+        if (text.IsEmpty)
         {
-            return _font;
+            return Size.Empty;
         }
 
-        _font?.Dispose();
-        _font = factory.CreateFont(family, size, dpi, weight);
-        _fontDpi = dpi;
-        return _font;
+        var style = GetTextRunStyle();
+        return TextLayoutOperations.Measure(
+            GetGraphicsFactory(), text.ToString(), GetDpi(), in style, maxWidth, wrapping);
+    }
+
+    protected void DrawEngineText(
+        IGraphicsContext context,
+        ReadOnlySpan<char> text,
+        Rect bounds,
+        Color color,
+        TextAlignment horizontalAlignment = TextAlignment.Left,
+        TextAlignment verticalAlignment = TextAlignment.Top,
+        TextWrapping wrapping = TextWrapping.NoWrap,
+        TextTrimming trimming = TextTrimming.None,
+        object? owner = null)
+    {
+        if (text.IsEmpty || bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return;
+        }
+
+        var style = GetTextRunStyle();
+        var layout = TextLayoutOperations.GetOrCreate(
+            GetGraphicsFactory(),
+            text.ToString(),
+            GetDpi(),
+            in style,
+            bounds.Width,
+            bounds.Height,
+            wrapping,
+            trimming,
+            horizontalAlignment);
+        TextLayoutOperations.DrawInBounds(
+            context, layout, bounds, color, verticalAlignment, owner ?? this);
     }
 
     protected override void OnDpiChanged(uint oldDpi, uint newDpi)
     {
         base.OnDpiChanged(oldDpi, newDpi);
-
-        _font?.Dispose();
-        _font = null;
 
         // Builds may bake device-pixel-snapped metrics, which the new scale invalidates.
         InvalidateTemplateInstance();
@@ -1050,11 +1045,6 @@ public abstract class Control : TextElement
     {
         return state.IsEnabled ? normalBackground : Theme.Palette.DisabledControlBackground;
     }
-
-    /// <summary>
-    /// Gets the font using the control's graphics factory.
-    /// </summary>
-    protected IFont GetFont() => GetFont(GetGraphicsFactory());
 
     protected double GetBorderVisualInset()
     {
@@ -1277,10 +1267,6 @@ public abstract class Control : TextElement
     {
         base.OnDispose();
 
-        // Release cached font resources.
-        _font?.Dispose();
-        _font = null;
-
         HideToolTip();
     }
 
@@ -1349,24 +1335,6 @@ public abstract class Control : TextElement
         }
 
         window.CloseToolTip(this);
-    }
-
-    protected readonly struct TextMeasurementScope : IDisposable
-    {
-        public TextMeasurementScope(IGraphicsFactory factory, IGraphicsContext context, IFont font)
-        {
-            Factory = factory;
-            Context = context;
-            Font = font;
-        }
-
-        public IGraphicsFactory Factory { get; }
-
-        public IGraphicsContext Context { get; }
-
-        public IFont Font { get; }
-
-        public void Dispose() => Context.Dispose();
     }
 
     /// <summary>

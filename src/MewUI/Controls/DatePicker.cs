@@ -1,4 +1,5 @@
 using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -160,8 +161,8 @@ public sealed class DatePicker : DropDownBase
 
         // Measure a representative date string to determine width
         string sample = DateTime.Today.ToString(DateFormat);
-        using var measure = BeginTextMeasurement();
-        var textSize = measure.Context.MeasureText(sample, measure.Font);
+        var style = GetTextRunStyle();
+        var textSize = TextLayoutOperations.Measure(GetGraphicsFactory(), sample, GetDpi(), in style);
 
         double width = textSize.Width + ArrowAreaWidth;
         return new Size(width, headerHeight);
@@ -200,8 +201,11 @@ public sealed class DatePicker : DropDownBase
 
         if (!string.IsNullOrEmpty(text))
         {
-            context.DrawText(text, textRect, GetFont(), textColor,
-                TextAlignment.Left, TextAlignment.Center, TextWrapping.NoWrap);
+            var style = GetTextRunStyle();
+            var layout = TextLayoutOperations.GetOrCreate(
+                GetGraphicsFactory(), text, GetDpi(), in style, textRect.Width, textRect.Height);
+            TextLayoutOperations.DrawInBounds(
+                context, layout, textRect, textColor, TextAlignment.Center, this);
         }
     }
 

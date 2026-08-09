@@ -16,7 +16,7 @@ public sealed partial class MewVGX11GraphicsFactory
 #else
 public sealed partial class MewVGWin32GraphicsFactory 
 #endif
-    : IGraphicsFactory, IRenderDevice, IGpuInteropInvalidationSource, IWindowResourceReleaser, IWindowSurfacePresenter
+    : IGraphicsFactory, ITextBackendFactory, IRenderDevice, IGpuInteropInvalidationSource, IWindowResourceReleaser, IWindowSurfacePresenter
 {
     public event EventHandler<GpuInteropInvalidatedEventArgs>? GpuInteropInvalidated;
 
@@ -181,7 +181,7 @@ public sealed partial class MewVGWin32GraphicsFactory
         return CreateContextCore(target, resources);
     }
 
-    public IGraphicsContext CreateMeasurementContext(uint dpi)
+    ITextBackendMeasurementContext ITextBackendFactory.CreateTextMeasurementContext(uint dpi)
         => CreateMeasurementContextCore(dpi);
 
     private IRenderSurface CreatePixelSurface(int pixelWidth, int pixelHeight, double dpiScale, bool hasAlpha)
@@ -261,7 +261,7 @@ public sealed partial class MewVGWin32GraphicsFactory
 
     private partial IGraphicsContext CreateContextCore(WindowRenderTarget target, IDisposable resources);
 
-    private partial IGraphicsContext CreateMeasurementContextCore(uint dpi);
+    private partial ITextBackendMeasurementContext CreateMeasurementContextCore(uint dpi);
 
     partial void TryReleaseWindowResources(nint hwnd);
 

@@ -7,6 +7,7 @@ using Aprillz.MewUI.Platform.Win32;
 using Aprillz.MewUI.Rendering.Gdi;
 using Aprillz.MewUI.Rendering.OpenGL;
 using Aprillz.MewUI.Resources;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering.MewVG;
 
@@ -108,7 +109,7 @@ public sealed partial class MewVGWin32GraphicsFactory
         return res.GetOrCreateContext(_offscreenProvider, win32.Hwnd, win32.Hdc, RaiseGpuInteropInvalidated);
     }
 
-    private partial IGraphicsContext CreateMeasurementContextCore(uint dpi)
+    private partial ITextBackendMeasurementContext CreateMeasurementContextCore(uint dpi)
         => new GdiMeasurementContext(User32.GetDC(0), dpi);
 
     partial void TryCreatePixelSurface(int pixelWidth, int pixelHeight, double dpiScale, bool hasAlpha, ref bool handled, ref IRenderSurface? renderTarget)

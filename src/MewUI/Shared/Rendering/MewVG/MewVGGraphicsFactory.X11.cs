@@ -6,6 +6,7 @@ using Aprillz.MewUI.Platform.Linux.X11;
 using Aprillz.MewUI.Rendering.FreeType;
 using Aprillz.MewUI.Rendering.OpenGL;
 using Aprillz.MewUI.Resources;
+using Aprillz.MewUI.Text;
 
 using NativeX11 = Aprillz.MewUI.Native.X11;
 
@@ -244,7 +245,7 @@ public sealed partial class MewVGX11GraphicsFactory
         return ctx;
     }
 
-    private partial IGraphicsContext CreateMeasurementContextCore(uint dpi)
+    private partial ITextBackendMeasurementContext CreateMeasurementContextCore(uint dpi)
         => new OpenGLMeasurementContext(dpi);
 
     partial void TryCreatePixelSurface(int pixelWidth, int pixelHeight, double dpiScale, bool hasAlpha, ref bool handled, ref IRenderSurface? renderTarget)

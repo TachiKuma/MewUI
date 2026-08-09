@@ -39,24 +39,6 @@ internal sealed class GdiMeasurementContext : MeasureGraphicsContextBase, ITextA
         }
     }
 
-    public override TextLayout CreateTextLayout(ReadOnlySpan<char> text,
-        TextFormat format, in TextLayoutConstraints constraints)
-    {
-        var bounds = constraints.Bounds;
-        double maxWidth = double.IsPositiveInfinity(bounds.Width) ? 0 : bounds.Width;
-        Size measured = format.Wrapping == TextWrapping.NoWrap
-            ? MeasureText(text, format.Font)
-            : MeasureText(text, format.Font, maxWidth > 0 ? maxWidth : MeasureText(text, format.Font).Width);
-        double effectiveMaxWidth = maxWidth > 0 ? maxWidth : measured.Width;
-        return new TextLayout
-        {
-            MeasuredSize = measured,
-            EffectiveBounds = bounds,
-            EffectiveMaxWidth = effectiveMaxWidth,
-            ContentHeight = measured.Height
-        };
-    }
-
     public override unsafe Size MeasureText(ReadOnlySpan<char> text, IFont font)
     {
         if (text.IsEmpty || font is not GdiFont gdiFont)

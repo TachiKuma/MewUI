@@ -233,7 +233,7 @@ public sealed class TextEngineWindowsBackendTests
         Assert.AreEqual(text.Length, endHit.InsertionIndex);
 
         using var surface = factory.CreateSurface(RenderSurfaceDescriptor.CachedImage(width, height, 1));
-        TextLayout? nativeRealization = null;
+        ITextBackendRun? nativeRealization = null;
         using (var context = factory.CreateContext(surface))
         {
             context.BeginFrame(surface);
@@ -242,13 +242,13 @@ public sealed class TextEngineWindowsBackendTests
             context.EndFrame();
             if (factory is Direct2DGraphicsFactory)
             {
-                nativeRealization = ((ManagedTextRenderContext)context.Text).CachedLayouts.First();
+                nativeRealization = ((ManagedTextRenderContext)context.Text).CachedRuns.First();
             }
         }
 
         if (nativeRealization is not null)
         {
-            Assert.AreEqual(0, nativeRealization.BackendHandle,
+            Assert.AreEqual(0, nativeRealization.NativeHandle,
                 "Disposing the graphics context did not release its DirectWrite text layout realization.");
         }
 

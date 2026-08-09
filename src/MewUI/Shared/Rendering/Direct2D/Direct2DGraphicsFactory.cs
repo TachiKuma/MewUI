@@ -9,7 +9,7 @@ using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Rendering.Direct2D;
 
-public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, IRenderDevice, IGpuInteropInvalidationSource, IWindowResourceReleaser, IWin32TransparencyCapabilities, IWindowSurfacePresenter, IDisposable
+public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, ITextBackendFactory, IRenderDevice, IGpuInteropInvalidationSource, IWindowResourceReleaser, IWin32TransparencyCapabilities, IWindowSurfacePresenter, IDisposable
 {
     public const string BackendIdentifier = "Direct2D";
 
@@ -37,7 +37,7 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
     // the text contrast pinned (see TEXT_CONTRAST). 0 until EnsureInitialized runs.
     private nint _textRenderingParams;
 
-    private readonly TextResourceTracker _textTracker = new();
+    private readonly BackendTextResourceTracker _textTracker = new();
 
     internal readonly DWriteTextFormatCache TextFormatCache = new();
 
@@ -562,12 +562,10 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
         return ctx;
     }
 
-    public IGraphicsContext CreateMeasurementContext(uint dpi)
+    ITextBackendMeasurementContext ITextBackendFactory.CreateTextMeasurementContext(uint dpi)
     {
         EnsureInitialized();
-        var ctx = new Direct2DMeasurementContext(_dwriteFactory, dpi, TextFormatCache);
-        ctx.TextTracker = _textTracker;
-        return ctx;
+        return new Direct2DMeasurementContext(_dwriteFactory, dpi, TextFormatCache);
     }
 
     private IRenderSurface CreateCpuPixelSurface(int pixelWidth, int pixelHeight, double dpiScale, bool hasAlpha)

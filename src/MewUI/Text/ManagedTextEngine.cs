@@ -24,6 +24,17 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
 
     public ITextLayoutCache ManagedCache => _cache;
 
+    private ITextBackendMeasurementContext CreateMeasurementContext(uint dpi)
+    {
+        if (_factory is ITextBackendFactory backend)
+        {
+            return backend.CreateTextMeasurementContext(dpi);
+        }
+
+        throw new InvalidOperationException(
+            $"Graphics backend '{_factory.Backend}' does not provide text measurement services.");
+    }
+
     public ITextLayout CreateLayout(TextLayoutRequest request)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -50,7 +61,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                         snapshot.Inlines.Length == 0 &&
                         snapshot.Text.AsSpan().IndexOfAny('\r', '\n', '\t') < 0;
 
-        using var context = _factory.CreateMeasurementContext(snapshot.Dpi);
+        using var context = CreateMeasurementContext(snapshot.Dpi);
         if (fastPath)
         {
             var font = GetFont(snapshot.DefaultStyle, snapshot.Dpi);
@@ -103,7 +114,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         int start,
         int length)
     {
-        using var context = _factory.CreateMeasurementContext(snapshot.Dpi);
+        using var context = CreateMeasurementContext(snapshot.Dpi);
         return MeasureClusters(context, snapshot, start, length);
     }
 
@@ -116,8 +127,8 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             return 0;
         }
 
-        using var context = _factory.CreateMeasurementContext(snapshot.Dpi);
-        return context.MeasureText(
+        using var context = CreateMeasurementContext(snapshot.Dpi);
+        return context.Measure(
             snapshot.Text.AsSpan(start, length),
             GetFont(snapshot.DefaultStyle, snapshot.Dpi)).Width;
     }
@@ -131,16 +142,16 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             return [];
         }
 
-        using var context = _factory.CreateMeasurementContext(snapshot.Dpi);
-        return context is ITextAdvanceSource advanceSource
-            ? advanceSource.GetUtf16PrefixAdvances(
+        using var context = CreateMeasurementContext(snapshot.Dpi);
+        return context.SupportsUtf16PrefixAdvances
+            ? context.GetUtf16PrefixAdvances(
                 snapshot.Text.AsSpan(start, length),
                 GetFont(snapshot.DefaultStyle, snapshot.Dpi))
             : null;
     }
 
     private static List<ManagedTextSegment> MeasureFastPathSegments(
-        IGraphicsContext context,
+        ITextBackendMeasurementContext context,
         string text,
         IFont font,
         out Size measured)
@@ -160,7 +171,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         start = 0;
         foreach (int end in segmentEnds)
         {
-            var size = context.MeasureText(text.AsSpan(start, end - start), font);
+            var size = context.Measure(text.AsSpan(start, end - start), font);
             segments.Add(new ManagedTextSegment(start, end - start, x, Math.Max(0, size.Width)));
             x += Math.Max(0, size.Width);
             height = Math.Max(height, size.Height);
@@ -195,7 +206,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     }
 
     private List<ManagedTextCluster> MeasureClusters(
-        IGraphicsContext context,
+        ITextBackendMeasurementContext context,
         TextLayoutRequestSnapshot snapshot,
         int start,
         int length)
@@ -203,7 +214,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         int end = checked(start + length);
         var boundaries = GetTextElementBoundaries(snapshot.Text, start, end);
         var clusters = new List<ManagedTextCluster>(boundaries.Count);
-        var advanceSource = context as ITextAdvanceSource;
+        bool hasAdvanceSource = context.SupportsUtf16PrefixAdvances;
 
         for (int i = 0; i < boundaries.Count; i++)
         {
@@ -275,7 +286,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
 
             // A backend advance source measures each style run whole below and overwrites both
             // values, so measuring every cluster here would be discarded work.
-            var measured = advanceSource is null ? context.MeasureText(span, font) : Size.Empty;
+            var measured = !hasAdvanceSource ? context.Measure(span, font) : Size.Empty;
             clusters.Add(new ManagedTextCluster(
                 clusterStart,
                 clusterLength,
@@ -294,11 +305,11 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     }
 
     private static void ApplyBackendAdvances(
-        IGraphicsContext context,
+        ITextBackendMeasurementContext context,
         TextLayoutRequestSnapshot snapshot,
         List<ManagedTextCluster> clusters)
     {
-        if (context is not ITextAdvanceSource advanceSource)
+        if (!context.SupportsUtf16PrefixAdvances)
         {
             return;
         }
@@ -325,12 +336,16 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             int textStart = first.Start;
             int textEnd = clusters[endIndex - 1].End;
             var runText = snapshot.Text.AsSpan(textStart, textEnd - textStart);
-            var cumulative = advanceSource.GetUtf16PrefixAdvances(runText, first.Font);
+            var cumulative = context.GetUtf16PrefixAdvances(runText, first.Font);
+            if (cumulative is null)
+            {
+                return;
+            }
             // Line height takes the maximum over clusters, so one measurement per run carries the
             // same result as measuring every cluster, including taller fallback glyphs.
             double runHeight = Math.Max(
                 first.Font.Ascent + first.Font.Descent,
-                context.MeasureText(runText, first.Font).Height);
+                context.Measure(runText, first.Font).Height);
             double previous = 0;
             for (int clusterIndex = index; clusterIndex < endIndex; clusterIndex++)
             {
@@ -346,7 +361,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     }
 
     private List<ManagedTextLine> AssembleLines(
-        IGraphicsContext context,
+        ITextBackendMeasurementContext context,
         TextLayoutRequestSnapshot snapshot,
         List<ManagedTextCluster> clusters)
     {
@@ -445,7 +460,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     }
 
     private ManagedTextLine CreateLine(
-        IGraphicsContext context,
+        ITextBackendMeasurementContext context,
         TextLayoutRequestSnapshot snapshot,
         List<ManagedTextCluster> clusters,
         double y,
@@ -499,11 +514,11 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     /// it measures the font here instead of falling back to the unpadded metrics and coming out
     /// shorter than the lines around it.
     /// </summary>
-    private double GetFontLineHeight(IGraphicsContext context, IFont font)
+    private double GetFontLineHeight(ITextBackendMeasurementContext context, IFont font)
     {
         if (!_fontLineHeights.TryGetValue(font, out double height))
         {
-            height = Math.Max(font.Ascent + font.Descent, context.MeasureText(" ", font).Height);
+            height = Math.Max(font.Ascent + font.Descent, context.Measure(" ", font).Height);
             _fontLineHeights.Add(font, height);
         }
         return height;
@@ -564,7 +579,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
 
     /// <summary>Trailing whitespace width of the whole text, measured only when alignment needs it.</summary>
     private static double MeasureTrailingWhitespace(
-        IGraphicsContext context,
+        ITextBackendMeasurementContext context,
         TextLayoutRequestSnapshot snapshot,
         IFont font)
     {
@@ -580,7 +595,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         {
             start--;
         }
-        return start == text.Length ? 0 : context.MeasureText(text[start..], font).Width;
+        return start == text.Length ? 0 : context.Measure(text[start..], font).Width;
     }
 
     /// <summary>
@@ -661,7 +676,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
     /// are dropped and the last visible line always takes an ellipsis.
     /// </summary>
     private void ApplyTrimming(
-        IGraphicsContext context,
+        ITextBackendMeasurementContext context,
         TextLayoutRequestSnapshot snapshot,
         List<ManagedTextLine> lines)
     {
@@ -678,7 +693,7 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         }
 
         var defaultFont = GetFont(snapshot.DefaultStyle, snapshot.Dpi);
-        double ellipsisWidth = context.MeasureText(ELLIPSIS, defaultFont).Width;
+        double ellipsisWidth = context.Measure(ELLIPSIS, defaultFont).Width;
 
         if (paragraph.Wrapping == TextWrapping.NoWrap)
         {
@@ -769,15 +784,16 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             line.Metrics.Baseline);
     }
 
-    private static double GetSpaceWidth(IGraphicsContext context, IFont font, ref Dictionary<IFont, double>? cache)
+    private static double GetSpaceWidth(ITextBackendMeasurementContext context, IFont font, ref Dictionary<IFont, double>? cache)
     {
         cache ??= [];
         if (!cache.TryGetValue(font, out double width))
         {
             // Tab stops must land on real space advances; MeasureText pads to whole pixels on some backends.
-            width = context is ITextAdvanceSource advanceSource
-                ? advanceSource.GetUtf16PrefixAdvances(" ", font)[0]
-                : context.MeasureText(" ", font).Width;
+            var advances = context.GetUtf16PrefixAdvances(" ", font);
+            width = advances is { Length: > 0 }
+                ? advances[0]
+                : context.Measure(" ", font).Width;
             width = Math.Max(1, width);
             cache.Add(font, width);
         }

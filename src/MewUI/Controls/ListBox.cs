@@ -1,6 +1,6 @@
-using Aprillz.MewUI.Controls.Text;
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -31,7 +31,6 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
     public static readonly MewProperty<bool> ZebraStripingProperty =
         MewProperty<bool>.Register<ListBox>(nameof(ZebraStriping), true, MewPropertyOptions.AffectsRender);
 
-    private readonly TextWidthCache _textWidthCache = new(512);
     private IItemsPresenter _presenter;
     private IDataTemplate _itemTemplate;
 
@@ -407,7 +406,8 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
         // Desired width is the natural item width regardless of alignment: stretch is an arrange
         // concern, and echoing the constraint made fit-content sizing impossible (issue #199).
         {
-            using var measure = BeginTextMeasurement();
+            var factory = GetGraphicsFactory();
+            var style = GetTextRunStyle();
 
             maxWidth = 0;
             if (count > 4096)
@@ -420,7 +420,6 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
                 int visibleEstimate = itemHeightEstimate <= 0 ? count : (int)Math.Ceiling(viewportEstimate / itemHeightEstimate) + 1;
                 int sampleCount = Math.Clamp(visibleEstimate, 32, 256);
                 sampleCount = Math.Min(sampleCount, count);
-                _textWidthCache.SetCapacity(Math.Clamp(visibleEstimate * 4, 256, 4096));
                 double itemPadW = ItemPadding.HorizontalThickness;
 
                 for (int i = 0; i < sampleCount; i++)
@@ -431,7 +430,7 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
                         continue;
                     }
 
-                    maxWidth = Math.Max(maxWidth, _textWidthCache.GetOrMeasure(measure.Context, measure.Font, dpi, item) + itemPadW);
+                    maxWidth = Math.Max(maxWidth, TextLayoutOperations.Measure(factory, item, dpi, in style).Width + itemPadW);
                     if (maxWidth >= widthLimit)
                     {
                         // Stop measuring, but keep the uncapped width: the scroll extent must stay
@@ -445,13 +444,12 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
                     var item = ItemsSource.GetText(SelectedIndex);
                     if (!string.IsNullOrEmpty(item))
                     {
-                        maxWidth = Math.Max(maxWidth, _textWidthCache.GetOrMeasure(measure.Context, measure.Font, dpi, item) + itemPadW);
+                        maxWidth = Math.Max(maxWidth, TextLayoutOperations.Measure(factory, item, dpi, in style).Width + itemPadW);
                     }
                 }
             }
             else
             {
-                _textWidthCache.SetCapacity(Math.Clamp(count, 64, 4096));
                 double itemPadW = ItemPadding.HorizontalThickness;
                 for (int i = 0; i < count; i++)
                 {
@@ -461,7 +459,7 @@ public partial class ListBox : ScrollableItemsBase, IVirtualizedTabNavigationHos
                         continue;
                     }
 
-                    maxWidth = Math.Max(maxWidth, _textWidthCache.GetOrMeasure(measure.Context, measure.Font, dpi, item) + itemPadW);
+                    maxWidth = Math.Max(maxWidth, TextLayoutOperations.Measure(factory, item, dpi, in style).Width + itemPadW);
                     if (maxWidth >= widthLimit)
                     {
                         // Stop measuring, but keep the uncapped width: the scroll extent must stay

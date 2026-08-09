@@ -1,6 +1,7 @@
 using Aprillz.MewUI;
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Rendering;
+using MewUI.Test.Infrastructure;
 
 namespace MewUI.Test.Rendering;
 
@@ -13,7 +14,7 @@ namespace MewUI.Test.Rendering;
 public sealed class OpacityTests
 {
     // Re-listing the interface lets the explicit implementations below re-map its slots for this type.
-    private sealed class RecordingContext : MeasureGraphicsContextBase, IGraphicsContext
+    private sealed class RecordingContext : NoOpGraphicsContext, IGraphicsContext
     {
         private int _depth;
 
@@ -24,13 +25,6 @@ public sealed class OpacityTests
         public int FillsInsideScope { get; private set; }
 
         public override double DpiScale => 1;
-
-        public override Size MeasureText(ReadOnlySpan<char> text, IFont font) => default;
-
-        public override Size MeasureText(ReadOnlySpan<char> text, IFont font, double maxWidth) => default;
-
-        public override TextLayout? CreateTextLayout(ReadOnlySpan<char> text, TextFormat format,
-            in TextLayoutConstraints constraints) => null;
 
         // Explicit implementations: the base class members are not virtual, and rendering dispatches
         // through the interface.

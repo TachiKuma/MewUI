@@ -22,8 +22,8 @@ internal sealed unsafe class Direct2DMeasurementContext : MeasureGraphicsContext
         _textFormatCache = textFormatCache;
     }
 
-    public override TextLayout? CreateTextLayout(ReadOnlySpan<char> text,
-        TextFormat format, in TextLayoutConstraints constraints)
+    private BackendTextLayout? CreateMeasurementLayout(ReadOnlySpan<char> text,
+        BackendTextFormat format, in BackendTextLayoutConstraints constraints)
     {
         if (text.IsEmpty) return null;
 
@@ -69,7 +69,7 @@ internal sealed unsafe class Direct2DMeasurementContext : MeasureGraphicsContext
             var height = metrics.height;
             if (metrics.top < 0) height += -metrics.top;
 
-            var measured = new Size(TextMeasurePolicy.ApplyWidthPadding(metrics.widthIncludingTrailingWhitespace), height);
+            var measured = new Size(metrics.widthIncludingTrailingWhitespace, height);
             double effectiveMaxWidth = bounds.Width > 0 && !double.IsPositiveInfinity(bounds.Width) ? bounds.Width : measured.Width;
 
             if (format.Trimming == TextTrimming.CharacterEllipsis)
@@ -81,7 +81,7 @@ internal sealed unsafe class Direct2DMeasurementContext : MeasureGraphicsContext
             }
 
             // Measurement only - native layout released immediately. No BackendHandle.
-            return new TextLayout
+            return new BackendTextLayout
             {
                 MeasuredSize = measured,
                 EffectiveBounds = bounds,
@@ -109,7 +109,7 @@ internal sealed unsafe class Direct2DMeasurementContext : MeasureGraphicsContext
 
     public override Size MeasureText(ReadOnlySpan<char> text, IFont font, double maxWidth)
     {
-        var format = new TextFormat
+        var format = new BackendTextFormat
         {
             Font = font,
             HorizontalAlignment = TextAlignment.Left,
@@ -117,8 +117,8 @@ internal sealed unsafe class Direct2DMeasurementContext : MeasureGraphicsContext
             Wrapping = TextWrapping.NoWrap,
             Trimming = TextTrimming.None
         };
-        var constraints = new TextLayoutConstraints(new Rect(0, 0, double.PositiveInfinity, 0));
-        var layout = CreateTextLayout(text, format, in constraints);
+        var constraints = new BackendTextLayoutConstraints(new Rect(0, 0, double.PositiveInfinity, 0));
+        var layout = CreateMeasurementLayout(text, format, in constraints);
         return layout?.MeasuredSize ?? Size.Empty;
     }
 

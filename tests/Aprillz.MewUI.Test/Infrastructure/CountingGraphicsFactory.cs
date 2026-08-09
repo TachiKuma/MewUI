@@ -9,7 +9,7 @@ namespace MewUI.Test.Infrastructure;
 /// Delegating factory that counts the text measurement and layout calls a backend receives, so
 /// tests can assert on the work a control asks of the engine.
 /// </summary>
-internal sealed class CountingGraphicsFactory(IGraphicsFactory inner) : IGraphicsFactory
+internal sealed class CountingGraphicsFactory(IGraphicsFactory inner) : IGraphicsFactory, ITextBackendFactory
 {
     public int MeasureTextCalls;
     public int CreateTextLayoutCalls;
@@ -22,8 +22,15 @@ internal sealed class CountingGraphicsFactory(IGraphicsFactory inner) : IGraphic
 
     public string Backend => inner.Backend;
 
-    public IGraphicsContext CreateMeasurementContext(uint dpi)
-        => new CountingContext(inner.CreateMeasurementContext(dpi), this);
+    ITextBackendMeasurementContext ITextBackendFactory.CreateTextMeasurementContext(uint dpi)
+    {
+        if (inner is not ITextBackendFactory backendFactory)
+        {
+            throw new NotSupportedException($"{inner.GetType().Name} has no text measurement backend.");
+        }
+
+        return new CountingContext(backendFactory.CreateTextMeasurementContext(dpi), this);
+    }
 
     public IFont CreateFont(string family, double size, FontWeight weight = FontWeight.Normal,
         bool italic = false, bool underline = false, bool strikethrough = false)
@@ -53,33 +60,20 @@ internal sealed class CountingGraphicsFactory(IGraphicsFactory inner) : IGraphic
     public void Dispose() { }
 
     // Forwards ITextAdvanceSource so the engine takes the same path a real backend context does.
-    private sealed class CountingContext(IGraphicsContext inner, CountingGraphicsFactory owner)
-        : MeasureGraphicsContextBase, ITextAdvanceSource
+    private sealed class CountingContext(ITextBackendMeasurementContext inner, CountingGraphicsFactory owner)
+        : ITextBackendMeasurementContext
     {
-        double[] ITextAdvanceSource.GetUtf16PrefixAdvances(ReadOnlySpan<char> text, IFont font)
-            => ((ITextAdvanceSource)inner).GetUtf16PrefixAdvances(text, font);
+        public bool SupportsUtf16PrefixAdvances => inner.SupportsUtf16PrefixAdvances;
 
-        public override double DpiScale => inner.DpiScale;
-
-        public override Size MeasureText(ReadOnlySpan<char> text, IFont font)
+        public Size Measure(ReadOnlySpan<char> text, IFont font)
         {
             owner.MeasureTextCalls++;
-            return inner.MeasureText(text, font);
+            return inner.Measure(text, font);
         }
 
-        public override Size MeasureText(ReadOnlySpan<char> text, IFont font, double maxWidth)
-        {
-            owner.MeasureTextCalls++;
-            return inner.MeasureText(text, font, maxWidth);
-        }
+        public double[]? GetUtf16PrefixAdvances(ReadOnlySpan<char> text, IFont font)
+            => inner.GetUtf16PrefixAdvances(text, font);
 
-        public override TextLayout? CreateTextLayout(ReadOnlySpan<char> text, TextFormat format,
-            in TextLayoutConstraints constraints)
-        {
-            owner.CreateTextLayoutCalls++;
-            return inner.CreateTextLayout(text, format, in constraints);
-        }
-
-        public override void Dispose() => inner.Dispose();
+        public void Dispose() => inner.Dispose();
     }
 }

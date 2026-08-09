@@ -53,8 +53,6 @@ public interface IGraphicsFactory : IRenderDevice, IDisposable
     /// <summary>
     /// Creates a measurement-only graphics context for text measurement.
     /// </summary>
-    IGraphicsContext CreateMeasurementContext(uint dpi);
-
     /// <summary>
     /// Creates an executor for evaluating <see cref="ImageFilter"/> graphs. The default
     /// returns a CPU reference implementation; backends override to return GPU-accelerated

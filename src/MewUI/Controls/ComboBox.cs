@@ -1,6 +1,6 @@
-using Aprillz.MewUI.Controls.Text;
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -26,7 +26,6 @@ public sealed partial class ComboBox : DropDownBase, ISelector, IIndexedSelector
     public static readonly MewProperty<string> PlaceholderProperty =
         MewProperty<string>.Register<ComboBox>(nameof(Placeholder), string.Empty, MewPropertyOptions.AffectsRender);
 
-    private readonly TextWidthCache _textWidthCache = new(512);
     private ListBox? _popupList;
     private readonly SelectionSync _selection;
     private bool _suppressItemsSelectionChanged;
@@ -228,32 +227,29 @@ public sealed partial class ComboBox : DropDownBase, ISelector, IIndexedSelector
         var headerHeight = ResolveHeaderHeight();
         double width = 80;
         var dpi = GetDpi();
+        var factory = GetGraphicsFactory();
+        var style = GetTextRunStyle();
 
-        using (var measure = BeginTextMeasurement())
+        double maxWidth = 0;
+        int count = ItemsSource.Count;
+
+        for (int i = 0; i < count; i++)
         {
-            double maxWidth = 0;
-            int count = ItemsSource.Count;
-            _textWidthCache.SetCapacity(Math.Clamp(count + 8, 64, 4096));
-
-            for (int i = 0; i < count; i++)
+            var item = ItemsSource.GetText(i);
+            if (string.IsNullOrEmpty(item))
             {
-                var item = ItemsSource.GetText(i);
-                if (string.IsNullOrEmpty(item))
-                {
-                    continue;
-                }
-
-                maxWidth = Math.Max(maxWidth, _textWidthCache.GetOrMeasure(measure.Context, measure.Font, dpi, item));
+                continue;
             }
 
-            if (!string.IsNullOrEmpty(Placeholder))
-            {
-                maxWidth = Math.Max(maxWidth, _textWidthCache.GetOrMeasure(measure.Context, measure.Font, dpi, Placeholder));
-            }
-
-            width = maxWidth + ArrowAreaWidth;
+            maxWidth = Math.Max(maxWidth, TextLayoutOperations.Measure(factory, item, dpi, in style).Width);
         }
 
+        if (!string.IsNullOrEmpty(Placeholder))
+        {
+            maxWidth = Math.Max(maxWidth, TextLayoutOperations.Measure(factory, Placeholder, dpi, in style).Width);
+        }
+
+        width = maxWidth + ArrowAreaWidth;
         return new Size(width, headerHeight);
     }
 
@@ -274,7 +270,11 @@ public sealed partial class ComboBox : DropDownBase, ISelector, IIndexedSelector
 
         if (!string.IsNullOrEmpty(text))
         {
-            context.DrawText(text, textRect, GetFont(), textColor, TextAlignment.Left, TextAlignment.Center, TextWrapping.NoWrap);
+            var style = GetTextRunStyle();
+            var layout = TextLayoutOperations.GetOrCreate(
+                GetGraphicsFactory(), text, GetDpi(), in style, textRect.Width, textRect.Height);
+            TextLayoutOperations.DrawInBounds(
+                context, layout, textRect, textColor, TextAlignment.Center, this);
         }
     }
 

@@ -7,7 +7,7 @@ namespace Aprillz.MewUI.Rendering;
 /// Backend caches handle native resource lifecycle separately.
 /// </para>
 /// </summary>
-public sealed class TextFormat
+internal sealed class BackendTextFormat
 {
     public required IFont Font { get; init; }
 

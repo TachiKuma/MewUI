@@ -44,8 +44,6 @@ internal static unsafe class FreeTypeText
             lines = 1;
         }
 
-        maxLineWidth = (int)Math.Round(TextMeasurePolicy.ApplyWidthPadding(maxLineWidth));
-
         int heightPx = lines * lineHeightPx;
         return new Size(maxLineWidth, heightPx);
     }

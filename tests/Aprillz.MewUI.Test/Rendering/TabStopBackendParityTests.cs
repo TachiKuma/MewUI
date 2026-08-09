@@ -23,9 +23,9 @@ public sealed class TabStopBackendParityTests
         using var d2d = new Direct2DGraphicsFactory();
         foreach ((string name, IGraphicsFactory factory) in new (string, IGraphicsFactory)[] { ("GDI", gdi), ("D2D", d2d) })
         {
-            using var context = factory.CreateMeasurementContext(96);
+            using var context = ((ITextBackendFactory)factory).CreateTextMeasurementContext(96);
             using var font = factory.CreateFont("Consolas", 14, 96);
-            double spaceAdvance = ((ITextAdvanceSource)context).GetUtf16PrefixAdvances(" ", font)[0];
+            double spaceAdvance = context.GetUtf16PrefixAdvances(" ", font)![0];
 
             var layout = factory.TextEngine.CreateLayout(new TextLayoutRequest
             {

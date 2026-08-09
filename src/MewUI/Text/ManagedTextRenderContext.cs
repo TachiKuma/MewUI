@@ -5,7 +5,7 @@ namespace Aprillz.MewUI.Text;
 /// <summary>
 /// The single <see cref="ITextRenderContext"/> implementation: lays paint-span colors,
 /// backgrounds, decorations and overlays over a <see cref="ManagedTextLayout"/> and hands each
-/// run to the backend through <see cref="IGraphicsContext.DrawTextLayout(ReadOnlySpan{char}, TextFormat, Rendering.TextLayout, Color, object?)"/>.
+/// run to the backend through its private realization surface.
 /// </summary>
 internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
 {
@@ -13,17 +13,23 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
     private const string ELLIPSIS = "...";
 
     private readonly IGraphicsContext _context;
+    private readonly ITextBackendRenderContext _backend;
     private readonly BoundedCache<RunRealizationKey, RealizedRun> _runs = new(
         REALIZATION_CAPACITY,
-        static run => run.Layout.ReleaseBackendHandle());
+        static run => run.Dispose());
 
-    public ManagedTextRenderContext(IGraphicsContext context) => _context = context;
+    public ManagedTextRenderContext(IGraphicsContext context)
+    {
+        _context = context;
+        _backend = context as ITextBackendRenderContext
+            ?? throw new InvalidOperationException("The graphics context does not provide text realization services.");
+    }
 
     public IGraphicsContext Graphics => _context;
 
     internal int CachedLayoutCount => _runs.Count;
-    internal IEnumerable<Rendering.TextLayout> CachedLayouts
-        => _runs.Values.Select(static run => run.Layout);
+    internal IEnumerable<ITextBackendRun> CachedRuns
+        => _runs.Values.Select(static run => run.Run);
 
     public void Draw(ITextLayout layout, Point origin, in TextDrawOptions options)
     {
@@ -218,25 +224,13 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
         var font = clusters.Count > 0 ? clusters[^1].Font : managed.GetDefaultFont();
         double x = clusters.Count > 0 ? clusters[^1].X + clusters[^1].Width : lineBounds.X;
         double width = Math.Max(1, lineBounds.Right - x);
-        var format = new TextFormat
-        {
-            Font = font,
-            HorizontalAlignment = TextAlignment.Left,
-            VerticalAlignment = TextAlignment.Top,
-            Wrapping = TextWrapping.NoWrap,
-            Trimming = TextTrimming.None
-        };
-        var constraints = new TextLayoutConstraints(new Rect(0, 0, width, lineBounds.Height));
-        var layout = _context.CreateTextLayout(ELLIPSIS, format, in constraints);
-        if (layout is null)
+        using var run = _backend.CreateRun(ELLIPSIS, font, width, lineBounds.Height);
+        if (run is null)
         {
             return;
         }
 
-        layout.EffectiveBounds = new Rect(origin.X + x, origin.Y + lineBounds.Y, width, lineBounds.Height);
-        _context.DrawTextLayout(ELLIPSIS, format, layout, color, owner);
-        // Per-draw realization: release the backend handle now instead of leaving it to the finalizer.
-        layout.ReleaseBackendHandle();
+        _backend.DrawRun(run, new Point(origin.X + x, origin.Y + lineBounds.Y), color, owner);
     }
 
     private void DrawBackgrounds(ManagedTextLayout layout, Point origin, ReadOnlySpan<TextPaintSpan> spans)
@@ -447,39 +441,24 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
             return cached;
         }
 
-        var format = new TextFormat
-        {
-            Font = font,
-            HorizontalAlignment = TextAlignment.Left,
-            VerticalAlignment = TextAlignment.Top,
-            Wrapping = TextWrapping.NoWrap,
-            Trimming = TextTrimming.None
-        };
-        var constraints = new TextLayoutConstraints(new Rect(0, 0, Math.Max(1, width), Math.Max(1, height)));
-        var nativeLayout = _context.CreateTextLayout(
+        var backendRun = _backend.CreateRun(
             layout.Snapshot.Text.AsSpan(textStart, textLength),
-            format,
-            in constraints);
-        if (nativeLayout is null)
+            font,
+            Math.Max(1, width),
+            Math.Max(1, height));
+        if (backendRun is null)
         {
             return null;
         }
 
         var created = new RealizedRun(
-            layout.Snapshot.Text.Substring(textStart, textLength),
-            format,
-            nativeLayout,
-            Math.Max(1, width),
-            Math.Max(1, height));
+            backendRun);
         _runs.Add(key, created);
         return created;
     }
 
     private void DrawRun(RealizedRun realized, Point origin, Color color, object? owner)
-    {
-        realized.Layout.EffectiveBounds = new Rect(origin.X, origin.Y, realized.Width, realized.Height);
-        _context.DrawTextLayout(realized.Text, realized.Format, realized.Layout, color, owner);
-    }
+        => _backend.DrawRun(realized.Run, origin, color, owner);
 
     public void Dispose() => _runs.Dispose();
 
@@ -491,19 +470,10 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
         double Width,
         double Height);
 
-    // Caches the format and source text with the realization so a cache hit repaints a run
-    // without re-allocating either.
-    private sealed class RealizedRun(
-        string text,
-        TextFormat format,
-        Rendering.TextLayout layout,
-        double width,
-        double height)
+    private sealed class RealizedRun(ITextBackendRun run) : IDisposable
     {
-        public string Text { get; } = text;
-        public TextFormat Format { get; } = format;
-        public Rendering.TextLayout Layout { get; } = layout;
-        public double Width { get; } = width;
-        public double Height { get; } = height;
+        public ITextBackendRun Run { get; } = run;
+
+        public void Dispose() => Run.Dispose();
     }
 }

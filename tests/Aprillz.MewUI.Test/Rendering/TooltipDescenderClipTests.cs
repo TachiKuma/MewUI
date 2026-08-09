@@ -1,6 +1,7 @@
 using System;
 using Aprillz.MewUI;
 using Aprillz.MewUI.Rendering;
+using MewUI.Test.Infrastructure;
 using Aprillz.MewUI.Rendering.Direct2D;
 
 namespace MewUI.Test.Rendering;
@@ -61,22 +62,9 @@ public sealed class TooltipDescenderClipTests
             context.Clear(Color.FromArgb(255, 255, 255, 255));
 
             using var font = factory.CreateFont("Segoe UI", 12, (uint)Math.Round(DPI_SCALE * 96));
-            var format = new TextFormat
-            {
-                Font = font,
-                HorizontalAlignment = TextAlignment.Left,
-                VerticalAlignment = verticalAlignment,
-                Wrapping = TextWrapping.NoWrap,
-                Trimming = TextTrimming.None,
-            };
-
             var box = new Rect(2, 4 + yOffsetDip, 200, boxHeightDip);
-            var layout = context.CreateTextLayout(TEXT, format, new TextLayoutConstraints(box));
-            if (layout != null)
-            {
-                layout.EffectiveBounds = box;
-                context.DrawTextLayout(TEXT, format, layout, Color.FromArgb(255, 0, 0, 0));
-            }
+            var layout = TextTestHarness.CreateLayout(factory, TEXT.AsMemory(), font, box);
+            TextTestHarness.Draw(context, layout, box, Color.FromArgb(255, 0, 0, 0), verticalAlignment);
 
             context.EndFrame();
         }

@@ -49,7 +49,7 @@ public sealed class TextLayoutLifetimeTests
         return new WeakReference(layout);
     }
 
-    private static TextLayout CreateLayout()
+    private static BackendTextLayout CreateLayout()
         => new()
         {
             MeasuredSize = new Size(10, 10),

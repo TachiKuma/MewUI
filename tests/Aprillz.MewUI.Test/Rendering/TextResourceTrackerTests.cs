@@ -12,7 +12,7 @@ public sealed class TextResourceTrackerTests
     public void CleanupAndFinalizerReleaseNativeHandleOnlyOnce()
     {
         int releaseCount = 0;
-        var tracker = new TextResourceTracker();
+        var tracker = new BackendTextResourceTracker();
         var weak = TrackLayout(tracker, () => Interlocked.Increment(ref releaseCount));
 
         GC.Collect();
@@ -29,7 +29,7 @@ public sealed class TextResourceTrackerTests
     public void ReleaseAllAndFinalizerReleaseNativeHandleOnlyOnce()
     {
         int releaseCount = 0;
-        var tracker = new TextResourceTracker();
+        var tracker = new BackendTextResourceTracker();
         var layout = CreateLayout(() => Interlocked.Increment(ref releaseCount));
         tracker.TrackLayout(layout);
 
@@ -44,16 +44,16 @@ public sealed class TextResourceTrackerTests
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static WeakReference<TextLayout> TrackLayout(TextResourceTracker tracker, Action release)
+    private static WeakReference<BackendTextLayout> TrackLayout(BackendTextResourceTracker tracker, Action release)
     {
         var layout = CreateLayout(release);
         tracker.TrackLayout(layout);
-        return new WeakReference<TextLayout>(layout);
+        return new WeakReference<BackendTextLayout>(layout);
     }
 
-    private static TextLayout CreateLayout(Action release)
+    private static BackendTextLayout CreateLayout(Action release)
     {
-        var layout = new TextLayout
+        var layout = new BackendTextLayout
         {
             MeasuredSize = Size.Empty,
             EffectiveBounds = Rect.Empty,

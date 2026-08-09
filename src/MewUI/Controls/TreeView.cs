@@ -1,6 +1,6 @@
 using Aprillz.MewUI.Input;
-using Aprillz.MewUI.Controls.Text;
 using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -9,7 +9,6 @@ namespace Aprillz.MewUI.Controls;
 /// </summary>
 public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoViewHost, IVirtualizedTabNavigationHost, ISelector, IMultiSelector
 {
-    private readonly TextWidthCache _textWidthCache = new(512);
     private readonly FixedHeightItemsPresenter _presenter;
     private readonly ScrollViewer _scrollViewer;
     private uint _itemBindingGeneration;
@@ -668,12 +667,12 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
         double extentWidth = 0;
         if (_itemsSource.Count > 0)
         {
-            using var measure = BeginTextMeasurement();
+            var factory = GetGraphicsFactory();
+            var style = GetTextRunStyle();
 
             int count = _itemsSource.Count;
             int sampleCount = Math.Clamp(count, 32, 256);
 
-            _textWidthCache.SetCapacity(Math.Clamp(sampleCount * 4, 256, 4096));
             double padW = ItemPadding.HorizontalThickness;
 
             // Sample across the whole flattened list (not just the first N items) to avoid
@@ -692,7 +691,7 @@ public sealed class TreeView : Control, ISubtreeInvalidationHost, IFocusIntoView
 
                 int depth = _itemsSource.GetDepth(idx);
                 double indentW = depth * Indent + Indent; // includes glyph column
-                double itemW = indentW + _textWidthCache.GetOrMeasure(measure.Context, measure.Font, dpi, text) + padW;
+                double itemW = indentW + TextLayoutOperations.Measure(factory, text, dpi, in style).Width + padW;
                 extentWidth = Math.Max(extentWidth, itemW);
             }
         }

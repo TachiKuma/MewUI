@@ -1,6 +1,7 @@
 #if DEBUG
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Diagnostics;
 
@@ -88,15 +89,17 @@ internal sealed class DebugInspectorOverlay : Control
 
     private void DrawInfoPanel(IGraphicsContext context, UIElement? hovered, UIElement? focused, UIElement? pinned)
     {
-        var font = GetFont();
         string text = GetOrBuildInspectorText(hovered, focused, pinned);
-
-        var size = context.MeasureText(text, font, maxWidth: PanelMaxTextWidth);
+        var style = GetTextRunStyle();
+        var layout = TextLayoutOperations.GetOrCreate(
+            GetGraphicsFactory(), text, GetDpi(), in style, PanelMaxTextWidth, wrapping: TextWrapping.Wrap);
+        var size = layout.MeasuredSize;
         var panelRect = GetInfoPanelRect(size, _window.LastMousePositionDip);
         panelRect = LayoutRounding.SnapBoundsRectToPixels(panelRect, context.DpiScale);
         context.FillRoundedRectangle(panelRect, PanelCornerRadius, PanelCornerRadius, PanelBackgroundColor);
         context.DrawRoundedRectangle(panelRect, PanelCornerRadius, PanelCornerRadius, PanelBorderColor, 1, strokeInset: true);
-        context.DrawText(text, panelRect.Deflate(new Thickness(PanelPadding)), font, PanelTextColor, TextAlignment.Left, TextAlignment.Top, TextWrapping.Wrap);
+        TextLayoutOperations.DrawInBounds(
+            context, layout, panelRect.Deflate(new Thickness(PanelPadding)), PanelTextColor, owner: this);
     }
 
     private Rect GetInfoPanelRect(Size contentSize, Point mousePosition)

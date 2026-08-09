@@ -351,10 +351,7 @@ internal static unsafe partial class CoreTextText
             totalLines = 1;
         }
 
-        // CoreText measures with DPI-scaled fonts, so padding must also scale with DPI
-        // to ensure a consistent 1 DIP padding after the caller divides by dpiScale.
-        double dpiScale = dpi / 96.0;
-        double w = maxLineWidth + TextMeasurePolicy.WidthPaddingPx * dpiScale;
+        double w = maxLineWidth;
 
         double h = totalLines * metrics.LineHeight;
         return new Size(w, h);

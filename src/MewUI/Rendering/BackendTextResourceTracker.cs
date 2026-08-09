@@ -1,24 +1,24 @@
 namespace Aprillz.MewUI.Rendering;
 
 /// <summary>
-/// Tracks <see cref="TextLayout"/> instances with native handles.
+/// Tracks <see cref="BackendTextLayout"/> instances with native handles.
 /// Releases native resources when layouts are no longer referenced.
 /// </summary>
-public sealed class TextResourceTracker
+internal sealed class BackendTextResourceTracker
 {
-    private sealed class Entry(WeakReference<TextLayout> weakRef, NativeHandleLease lease)
+    private sealed class Entry(WeakReference<BackendTextLayout> weakRef, NativeHandleLease lease)
     {
-        public readonly WeakReference<TextLayout> WeakRef = weakRef;
+        public readonly WeakReference<BackendTextLayout> WeakRef = weakRef;
         public readonly NativeHandleLease Lease = lease;
     }
 
     private readonly LinkedList<Entry> _layouts = new();
 
-    public void TrackLayout(TextLayout layout)
+    public void TrackLayout(BackendTextLayout layout)
     {
         if (layout.BackendLease is { } lease && lease.Handle != 0)
         {
-            _layouts.AddFirst(new Entry(new WeakReference<TextLayout>(layout), lease));
+            _layouts.AddFirst(new Entry(new WeakReference<BackendTextLayout>(layout), lease));
         }
     }
 

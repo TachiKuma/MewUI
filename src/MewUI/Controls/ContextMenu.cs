@@ -1,6 +1,6 @@
 using Aprillz.MewUI.Input;
 using Aprillz.MewUI.Rendering;
-using Aprillz.MewUI.Controls.Text;
+using Aprillz.MewUI.Text;
 
 namespace Aprillz.MewUI.Controls;
 
@@ -20,7 +20,7 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
     private const double IconTextGap = 8;
     private readonly ScrollBar _vBar;
     private readonly ScrollController _scroll = new();
-    private readonly MenuTextLayoutCache _textLayouts = new();
+    private readonly MenuTextLayouts _textLayouts = new();
     private double _extentHeight;
     private double _viewportHeight;
     private double _verticalOffset;
@@ -494,9 +494,9 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
         double itemHeight = ResolveItemHeight();
 
 
-        using var measure = BeginTextMeasurement();
-        var textFormat = CreateMenuTextFormat(measure.Font, TextAlignment.Left, TextAlignment.Center);
-        var shortcutFormat = CreateMenuTextFormat(measure.Font, TextAlignment.Right, TextAlignment.Center);
+        var factory = GetGraphicsFactory();
+        var style = GetTextRunStyle();
+        uint dpi = GetDpi();
 
         _maxTextWidth = 0;
         _maxShortcutWidth = 0;
@@ -514,14 +514,15 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
             if (entry is MenuItem item)
             {
                 var text = GetDisplayText(item);
-                var size = _textLayouts.Measure(measure.Context, text, textFormat, double.PositiveInfinity);
+                var size = _textLayouts.Measure(factory, text, dpi, in style);
                 _maxTextWidth = Math.Max(_maxTextWidth, size.Width);
 
                 var shortcutText = item.GetShortcutDisplayText();
                 if (!string.IsNullOrEmpty(shortcutText))
                 {
                     _hasAnyShortcut = true;
-                    var shortcutSize = _textLayouts.Measure(measure.Context, shortcutText, shortcutFormat, double.PositiveInfinity);
+                    var shortcutSize = _textLayouts.Measure(
+                        factory, shortcutText, dpi, in style, TextAlignment.Right);
                     _maxShortcutWidth = Math.Max(_maxShortcutWidth, shortcutSize.Width);
                 }
 
@@ -1064,9 +1065,9 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
             return;
         }
 
-        var font = GetFont();
-        var textFormat = CreateMenuTextFormat(font, TextAlignment.Left, TextAlignment.Center);
-        var shortcutFormat = CreateMenuTextFormat(font, TextAlignment.Right, TextAlignment.Center);
+        var factory = GetGraphicsFactory();
+        var style = GetTextRunStyle();
+        uint dpi = GetDpi();
 
         context.Save();
         context.SetClip(LayoutRounding.MakeClipRect(contentBounds, dpiScale));
@@ -1147,11 +1148,12 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
                 var textRect = new Rect(textLeft, paddedRow.Y, Math.Max(0, textRight - textLeft), paddedRow.Height);
                 var showAccessKeys = GetValue(Window.ShowAccessKeysProperty);
                 var parsed = item.GetParsedText();
-                var textLayout = _textLayouts.EnsureRenderLayout(context, parsed.displayText, textFormat, textRect);
+                var textLayout = _textLayouts.GetOrCreate(
+                    factory, parsed.displayText, dpi, in style, textRect.Width, textRect.Height);
                 if (textLayout != null)
                 {
-                    var metrics = _textLayouts.GetUnderlineMetrics(context, parsed.displayText, parsed.underlineIndex, textFormat, textLayout);
-                    AccessKeyRenderer.DrawParsed(context, parsed.displayText, parsed.underlineIndex, textRect, textFormat, textLayout, fg, showAccessKeys, GetDpi() / 96.0, metrics);
+                    MenuTextLayouts.Draw(
+                        context, textLayout, textRect, fg, showAccessKeys, parsed.underlineIndex);
                 }
 
                 var shortcutText = item.GetShortcutDisplayText();
@@ -1160,10 +1162,17 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
                     double shortcutRight = paddedRow.Right - chevronReserved;
                     double shortcutLeft = shortcutRight - _maxShortcutWidth;
                     var shortcutRect = new Rect(shortcutLeft, paddedRow.Y, Math.Max(0, shortcutRight - shortcutLeft), paddedRow.Height);
-                    var shortcutLayout = _textLayouts.EnsureRenderLayout(context, shortcutText, shortcutFormat, shortcutRect);
+                    var shortcutLayout = _textLayouts.GetOrCreate(
+                        factory,
+                        shortcutText,
+                        dpi,
+                        in style,
+                        shortcutRect.Width,
+                        shortcutRect.Height,
+                        TextAlignment.Right);
                     if (shortcutLayout != null)
                     {
-                        context.DrawTextLayout(shortcutText, shortcutFormat, shortcutLayout, fg);
+                        MenuTextLayouts.Draw(context, shortcutLayout, shortcutRect, fg);
                     }
                 }
 
@@ -1209,19 +1218,6 @@ public sealed class ContextMenu : Control, IPopupOwner, ICommandSource, IVisualT
         ClearMaterializedIcons();
         base.OnDispose();
     }
-
-    private static TextFormat CreateMenuTextFormat(
-        IFont font,
-        TextAlignment horizontalAlignment,
-        TextAlignment verticalAlignment)
-        => new()
-        {
-            Font = font,
-            HorizontalAlignment = horizontalAlignment,
-            VerticalAlignment = verticalAlignment,
-            Wrapping = TextWrapping.NoWrap,
-            Trimming = TextTrimming.None
-        };
 
     protected override void OnMewPropertyChanged(MewProperty property)
     {

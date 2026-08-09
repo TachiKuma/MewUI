@@ -2,6 +2,7 @@ using Aprillz.MewUI;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Rendering.Gdi;
 using Aprillz.MewUI.Text;
+using MewUI.Test.Infrastructure;
 
 namespace MewUI.Test.Rendering;
 
@@ -42,12 +43,11 @@ public sealed class DpiPaddingProbe
             report.AppendLine($"=== dpi={dpi} scale={scale:F2} ===");
             foreach (var (family, size, text) in _cases)
             {
-                using var measureContext = factory.CreateMeasurementContext(dpi);
+                using var measureContext = ((ITextBackendFactory)factory).CreateTextMeasurementContext(dpi);
                 using var font = factory.CreateFont(family, size, dpi);
 
-                double advanceDip = ((ITextAdvanceSource)measureContext)
-                    .GetUtf16PrefixAdvances(text, font)[^1];
-                double measureCtxDip = measureContext.MeasureText(text, font).Width;
+                double advanceDip = measureContext.GetUtf16PrefixAdvances(text, font)![^1];
+                double measureCtxDip = measureContext.Measure(text, font).Width;
                 var (drawCtxDip, inkRightPx) = DrawAndMeasureInk(factory, family, size, dpi, scale, text);
 
                 double advancePx = advanceDip * scale;
@@ -83,8 +83,8 @@ public sealed class DpiPaddingProbe
                 context.BeginFrame(surface);
                 context.FillRectangle(area, Color.FromRgb(255, 255, 255));
                 using var font = factory.CreateFont(family, size, dpi);
-                widthDip = context.MeasureText(text, font).Width;
-                context.DrawText(text, area, font, Color.FromRgb(0, 0, 0));
+                widthDip = TextTestHarness.Measure(factory, text.AsMemory(), font).Width;
+                TextTestHarness.Draw(context, factory, text.AsMemory(), area, font, Color.FromRgb(0, 0, 0));
                 context.EndFrame();
             }
 

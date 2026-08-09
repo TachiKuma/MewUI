@@ -38,11 +38,11 @@ public sealed class EmojiAdvanceSourceTests
         using var d2d = new Direct2DGraphicsFactory();
         foreach ((string name, IGraphicsFactory factory) in new (string, IGraphicsFactory)[] { ("GDI", gdi), ("D2D", d2d) })
         {
-            using var context = factory.CreateMeasurementContext(96);
+            using var context = ((ITextBackendFactory)factory).CreateTextMeasurementContext(96);
             using var font = factory.CreateFont("Segoe UI Emoji", 14, 96);
             foreach (string sequence in _sequences)
             {
-                double[] advances = ((ITextAdvanceSource)context).GetUtf16PrefixAdvances(sequence, font);
+                double[] advances = context.GetUtf16PrefixAdvances(sequence, font)!;
 
                 Assert.HasCount(sequence.Length, advances, $"{name}: one entry per code unit.");
                 for (int index = 1; index < advances.Length; index++)

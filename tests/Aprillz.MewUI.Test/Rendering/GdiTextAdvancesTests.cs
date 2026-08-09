@@ -1,4 +1,5 @@
 using Aprillz.MewUI.Rendering.Gdi;
+using Aprillz.MewUI.Text;
 
 namespace MewUI.Test.Rendering;
 
@@ -16,10 +17,10 @@ public sealed class GdiTextAdvancesTests
 
         const string text = "office 한글 😀";
         using var factory = new GdiGraphicsFactory();
-        using var context = (GdiMeasurementContext)factory.CreateMeasurementContext(144);
+        using var context = ((ITextBackendFactory)factory).CreateTextMeasurementContext(144);
         using var font = (GdiFont)factory.CreateFont("Segoe UI", 16, 144);
 
-        var cumulative = context.GetUtf16PrefixAdvances(text, font);
+        var cumulative = context.GetUtf16PrefixAdvances(text, font)!;
 
         Assert.HasCount(text.Length, cumulative);
         Assert.IsGreaterThan(0, cumulative[^1]);
@@ -28,7 +29,7 @@ public sealed class GdiTextAdvancesTests
             Assert.IsGreaterThanOrEqualTo(cumulative[i - 1], cumulative[i]);
         }
 
-        var measured = context.MeasureText(text, font);
+        var measured = context.Measure(text, font);
         Assert.AreEqual(measured.Width, cumulative[^1], 1.0,
             "Prefix extents and the GDI draw measurement must use the same horizontal metric source.");
     }
