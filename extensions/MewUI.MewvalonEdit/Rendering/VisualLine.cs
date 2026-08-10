@@ -54,11 +54,12 @@ public sealed class VisualLine
     public IReadOnlyList<VisualTextLine> TextLines => _layout.VisualLines;
 
     /// <summary>
-    /// <see cref="VisualLength"/> plus the column standing for the line terminator, which is the
-    /// position a selection reaching past the end of the line stops at.
+    /// <see cref="VisualLength"/> plus the column of the end-of-line marker when the options show
+    /// one, as the original counts it. Virtual space starts at the column after this, so counting a
+    /// marker that is not shown pushed everything typed there one column short.
     /// </summary>
     public int VisualLengthWithEndOfLineMarker
-        => VisualLength + (FirstDocumentLine.DelimiterLength > 0 ? 1 : 0);
+        => VisualLength + (_textView.Options.ShowEndOfLine && FirstDocumentLine.DelimiterLength > 0 ? 1 : 0);
 
     /// <summary>First visual column of <paramref name="row"/>.</summary>
     public int GetTextLineVisualStartColumn(VisualTextLine row)

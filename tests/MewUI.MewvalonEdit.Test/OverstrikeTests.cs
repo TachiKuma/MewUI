@@ -9,6 +9,7 @@ namespace MewUI.MewvalonEdit.Test;
 /// <summary>
 /// Overstrike mode types over what is in front of the caret instead of pushing it along, except
 /// where there is nothing to take the place of: the end of a line, and a line ending itself.
+/// Driven through the keyboard path, which is the one a reader actually types through.
 /// </summary>
 [TestClass]
 [DoNotParallelize]
@@ -21,7 +22,7 @@ public sealed class OverstrikeTests
         editor.TextArea.OverstrikeMode = true;
         editor.CaretOffset = 0;
 
-        editor.TextArea.PerformTextInput("X");
+        Type(editor, "X");
 
         Assert.AreEqual("Xbc", editor.Text);
         Assert.AreEqual(1, editor.CaretOffset);
@@ -34,7 +35,7 @@ public sealed class OverstrikeTests
         editor.TextArea.OverstrikeMode = true;
         editor.CaretOffset = 2;
 
-        editor.TextArea.PerformTextInput("X");
+        Type(editor, "X");
 
         Assert.AreEqual("abX\ncd", editor.Text, "there is nothing at the end of a line to take the place of");
     }
@@ -46,9 +47,33 @@ public sealed class OverstrikeTests
         editor.TextArea.OverstrikeMode = true;
         editor.CaretOffset = 1;
 
-        editor.TextArea.PerformTextInput("\n");
+        Type(editor, "\n");
 
         Assert.AreEqual("a\nbc", editor.Text);
+    }
+
+    /// <summary>
+    /// The keystroke edits a range without ever holding a selection, so undo returns to the bare
+    /// caret the reader had, not to a one-character selection nobody made.
+    /// </summary>
+    [TestMethod]
+    public void UndoReturnsToTheCaretAndRedoLandsAfterTheCharacter()
+    {
+        var editor = CreateEditor("abc");
+        editor.Document.UndoStack.ClearAll();
+        editor.TextArea.OverstrikeMode = true;
+        editor.CaretOffset = 0;
+        Type(editor, "X");
+        Assert.AreEqual("Xbc", editor.Text);
+
+        editor.Document.UndoStack.Undo();
+        Assert.AreEqual("abc", editor.Text);
+        Assert.AreEqual(0, editor.CaretOffset);
+        Assert.AreEqual(0, editor.SelectionLength, "undo brought back a selection nobody made");
+
+        editor.Document.UndoStack.Redo();
+        Assert.AreEqual("Xbc", editor.Text);
+        Assert.AreEqual(1, editor.CaretOffset, "redo belongs after the typed character");
     }
 
     [TestMethod]
@@ -66,6 +91,9 @@ public sealed class OverstrikeTests
         Press(editor, Key.Insert);
         Assert.IsFalse(editor.TextArea.OverstrikeMode);
     }
+
+    private static void Type(TextEditor editor, string text)
+        => ((ITextInputClient)editor.Surface).HandleTextInput(new TextInputEventArgs(text));
 
     private static void Press(TextEditor editor, Key key)
         => editor.TextArea.HandleKeyDown(new KeyEventArgs(key, platformKey: 0, ModifierKeys.None));
@@ -98,7 +126,7 @@ public sealed class OverstrikeTests
         Assert.IsTrue(editor.Options.HideCursorWhileTyping, "the original hides it by default");
 
         editor.Options.HideCursorWhileTyping = false;
-        editor.TextArea.PerformTextInput("X");
+        Type(editor, "X");
 
         Assert.AreNotEqual(CursorType.None, editor.Surface.Cursor,
             "the pointer went away with the option turned off");

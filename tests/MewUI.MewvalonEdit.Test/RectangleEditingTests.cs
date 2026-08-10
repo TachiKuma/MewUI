@@ -67,7 +67,7 @@ public sealed class RectangleEditingTests
         var editor = CreateEditor("abcdef\nghijkl\nmnopqr");
         SelectBlock(editor);
 
-        Assert.IsTrue(editor.TextArea.HandleRectangleTextInput("X"));
+        editor.TextArea.PerformTextInput("X");
 
         Assert.AreEqual("abXef\nghXkl\nmnXqr", editor.Text.ReplaceLineEndings("\n"));
         Assert.IsInstanceOfType<RectangleSelection>(editor.TextArea.Selection);

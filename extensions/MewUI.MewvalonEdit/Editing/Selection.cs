@@ -209,9 +209,12 @@ public sealed class EmptySelection(TextArea textArea) : Selection(textArea)
     public override void ReplaceSelectionWithText(string newText)
     {
         ArgumentNullException.ThrowIfNull(newText);
+        // Straight to the editor's insertion, not back through PerformTextInput, which routes
+        // empty-selection input here. The original edits the document directly at this spot.
+        newText = AddSpacesIfRequired(newText, TextArea.Caret.Position, TextArea.Caret.Position);
         if (newText.Length > 0)
         {
-            TextArea.PerformTextInput(newText);
+            TextArea.Editor.InsertTextInput(newText);
         }
     }
 
@@ -263,6 +266,7 @@ public sealed class SimpleSelection : Selection
     {
         ArgumentNullException.ThrowIfNull(newText);
         // Through the editing path rather than the document, so a read-only section still refuses.
+        newText = AddSpacesIfRequired(newText, _start, _end);
         TextArea.Selection = this;
         TextArea.ReplaceSelection(newText);
     }

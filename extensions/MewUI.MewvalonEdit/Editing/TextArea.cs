@@ -272,28 +272,60 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     public void ReplaceSelection(string? text) => _editor.Surface.ReplaceSelection(text);
 
     /// <summary>
-    /// Inserts text as if typed, replacing the selection. In overstrike mode a character typed over
-    /// existing text takes the place of the one in front of the caret, which the original does by
-    /// selecting that character first; a line ending is always inserted, and so is anything typed at
-    /// the end of a line, because there is nothing there to take the place of.
+    /// Inserts text as if typed, whatever the selection: a rectangle writes every line it covers,
+    /// overstrike takes the place of the character in front of the caret, and anything else
+    /// replaces the selection. The keyboard lands in the same handling, so a programmatic call and
+    /// a keystroke produce the same document.
     /// </summary>
     public void PerformTextInput(string text)
     {
         text ??= string.Empty;
-        if (OverstrikeMode && Selection.IsEmpty && text is not ("\n" or "\r" or "\r\n"))
+        if (text.Length == 0)
         {
-            var line = Document.GetLineByOffset(Caret.Offset);
-            if (Caret.Offset < line.EndOffset)
-            {
-                int next = TextUtilities.GetNextCaretPosition(
-                    Document, Caret.Offset, Aprillz.MewUI.Text.LogicalDirection.Forward, CaretPositioningMode.Normal);
-                if (next > Caret.Offset && next <= line.EndOffset)
-                {
-                    _editor.Select(Caret.Offset, next - Caret.Offset);
-                }
-            }
+            return;
         }
-        _editor.InsertTextInput(text);
+        if (Selection is RectangleSelection rectangle)
+        {
+            rectangle.ReplaceSelectionWithText(text);
+            return;
+        }
+        if (TryGetOverstrikeRange(text, out int start, out int length))
+        {
+            // The typed-range path: undo returns to the caret and no selection is disturbed, so a
+            // box selection in progress survives the keystroke.
+            _editor.Surface.EnterText(start, length, text);
+            _editor.Surface.ScrollToCaret();
+            return;
+        }
+        Selection.ReplaceSelectionWithText(text);
+    }
+
+    /// <summary>
+    /// The range an overstrike keystroke takes the place of: the character in front of the caret.
+    /// False where there is nothing to take the place of - a line ending, the end of a line, or a
+    /// selection - which is where overstrike inserts like any other keystroke.
+    /// </summary>
+    private bool TryGetOverstrikeRange(string text, out int start, out int length)
+    {
+        start = Caret.Offset;
+        length = 0;
+        if (!OverstrikeMode || !Selection.IsEmpty || text is "\n" or "\r" or "\r\n")
+        {
+            return false;
+        }
+        var line = Document.GetLineByOffset(start);
+        if (start >= line.EndOffset)
+        {
+            return false;
+        }
+        int next = TextUtilities.GetNextCaretPosition(
+            Document, start, Aprillz.MewUI.Text.LogicalDirection.Forward, CaretPositioningMode.Normal);
+        if (next <= start || next > line.EndOffset)
+        {
+            return false;
+        }
+        length = next - start;
+        return true;
     }
 
     /// <summary>Collapses the selection to the caret.</summary>
@@ -413,25 +445,24 @@ public sealed class TextArea : MewObject, ITextEditorComponent
     private void OnTextInput(TextInputEventArgs args)
     {
         TextEntering?.Invoke(args);
-        if (!args.Handled && HandleRectangleTextInput(args.Text))
+        if (args.Handled || string.IsNullOrEmpty(args.Text) || _editor.IsReadOnly)
         {
+            return;
+        }
+        // A rectangle writes every line it covers, and overstrike replaces a range: the surface,
+        // whose selection stays empty in both, would insert at the caret only. Both are claims.
+        if (Selection is RectangleSelection || TryGetOverstrikeRange(args.Text, out _, out _))
+        {
+            PerformTextInput(args.Text);
             args.Handled = true;
+            return;
         }
-    }
-
-    /// <summary>
-    /// Typing over a rectangle writes every line it covers; the surface, whose selection stays
-    /// empty while a rectangle is active, would insert at the caret only. Returns whether the
-    /// rectangle took the text.
-    /// </summary>
-    internal bool HandleRectangleTextInput(string? text)
-    {
-        if (string.IsNullOrEmpty(text) || Selection is not RectangleSelection rectangle)
+        // A caret standing in virtual space owns columns the document does not have yet; the text
+        // grows the spaces that create them and the surface inserts it as one keystroke.
+        if (Selection.IsEmpty)
         {
-            return false;
+            args.Text = Selection.AddSpacesIfRequired(args.Text, Caret.Position, Caret.Position);
         }
-        rectangle.ReplaceSelectionWithText(text);
-        return true;
     }
 
     /// <summary>
