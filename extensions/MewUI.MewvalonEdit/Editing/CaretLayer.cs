@@ -46,7 +46,7 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
     /// A window-coordinate rectangle: one column wide normally, and as wide as the character it
     /// would overwrite in overstrike mode.
     /// </summary>
-    private Rect GetCaretRectangle(Controls.MultiLineTextBox surface)
+    internal Rect GetCaretRectangle(Controls.MultiLineTextBox surface)
     {
         int offset = textArea.Caret.Offset;
         var caret = surface.GetCharRectInWindow(offset);
@@ -54,6 +54,7 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
         {
             return Rect.Empty;
         }
+        caret = new Rect(caret.X + GetVirtualSpaceWidth(), caret.Y, caret.Width, caret.Height);
 
         double width = MINIMUM_WIDTH;
         if (textArea.OverstrikeMode)
@@ -70,6 +71,22 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
             }
         }
         return new Rect(caret.X, caret.Y, width, Math.Max(MINIMUM_WIDTH, caret.Height));
+    }
+
+    /// <summary>
+    /// How far past the end of its line the caret stands. Columns in virtual space carry no
+    /// characters, so the document offset the surface is asked about is the line's end and points at
+    /// the wrong place; each column past the end is one wide space, as the original measures them.
+    /// </summary>
+    private double GetVirtualSpaceWidth()
+    {
+        var position = textArea.Caret.Position;
+        var line = textArea.TextView.GetOrConstructVisualLine(textArea.Document.GetLineByNumber(position.Line));
+        if (line is null || position.VisualColumn <= line.VisualLength)
+        {
+            return 0;
+        }
+        return (position.VisualColumn - line.VisualLength) * textArea.TextView.WideSpaceWidth;
     }
 
     /// <summary>The caret band on whole device pixels, never thinner than one.</summary>
