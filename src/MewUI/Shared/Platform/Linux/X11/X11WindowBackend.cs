@@ -1045,7 +1045,7 @@ internal sealed class X11WindowBackend : IWindowBackend
             return;
         }
 
-        Point? targetPosition = Window.StartupLocation switch
+        Point? targetPosition = Window.EffectiveStartupLocation switch
         {
             WindowStartupLocation.Manual => Window.ResolvedStartupPosition,
             WindowStartupLocation.CenterOwner => ResolveCenterOwnerStartupPosition(),

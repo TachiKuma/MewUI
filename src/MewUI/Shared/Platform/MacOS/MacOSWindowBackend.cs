@@ -1150,7 +1150,7 @@ internal sealed class MacOSWindowBackend : IWindowBackend
             return;
         }
 
-        switch (_window.StartupLocation)
+        switch (_window.EffectiveStartupLocation)
         {
             case WindowStartupLocation.CenterScreen:
                 MacOSWindowInterop.CenterWindow(_nsWindow);

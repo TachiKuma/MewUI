@@ -1115,7 +1115,7 @@ internal sealed class Win32WindowBackend : IWindowBackend
             return ClampToWorkArea(x, y, windowWidthPx, windowHeightPx, User32.MonitorFromWindow(ownerWindow.Handle, MonitorDefaultToNearest));
         }
 
-        if (Window.StartupLocation == WindowStartupLocation.CenterScreen)
+        if (Window.EffectiveStartupLocation == WindowStartupLocation.CenterScreen)
         {
             var monitor = GetStartupMonitor();
             if (TryGetMonitorWorkArea(monitor, out var workArea))

@@ -700,6 +700,18 @@ public partial class Window : ContentControl, ILayoutRoundingHost
         }
     }
 
+    // Backends resolve placement through this rather than the raw property.
+    internal WindowStartupLocation EffectiveStartupLocation =>
+        ResolveEffectiveStartupLocation(StartupLocation, Owner != null && Owner.Handle != 0);
+
+    // Pure decision so the placement fallback is unit-testable in isolation. A CenterOwner window whose
+    // owner is absent or not yet realized has nothing to center against, so it centers on the screen
+    // instead of falling through to a backend default position.
+    internal static WindowStartupLocation ResolveEffectiveStartupLocation(WindowStartupLocation requested, bool hasRealizedOwner)
+        => requested == WindowStartupLocation.CenterOwner && !hasRealizedOwner
+            ? WindowStartupLocation.CenterScreen
+            : requested;
+
     /// <summary>
     /// Gets the resolved startup position in DIPs for <see cref="WindowStartupLocation.CenterOwner"/>
     /// and <see cref="WindowStartupLocation.Manual"/> modes. <see langword="null"/> for <see cref="WindowStartupLocation.CenterScreen"/>.
