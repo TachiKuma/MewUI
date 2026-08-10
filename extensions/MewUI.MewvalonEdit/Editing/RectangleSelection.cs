@@ -329,6 +329,27 @@ public sealed class RectangleSelection : Selection
         }
     }
 
+    /// <summary>
+    /// Where a caret belongs on each line the rectangle crosses: the moving edge, which is the one
+    /// the caret was walked to. A column past the end of its line has no character, so the offset is
+    /// the line's end and the column says how far past it the caret stands.
+    /// </summary>
+    internal IEnumerable<(int Offset, int VisualColumn)> CaretEdges()
+    {
+        int first = Math.Min(_startLine, _endLine);
+        int last = Math.Max(_startLine, _endLine);
+        for (int lineNumber = first; lineNumber <= last && lineNumber <= _document.LineCount; lineNumber++)
+        {
+            var visualLine = TextArea.TextView.GetOrConstructVisualLine(_document.GetLineByNumber(lineNumber));
+            if (visualLine is null)
+            {
+                continue;
+            }
+            int column = visualLine.GetVisualColumn(new Point(_endX, 0), allowVirtualSpace: true);
+            yield return (visualLine.FirstDocumentLine.Offset + visualLine.GetRelativeOffset(column), column);
+        }
+    }
+
     private (int topLeft, int bottomRight) ResolveCornerOffsets()
         => _segments.Count == 0 ? (0, 0) : (_segments[0].StartOffset, _segments[^1].EndOffset);
 

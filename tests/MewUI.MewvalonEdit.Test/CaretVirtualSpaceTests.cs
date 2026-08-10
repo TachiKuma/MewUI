@@ -53,6 +53,32 @@ public sealed class CaretVirtualSpaceTests
             "an ordinary move left the caret hanging past the empty line");
     }
 
+    /// <summary>
+    /// A rectangle edits every line it crosses, so each of them carries a caret, all in the same
+    /// column the box was walked to.
+    /// </summary>
+    [TestMethod]
+    public void EveryLineOfARectangleCarriesACaret()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var (window, editor, layer) = CreateHost();
+        Assert.ContainsSingle(layer.GetCaretRectangles(editor.Surface),
+            "an editor with no rectangle drew more than its one caret");
+
+        StepDown(window, editor);
+        StepDown(window, editor);
+
+        var carets = layer.GetCaretRectangles(editor.Surface).ToArray();
+        Assert.HasCount(3, carets, "the box crossed three lines but not every line got a caret");
+        foreach (var caret in carets)
+        {
+            Assert.AreEqual(carets[0].X, caret.X, 1.0, "the carets did not line up under one another");
+        }
+        Assert.AreEqual(3, carets.Select(static caret => caret.Y).Distinct().Count(),
+            "the carets landed on top of each other instead of one per line");
+    }
+
     private static void StepDown(Window window, TextEditor editor)
     {
         CaretNavigationCommandHandler.MoveCaretBoxSelection(editor.TextArea, CaretMovementType.LineDown);

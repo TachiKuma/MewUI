@@ -27,19 +27,36 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
             return;
         }
 
-        var rectangle = GetCaretRectangle(surface);
-        if (rectangle.IsEmpty)
-        {
-            return;
-        }
-        rectangle = SnapToPixels(rectangle, textArea.TextView.DpiScale);
-
         var color = textArea.Caret.CaretBrush ?? textArea.Editor.Foreground;
         if (textArea.OverstrikeMode)
         {
             color = Color.FromArgb(OVERSTRIKE_ALPHA, color.R, color.G, color.B);
         }
-        context.Graphics.FillRectangle(rectangle, color);
+        double dpiScale = textArea.TextView.DpiScale;
+        foreach (var rectangle in GetCaretRectangles(surface))
+        {
+            if (!rectangle.IsEmpty)
+            {
+                context.Graphics.FillRectangle(SnapToPixels(rectangle, dpiScale), color);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Every caret to draw. A rectangle selection edits each line it crosses, so each of them shows
+    /// where typing will land; the original draws its one caret and leaves the rest to the box.
+    /// </summary>
+    internal IEnumerable<Rect> GetCaretRectangles(Controls.MultiLineTextBox surface)
+    {
+        if (textArea.Selection is RectangleSelection rectangle)
+        {
+            foreach ((int offset, int visualColumn) in rectangle.CaretEdges())
+            {
+                yield return GetCaretRectangle(surface, offset, visualColumn);
+            }
+            yield break;
+        }
+        yield return GetCaretRectangle(surface);
     }
 
     /// <summary>
@@ -47,14 +64,16 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
     /// would overwrite in overstrike mode.
     /// </summary>
     internal Rect GetCaretRectangle(Controls.MultiLineTextBox surface)
+        => GetCaretRectangle(surface, textArea.Caret.Offset, textArea.Caret.Position.VisualColumn);
+
+    private Rect GetCaretRectangle(Controls.MultiLineTextBox surface, int offset, int visualColumn)
     {
-        int offset = textArea.Caret.Offset;
         var caret = surface.GetCharRectInWindow(offset);
         if (caret.IsEmpty)
         {
             return Rect.Empty;
         }
-        caret = new Rect(caret.X + GetVirtualSpaceWidth(), caret.Y, caret.Width, caret.Height);
+        double x = caret.X + GetVirtualSpaceWidth(offset, visualColumn);
 
         double width = MINIMUM_WIDTH;
         if (textArea.OverstrikeMode)
@@ -70,23 +89,22 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
                 }
             }
         }
-        return new Rect(caret.X, caret.Y, width, Math.Max(MINIMUM_WIDTH, caret.Height));
+        return new Rect(x, caret.Y, width, Math.Max(MINIMUM_WIDTH, caret.Height));
     }
 
     /// <summary>
-    /// How far past the end of its line the caret stands. Columns in virtual space carry no
+    /// How far past the end of its line a caret stands. Columns in virtual space carry no
     /// characters, so the document offset the surface is asked about is the line's end and points at
     /// the wrong place; each column past the end is one wide space, as the original measures them.
     /// </summary>
-    private double GetVirtualSpaceWidth()
+    private double GetVirtualSpaceWidth(int offset, int visualColumn)
     {
-        var position = textArea.Caret.Position;
-        var line = textArea.TextView.GetOrConstructVisualLine(textArea.Document.GetLineByNumber(position.Line));
-        if (line is null || position.VisualColumn <= line.VisualLength)
+        var line = textArea.TextView.GetOrConstructVisualLine(textArea.Document.GetLineByOffset(offset));
+        if (line is null || visualColumn <= line.VisualLength)
         {
             return 0;
         }
-        return (position.VisualColumn - line.VisualLength) * textArea.TextView.WideSpaceWidth;
+        return (visualColumn - line.VisualLength) * textArea.TextView.WideSpaceWidth;
     }
 
     /// <summary>The caret band on whole device pixels, never thinner than one.</summary>
