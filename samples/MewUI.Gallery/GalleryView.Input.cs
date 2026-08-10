@@ -29,11 +29,11 @@ partial class GalleryView
                     .OnCheckedChanged(isChecked => box.Wrap = isChecked == true),
                 box,
                 new TextBlock()
-                    .FontSize(11)
+                    .FontSize(ThemeFontSize.Small)
                     .Bind(TextBlock.TextProperty, box, TextBase.SelectionStartProperty,
                         (int start) => $"SelectionStart: {start}"),
                 new TextBlock()
-                    .FontSize(11)
+                    .FontSize(ThemeFontSize.Small)
                     .Bind(TextBlock.TextProperty, box, TextBase.SelectionLengthProperty,
                         (int length) => $"SelectionLength: {length}")
             );
@@ -132,7 +132,7 @@ partial class GalleryView
         box.Extensions.Classifiers.Add(classifier);
 
         var searchBox = new TextBox().Placeholder("Find...").Width(150);
-        var countLabel = new TextBlock().FontSize(11).CenterVertical();
+        var countLabel = new TextBlock().FontSize(ThemeFontSize.Small).CenterVertical();
 
         void UpdateCountLabel()
             => countLabel.Text = classifier.Matches.Count == 0
@@ -314,7 +314,7 @@ partial class GalleryView
                                 .Text("Hover to show a tooltip. Right-click to open a context menu.")
                                 .TextWrapping(TextWrapping.Wrap)
                                 .Width(290)
-                                .FontSize(11),
+                                .FontSize(ThemeFontSize.Small),
 
                             new Button()
                                 .Content("Hover / Right-click me")

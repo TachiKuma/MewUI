@@ -12,7 +12,7 @@ partial class GalleryView
                 .Vertical()
                 .Spacing(4)
                 .Children(
-                    new TextBlock().Text(name).FontSize(11),
+                    new TextBlock().Text(name).FontSize(ThemeFontSize.Small),
                     content);
 
         // ButtonGroup of icon + text segments (recycle-safe template).

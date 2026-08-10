@@ -157,7 +157,7 @@ partial class GalleryView
                                 new TextBlock()
                                     .Text($"StartupLocation.Manual\nLeft: {left}\nTop: {top}"),
                                 new TextBlock()
-                                    .FontSize(11)
+                                    .FontSize(ThemeFontSize.Small)
                                     .Text("Use this sample to verify startup manual placement against the requested DIP coordinates."),
                                 new CheckBox()
                                     .BindIsChecked(cancelClose)
@@ -191,7 +191,7 @@ partial class GalleryView
                             .Content("Open Native Chrome Window")
                             .OnClick(() => new NativeCustomWindowSample().Show(window)),
                         new TextBlock()
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                             .TextWrapping(TextWrapping.Wrap)
                             .Text("Hides the default title bar while keeping\nthe native frame (rounded corners, shadow).")
                     )
@@ -207,7 +207,7 @@ partial class GalleryView
                             .Content("Open CustomWindow")
                             .OnClick(() => new CustomWindowSample().Show(window)),
                         new TextBlock()
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                             .TextWrapping(TextWrapping.Wrap)
                             .Text("AllowsTransparency-based custom chrome.\nProvides rounded borders on Win10 and earlier.\nWin32: higher overhead. Prefer NativeCustomWindow.")
                     )
@@ -220,7 +220,7 @@ partial class GalleryView
                     .Spacing(8)
                     .Children(
                         new TextBlock()
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                             .TextWrapping(TextWrapping.Wrap)
                             .Text("Modify the code and save to see hot-reload in action.\nThis card will update with the current time."),
                         new TextBlock()
@@ -238,7 +238,7 @@ partial class GalleryView
                             .OnClick(ShowDialogSample),
                         new TextBlock()
                             .BindText(dialogStatus)
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                     )
             ),
 
@@ -253,7 +253,7 @@ partial class GalleryView
                             .OnClick(ShowTransparentSample),
                         new TextBlock()
                             .BindText(transparentStatus)
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                     )
             ),
 
@@ -264,14 +264,14 @@ partial class GalleryView
                     .Spacing(8)
                     .Children(
                         new TextBlock()
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                             .Text("Opens a window with StartManualPosition(120, 140)."),
                         new Button()
                             .Content("Open manual-position window")
                             .OnClick(ShowManualPositionSample),
                         new TextBlock()
                             .BindText(manualPositionStatus)
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                     )
             ),
 
@@ -295,7 +295,7 @@ partial class GalleryView
                 .Vertical()
                 .Spacing(8)
                 .Children(
-                    new TextBlock().Text("Press Alt to show access key underlines (Windows/Linux).").FontSize(11),
+                    new TextBlock().Text("Press Alt to show access key underlines (Windows/Linux).").FontSize(ThemeFontSize.Small),
 
                     new StackPanel().Horizontal().Spacing(8).Children(
                         new Label().CenterVertical().Text("_Name:").AccessKeyTarget(nameBox),
@@ -326,7 +326,7 @@ partial class GalleryView
     {
         var copyPresentation = new ObservableValue<string>("_Copy");
         var shortcutLog = new TextBlock()
-            .FontSize(11)
+            .FontSize(ThemeFontSize.Small)
             .TextWrapping(TextWrapping.Wrap)
             .Text("Focus the TextBox inside the highlighted scope, then press a shortcut.");
 
@@ -338,7 +338,7 @@ partial class GalleryView
             .Padding(8)
             .WithTheme((theme, border) => border.BorderBrush(theme.Palette.Accent));
 
-        var scopeState = new TextBlock().FontSize(11).Bold();
+        var scopeState = new TextBlock().FontSize(ThemeFontSize.Small).Bold();
         scopeState.Bind(
             TextBlock.TextProperty,
             inputScope,
@@ -355,7 +355,7 @@ partial class GalleryView
                     scopeState,
                     CreateMenu(window.Commands, inputScope.InputMap, OnShortcut, copyPresentation),
                     new TextBlock()
-                        .FontSize(11)
+                        .FontSize(ThemeFontSize.Small)
                         .TextWrapping(TextWrapping.Wrap)
                         .Text("The menu handlers live in Window.Commands. Shortcut gestures live only in this bordered InputMap scope."),
                     new Button()
@@ -374,7 +374,7 @@ partial class GalleryView
                     .Spacing(8)
                     .Children(
                         new TextBlock()
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                             .TextWrapping(TextWrapping.Wrap)
                             .Text("Focus inside the border to activate its local shortcuts. Move focus to NavigationView or another card to leave the scope."),
                         inputScope
@@ -540,7 +540,7 @@ partial class GalleryView
                 .Spacing(8)
                 .Children(
                     new TextBlock()
-                        .FontSize(11)
+                        .FontSize(ThemeFontSize.Small)
                         .Text("The sample window defers its Closing decision to an async confirmation.\nCloseAsync reports whether it actually closed."),
                     new WrapPanel()
                         .Spacing(6)
@@ -563,7 +563,7 @@ partial class GalleryView
                                 })),
                     new TextBlock()
                         .BindText(status)
-                        .FontSize(11)));
+                        .FontSize(ThemeFontSize.Small)));
     }
 
     private FrameworkElement PromptDialogCard()
@@ -577,7 +577,7 @@ partial class GalleryView
                 .Spacing(8)
                 .Children(
                     new TextBlock()
-                        .FontSize(11)
+                        .FontSize(ThemeFontSize.Small)
                         .Text("Opens a FitContentHeight dialog.\nWindow height adjusts to content."),
                     new Button()
                         .Content("Show Prompt")
@@ -594,7 +594,7 @@ partial class GalleryView
                         }),
                     new TextBlock()
                         .BindText(promptStatus)
-                        .FontSize(11)
+                        .FontSize(ThemeFontSize.Small)
                 )
         );
     }
@@ -651,7 +651,7 @@ partial class GalleryView
     private FrameworkElement DevToolsCard()
     {
         var shortcuts = new TextBlock()
-            .FontSize(11)
+            .FontSize(ThemeFontSize.Small)
             .Text("Shortcuts:\n- Inspector: Ctrl/Cmd+Shift+I\n- Visual Tree: Ctrl/Cmd+Shift+T");
 
         FrameworkElement content;
@@ -716,7 +716,7 @@ partial class GalleryView
         .Spacing(8)
         .Children(
             new TextBlock()
-                .FontSize(11)
+                .FontSize(ThemeFontSize.Small)
                 .Text("DevTools are available in Debug builds only."),
             shortcuts
         );
@@ -763,7 +763,7 @@ partial class GalleryView
                 .Spacing(8)
                 .Children(
                     new TextBlock()
-                        .FontSize(11)
+                        .FontSize(ThemeFontSize.Small)
                         .Text("Subscribes to Window.NativeMessage to observe raw platform messages."),
                     new StackPanel()
                         .Horizontal()
@@ -795,7 +795,7 @@ partial class GalleryView
                         ),
                     new TextBlock()
                         .BindText(hookLog)
-                        .FontSize(11)
+                        .FontSize(ThemeFontSize.Small)
                         .TextWrapping(TextWrapping.Wrap)
                 )
         );

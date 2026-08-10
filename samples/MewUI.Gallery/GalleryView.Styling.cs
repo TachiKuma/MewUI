@@ -24,7 +24,7 @@ partial class GalleryView
                         new TextBlock()
                             .Text("The button is 20pt Consolas. Hover it: the tooltip keeps the theme font, not the button's font. A popup no longer inherits the triggering control's font.")
                             .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(11),
+                            .FontSize(ThemeFontSize.Small),
                         new Button()
                             .Content("Hover me (20pt / Consolas)")
                             .FontSize(20)
@@ -43,7 +43,7 @@ partial class GalleryView
                         new TextBlock()
                             .Text("Right-click the button. It renders at 22pt, but the context menu stays in the theme font.")
                             .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(11),
+                            .FontSize(ThemeFontSize.Small),
                         new Button()
                             .Content("Right-click me (22pt)")
                             .FontSize(22)
@@ -71,10 +71,10 @@ partial class GalleryView
                         new TextBlock()
                             .Text("Both menu bars are identical. The second sits in a FontSize 16 container. Open the menus: the dropdown follows the ambient font.")
                             .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(11),
-                        new TextBlock().Text("Default (theme font):").FontSize(11),
+                            .FontSize(ThemeFontSize.Small),
+                        new TextBlock().Text("Default (theme font):").FontSize(ThemeFontSize.Small),
                         MenuDemoBar(),
-                        new TextBlock().Text("Inside a FontSize 16 container:").FontSize(11),
+                        new TextBlock().Text("Inside a FontSize 16 container:").FontSize(ThemeFontSize.Small),
                         new Border()
                             .FontSize(16)
                             .Child(MenuDemoBar())
@@ -139,7 +139,7 @@ partial class GalleryView
                         new TextBlock()
                             .Text("This container owns a local StyleSheet and provides an Accent Foreground. Both named styles derive from a default Button style that contributes an Error Foreground.")
                             .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(11),
+                            .FontSize(ThemeFontSize.Small),
                         new Button()
                             .Content("No override: BasedOn Error wins")
                             .StyleName("derived-no-override")
@@ -151,7 +151,7 @@ partial class GalleryView
                         new TextBlock()
                             .Text("Unset does not assign Accent. It removes the Style candidate, so the resolver exposes the next source in the property precedence chain.")
                             .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                     )
             );
     }
@@ -170,7 +170,7 @@ partial class GalleryView
         Border scope = null!;
         var status = new TextBlock()
             .Text("StyleSheet: applied")
-            .FontSize(11);
+            .FontSize(ThemeFontSize.Small);
 
         scope = new Border()
             .Apply(b => b.StyleSheet = sheet)
@@ -187,7 +187,7 @@ partial class GalleryView
                 new TextBlock()
                     .Text("The first button is outside the local sheet. The second is inside a Border that owns a Button type rule, so it receives the square, padded, bold style without a StyleName. Removing the sheet safely returns it to the default Button style.")
                     .TextWrapping(TextWrapping.Wrap)
-                    .FontSize(11),
+                    .FontSize(ThemeFontSize.Small),
                 new Button()
                     .Content("Outside scope: default Button")
                     .HorizontalAlignment(HorizontalAlignment.Left),

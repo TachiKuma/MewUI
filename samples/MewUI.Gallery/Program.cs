@@ -150,7 +150,7 @@ FrameworkElement TopBar() => new Border()
                                 new TextBlock()
                                     .Text("Aprillz.MewUI Gallery")
                                     .WithTheme((t, c) => c.Foreground(t.Palette.Accent))
-                                    .FontSize(18)
+                                    .FontSize(ThemeFontSize.Large)
                                     .SemiBold(),
 
                                 new TextBlock()
@@ -184,20 +184,18 @@ FrameworkElement SettingsControls() => new StackPanel()
     .Margin(16)
     .Spacing(16)
     .Children(
-        new TextBlock().Text("Settings").FontSize(22).Bold(),
-
         new StackPanel().Vertical().Spacing(8).Children(
-            new TextBlock().Text("Theme").FontSize(14).Bold(),
+            new TextBlock().WithTheme((t, c) => c.Foreground(t.Palette.Accent)).Text("Theme").Bold(),
             new StackPanel().Horizontal().Spacing(12).CenterVertical().Children(
                 ThemeModePicker(),
                 new TextBlock().Ref(out themeText).CenterVertical())),
 
         new StackPanel().Vertical().Spacing(8).Children(
-            new TextBlock().Text("Accent").FontSize(14).Bold(),
+            new TextBlock().WithTheme((t, c) => c.Foreground(t.Palette.Accent)).Text("Accent").Bold(),
             AccentPicker()),
 
         new StackPanel().Vertical().Spacing(8).Children(
-            new TextBlock().Text("Rendering").FontSize(14).Bold(),
+            new TextBlock().WithTheme((t, c) => c.Foreground(t.Palette.Accent)).Text("Rendering").Bold(),
             new WrapPanel().Spacing(12).Children(
                 new CheckBox()
                     .Content("Cached")

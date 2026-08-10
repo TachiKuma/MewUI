@@ -235,7 +235,7 @@ partial class GalleryView
                             fallbackValue: fallbackText),
                     new TextBlock()
                         .Text("Try Select B, then edit Profile A: the target must stay on B. Select null to see the fallback; null-state target edits are not buffered.")
-                        .FontSize(11)
+                        .FontSize(ThemeFontSize.Small)
                         .TextWrapping(TextWrapping.Wrap)),
             minWidth: 440);
     }
@@ -299,7 +299,7 @@ partial class GalleryView
     private static TextBlock BindingDescription(string text) =>
         new TextBlock()
             .Text(text)
-            .FontSize(11)
+            .FontSize(ThemeFontSize.Small)
             .TextWrapping(TextWrapping.Wrap);
 
     private sealed class BindingPathDemoRoot(BindingPathDemoProfile initialProfile)

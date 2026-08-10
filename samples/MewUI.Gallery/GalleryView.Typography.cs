@@ -122,15 +122,186 @@ partial class GalleryView
                     .Children(
                         runDemo,
                         new TextBlock()
-                            .FontSize(11)
+                            .FontSize(ThemeFontSize.Small)
                             .Text("One logical text surface with per-range color, weight, italic, decoration, font, and size.")),
                 minWidth: 650),
+            Card("Line Box (LineSpacing / LineBoxTrim)", LineBoxDemo(), minWidth: 500),
+            Card("Search Highlight (ListBox / TreeView)", SearchHighlightDemo(), minWidth: 500),
             Card("SyntaxViewer", SyntaxViewerDemo(), minWidth: 650),
             Card("Font Size Inheritance", inheritanceDemo),
             Card("Font Family Inheritance", fontFamilyDemo),
             Card("Font Weight Inheritance", fontWeightDemo),
             Card("Nested Inheritance", nestedDemo)
         );
+    }
+
+    private FrameworkElement LineBoxDemo()
+    {
+        var sample = new TextBlock()
+            .FontSize(ThemeFontSize.Large)
+            .Text("Àccents float above the cap line,\nglyphs like g, y and p hang\ntheir descenders below the baseline,\nand spacing opens the leading.");
+
+        // The border's height tracks the measured box, so trimming visibly pulls the top and
+        // bottom edges onto the glyphs; stretching keeps the render width equal to the measure
+        // width, which pins the wrap points.
+        var border = new Border()
+            .Left()
+            .BorderThickness(1)
+            .WithTheme((t, b) => b.BorderBrush(t.Palette.Accent))
+            .Child(sample);
+
+        var spacingLabel = new TextBlock()
+            .FontSize(ThemeFontSize.Small)
+            .Text("LineSpacing: 0")
+            .CenterVertical()
+            .Bind(TextBlock.TextProperty, sample, TextBlock.LineSpacingProperty, x => $"LineSpacing: {x:0.#}");
+
+        return new StackPanel()
+            .Vertical()
+            .Spacing(10)
+            .Children(
+                border,
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(10)
+                    .Children(
+                        new RadioButton()
+                            .Content("None")
+                            .IsChecked(true)
+                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.None),
+                        new RadioButton()
+                            .Content("Cap")
+                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.Cap),
+                        new RadioButton()
+                            .Content("Cap + Baseline")
+                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.CapAndBaseline)),
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(10)
+                    .Children(
+                        new Slider()
+                            .Width(120)
+                            .Minimum(-16)
+                            .Maximum(16)
+                            .Value(0)
+                            .OnValueChanged(value => sample.LineSpacing = value),
+                        new Button()
+                            .Content("Reset")
+                            .OnClick(() => sample.LineSpacing = 0),
+                        spacingLabel),
+                new TextBlock()
+                    .FontSize(ThemeFontSize.Small)
+                    .Text("The border tracks the measured box: trimming cuts it to cap and baseline while the ink overflows; the slider tightens or opens the leading."));
+    }
+
+    private FrameworkElement SearchHighlightDemo()
+    {
+        string[] controlNames =
+        [
+            "Button", "TextBox", "TextBlock", "TreeView", "ListBox", "ComboBox", "CheckBox",
+            "RadioButton", "Slider", "ProgressBar", "TabControl", "ToolTip", "ContextMenu",
+            "ScrollViewer", "MenuBar", "ToggleSwitch", "NumericUpDown", "ColorPicker"
+        ];
+        var treeItems = new[]
+        {
+            new TreeViewNode("Controls",
+            [
+                new TreeViewNode("Button.cs"),
+                new TreeViewNode("TextBox.cs"),
+                new TreeViewNode("TreeView.cs"),
+                new TreeViewNode("ListBox.cs")
+            ]),
+            new TreeViewNode("Text",
+            [
+                new TreeViewNode("TextServices.cs"),
+                new TreeViewNode("ManagedTextEngine.cs"),
+                new TreeViewNode("ManagedTextRenderContext.cs"),
+                new TreeViewNode("TextViewLayout.cs")
+            ])
+        };
+
+        string query = string.Empty;
+        var highlightColor = Color.FromArgb(110, 255, 184, 0);
+
+        // Paint spans repaint only, so the layout and measured width never change while typing.
+        void ApplyHighlight(TextBlock target, string text)
+        {
+            if (query.Length == 0 || !text.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                target.Text = text;
+                return;
+            }
+            target.Inlines.Clear();
+            int position = 0;
+            while (position < text.Length)
+            {
+                int match = text.IndexOf(query, position, StringComparison.OrdinalIgnoreCase);
+                if (match < 0)
+                {
+                    break;
+                }
+                if (match > position)
+                {
+                    target.Inlines.Add(new Run(text[position..match]));
+                }
+                target.Inlines.Add(new Run(text.Substring(match, query.Length)).Background(highlightColor));
+                position = match + query.Length;
+            }
+            if (position < text.Length)
+            {
+                target.Inlines.Add(new Run(text[position..]));
+            }
+        }
+
+        var listBox = new ListBox()
+            .Height(230)
+            .Items(controlNames);
+        var treeView = new TreeView()
+            .Height(230)
+            .Width(250)
+            .ItemsSource(treeItems);
+
+        var description = new TextBlock()
+                   .DockBottom()
+                   .FontSize(ThemeFontSize.Small)
+                   .Text("Run.Background becomes a paint span behind the matched glyphs; items stay plain TextBlocks.")
+
+        // A fresh template instance is the public rebind trigger: the setter rebuilds realized
+        // containers while selection and expansion state stay on the control.
+        void ApplyTemplates()
+        {
+            listBox.ItemTemplate(new DelegateTemplate<string>(
+                build: ctx => new TextBlock().Register(ctx, "Text").CenterVertical(),
+                bind: (_, item, _, ctx) => ApplyHighlight(ctx.Get<TextBlock>("Text"), item ?? "")));
+            treeView.ItemTemplate<TreeViewNode>(
+                build: ctx => new TextBlock().Register(ctx, "Text").CenterVertical(),
+                bind: (_, item, _, ctx) => ApplyHighlight(ctx.Get<TextBlock>("Text"), item.Text));
+
+            ApplyHighlight(description, description.Text);
+        }
+
+        ApplyTemplates();
+
+        foreach (var node in treeItems)
+        {
+            treeView.Expand(node);
+        }
+
+        var search = new TextBox()
+            .Placeholder("Type to highlight matches, e.g. box")
+            .OnTextChanged(text =>
+            {
+                query = text;
+                ApplyTemplates();
+            });
+
+        return new DockPanel()
+            .Spacing(8)
+            .Children(
+                search.DockTop(),
+                description,
+                treeView.DockRight(),
+                listBox);
     }
 
     private FrameworkElement SyntaxViewerDemo()

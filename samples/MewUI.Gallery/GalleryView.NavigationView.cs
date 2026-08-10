@@ -42,7 +42,7 @@ partial class GalleryView
                     .Vertical()
                     .Spacing(8)
                     .Children(
-                        new TextBlock().Text(entry.Title).FontSize(22).Bold(),
+                        new TextBlock().Text(entry.Title).FontSize(ThemeFontSize.Medium).SemiBold(),
                         new TextBlock().Text(entry.Description).TextWrapping(TextWrapping.Wrap))));
         navigation.SelectedIndex = 0;
 
