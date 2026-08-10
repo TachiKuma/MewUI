@@ -2,16 +2,16 @@ using Aprillz.MewUI;
 using Aprillz.MewUI.Windowless.Sample;
 
 RegisterPlatformAndBackend();
-Application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
 IHotkeyProvider? hotkey = null;
 PaletteController? palette = null;
 DispatcherTimer? smokeTimer = null;
-bool runSmoke = Environment.GetCommandLineArgs().Contains("--smoke", StringComparer.Ordinal);
 
 Application.Create()
-    .OnStartup(() =>
+    .WithShutdownMode(ShutdownMode.OnExplicitShutdown)
+    .OnStartup(args =>
     {
+        bool runSmoke = args.Contains("--smoke", StringComparer.Ordinal);
         var dispatcher = Application.Current.Dispatcher
             ?? throw new InvalidOperationException("The UI dispatcher was not installed before startup.");
 
@@ -22,7 +22,7 @@ Application.Create()
             hotkey?.Dispose();
             hotkey = null;
             palette?.PrepareToExit();
-            Application.Quit();
+            Application.Shutdown();
         }
 
         palette = new PaletteController(Exit);
