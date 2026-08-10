@@ -232,7 +232,13 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
 
         // Measuring against an unbounded height keeps trimming out of the desired size; it applies
         // at render time, where the arranged bounds are known.
-        return GetOrCreateTextLayout(wrapping, maxWidth, double.PositiveInfinity).MeasuredSize;
+        var measured = GetOrCreateTextLayout(wrapping, maxWidth, double.PositiveInfinity).MeasuredSize;
+
+        // The desired width ceils to a device pixel: arrange snapping must never hand render a
+        // width below the measured content, or the render-time re-layout wraps against its own
+        // measurement and the last line clips.
+        double dpiScale = GetDpi() / 96.0;
+        return new Size(Math.Ceiling(measured.Width * dpiScale) / dpiScale, measured.Height);
     }
 
     protected override void ArrangeContent(Rect bounds)
