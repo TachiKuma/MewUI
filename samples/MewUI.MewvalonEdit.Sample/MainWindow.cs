@@ -37,7 +37,9 @@ public sealed class MainWindow : Window
 
         _editor = new TextEditor
         {
-            FontFamily = "Consolas",
+            // Comma lists resolve to the first installed family: Consolas ships with Windows,
+            // Menlo with macOS.
+            FontFamily = "Consolas, Menlo, DejaVu Sans Mono",
             FontSize = 13,
             ShowLineNumbers = true,
             WordWrap = false
