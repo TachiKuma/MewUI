@@ -2611,21 +2611,24 @@ internal sealed class Win32WindowBackend : IWindowBackend
             };
             Imm32.ImmSetCompositionWindow(himc, ref compForm);
 
-            // Candidate window stays at composition start position.
-            // CFS_EXCLUDE tells the IME to avoid overlapping the text line rect.
+            // Candidate window stays at the column the composition started in, at the top of its
+            // line: the IME drops the list below that point itself, by the composition font it was
+            // handed, so adding the line height here would drop it twice. The offset is clearance
+            // between the list and the line it belongs to, which the drop alone leaves too tight.
             var startRect = client.GetCharRectInWindow(client.CompositionStartIndex);
             int startPx = (int)(startRect.X * dpiScale);
-            int startPy = (int)(startRect.Y * dpiScale);
-            int startLineH = (int)((startRect.Height + COMPOSITION_OFFSET_Y_DIP) * dpiScale);
-
+            int startPy = (int)((startRect.Y + COMPOSITION_OFFSET_Y_DIP) * dpiScale);
 
             // Set composition font so third-party IMEs (e.g. Sogou) can determine
-            // candidate window size and position correctly.
+            // candidate window size and position correctly. The height is the line the preedit
+            // actually occupies, not the size the control asked for: a script that falls back to
+            // another face makes the line taller, and an IME that drops the list by the size it was
+            // told then lands it over the text.
             if (client is Controls.Control ctl)
             {
                 var logFont = new LOGFONT
                 {
-                    lfHeight = -(int)(ctl.FontSize * dpiScale),
+                    lfHeight = -(int)(Math.Max(ctl.FontSize, startRect.Height) * dpiScale),
                     lfWeight = ctl.FontWeight == FontWeight.Bold ? 700 : 400,
                     lfCharSet = 1, // DEFAULT_CHARSET
                 };
@@ -2640,6 +2643,7 @@ internal sealed class Win32WindowBackend : IWindowBackend
                 ptCurrentPos = new Imm32.POINT { x = startPx, y = startPy },
             };
             Imm32.ImmSetCandidateWindow(himc, ref candForm);
+            ImeLogger.Write($"position caret={caretPos} rect=({caretRect.X:F1},{caretRect.Y:F1},{caretRect.Width:F1},{caretRect.Height:F1}) compAt=({caretPx},{caretPy}) candAt=({startPx},{startPy}) dpi={dpiScale:F2}");
         }
         finally
         {
