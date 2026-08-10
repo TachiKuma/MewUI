@@ -230,9 +230,13 @@ public sealed class MainWindow : Window
                 // Setting any of these replaces the host's selection layer with the editor's own,
                 // which is the one consumer proving layer replacement works.
                 customSelection,
-                // The caret is the editor's own layer, so its colour is settable.
-                Toggle("Custom caret color", false,
-                    value => _editor.TextArea.Caret.CaretBrush = value ? Color.FromRgb(220, 60, 60) : null))
+                // The caret is the editor's own layer, so its colour is settable. The box selection
+                // draws a caret per line, and the ones off the active corner take their own colour.
+                Toggle("Custom caret color", false, value =>
+                {
+                    _editor.TextArea.Caret.CaretBrush = value ? Color.FromRgb(220, 60, 60) : null;
+                    _editor.TextArea.Caret.SecondaryCaretBrush = value ? Color.FromRgb(90, 140, 220) : null;
+                }))
         }.WithTheme((theme, border) => border
             .Background(theme.Palette.ContainerBackground)
             .BorderBrush(theme.Palette.ControlBorder));
