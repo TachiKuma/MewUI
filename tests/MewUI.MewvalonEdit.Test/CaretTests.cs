@@ -32,6 +32,11 @@ public sealed class CaretTests
 
         Assert.IsNull(caret.CaretBrush, "A caret follows the editor's foreground until told otherwise.");
 
+        Assert.IsNull(caret.SecondaryCaretBrush,
+            "the carets off the active corner follow the caret colour until told otherwise");
+        caret.SecondaryCaretBrush = Color.FromRgb(0, 0, 255);
+        Assert.AreEqual(Color.FromRgb(0, 0, 255), caret.SecondaryCaretBrush);
+
         caret.CaretBrush = Color.FromRgb(255, 0, 0);
 
         Assert.AreEqual(Color.FromRgb(255, 0, 0), caret.CaretBrush);

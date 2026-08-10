@@ -35,7 +35,8 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
         {
             color = Color.FromArgb(OVERSTRIKE_ALPHA, color.R, color.G, color.B);
         }
-        var secondary = Color.FromArgb((byte)(color.A * SECONDARY_ALPHA / 255), color.R, color.G, color.B);
+        var secondary = textArea.Caret.SecondaryCaretBrush
+            ?? Color.FromArgb((byte)(color.A * SECONDARY_ALPHA / 255), color.R, color.G, color.B);
         double dpiScale = textArea.TextView.DpiScale;
         foreach ((var rectangle, bool primary) in GetCaretRectangles(surface))
         {

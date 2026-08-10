@@ -593,6 +593,7 @@ public sealed class Caret(TextArea textArea)
     internal const double MINIMUM_DISTANCE_TO_VIEW_BORDER = 30;
 
     private Color? _caretBrush;
+    private Color? _secondaryCaretBrush;
     // An editor no one is typing in draws no caret; taking the focus is what turns it on.
     private bool _isVisible;
     private int _visualColumnOverride = -1;
@@ -652,6 +653,22 @@ public sealed class Caret(TextArea textArea)
         {
             if (_caretBrush == value) return;
             _caretBrush = value;
+            textArea.Editor.Surface.InvalidateLayer(Aprillz.MewUI.Text.TextViewLayerAnchor.Caret);
+        }
+    }
+
+    /// <summary>
+    /// Colour of the carets a rectangle selection puts on the lines the caret is not on. Null draws
+    /// them in <see cref="CaretBrush"/> at reduced alpha, so the block reads as one caret and its
+    /// echoes without a second colour to keep in step.
+    /// </summary>
+    public Color? SecondaryCaretBrush
+    {
+        get => _secondaryCaretBrush;
+        set
+        {
+            if (_secondaryCaretBrush == value) return;
+            _secondaryCaretBrush = value;
             textArea.Editor.Surface.InvalidateLayer(Aprillz.MewUI.Text.TextViewLayerAnchor.Caret);
         }
     }
