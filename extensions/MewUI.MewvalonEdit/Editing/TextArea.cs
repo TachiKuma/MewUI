@@ -688,6 +688,10 @@ public sealed class Caret(TextArea textArea)
         {
             _visualColumnOverride = -1;
         }
+        // The desired x belongs to the walk that set it, as the original's caret offset setter has
+        // it. Ordinary caret movement is the editing surface's, so this is where the extension
+        // hears about it; a vertical walk assigns the x again after moving, which outlives this.
+        DesiredXPos = double.NaN;
         PositionChanged?.Invoke(this, EventArgs.Empty);
     }
 
