@@ -286,6 +286,9 @@ internal sealed class MewVGMetalTextCache : IDisposable
         if (sameInputs)
         {
             // Identical inputs: the texture already holds these pixels; no re-rasterization needed.
+            // The frame stamp must still advance, or a second owner draw this frame fails the
+            // same-frame check below and repaints the texture this quad already queued against.
+            entry.LastFrame = _frameGeneration;
             imageId = entry.ImageId;
             bitmapWidthPx = entry.TextureWidthPx;
             bitmapHeightPx = entry.TextureHeightPx;
