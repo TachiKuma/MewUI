@@ -23,6 +23,22 @@ public enum TextDecoration
     Strikethrough = 2
 }
 
+/// <summary>
+/// Trims the layout's outer line boxes to font metrics: ink such as accents or descenders may
+/// paint outside the reported bounds, and interior line spacing is unaffected.
+/// </summary>
+public enum LineBoxTrim
+{
+    /// <summary>No trimming; the line boxes keep their full ascent and descent.</summary>
+    None,
+
+    /// <summary>Trims the first line's top to the cap height.</summary>
+    Cap,
+
+    /// <summary>Also trims the last line's bottom to the baseline.</summary>
+    CapAndBaseline
+}
+
 public readonly record struct CharacterHit(int FirstCharacterIndex, int TrailingLength)
 {
     public int InsertionIndex => checked(FirstCharacterIndex + TrailingLength);
@@ -60,8 +76,13 @@ public sealed record TextParagraphStyle
     /// <summary>Tab width in space characters, used where <see cref="TabStops"/> defines no stop ahead.</summary>
     public int TabSize { get; init; } = 4;
     public double? LineHeight { get; init; }
+
+    /// <summary>Extra gap between line boxes (in DIPs); negative tightens, but a line never starts above the previous one.</summary>
     public double LineSpacing { get; init; }
     public double LetterSpacing { get; init; }
+
+    /// <summary>Cap-height trimming of the outer line boxes; see <see cref="Text.LineBoxTrim"/>.</summary>
+    public LineBoxTrim LineBoxTrim { get; init; } = LineBoxTrim.None;
 }
 
 public readonly record struct GeometryStyleRun(int Start, int Length, TextRunStyle Style)

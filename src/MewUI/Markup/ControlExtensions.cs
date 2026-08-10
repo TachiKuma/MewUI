@@ -1,4 +1,5 @@
 using Aprillz.MewUI.Rendering;
+using Aprillz.MewUI.Text;
 
 #pragma warning disable CS0618 // Keep fluent compatibility methods for the legacy MultiLineTextBox.
 
@@ -88,6 +89,29 @@ public static class ControlExtensions
         control.FontSize = fontSize;
         return control;
     }
+
+    /// <summary>
+    /// Sets the font size resolved once from the current theme's <see cref="ThemeMetrics"/>;
+    /// themes with per-variant metrics re-resolve by calling this inside a WithTheme callback.
+    /// </summary>
+    /// <typeparam name="T">Control type.</typeparam>
+    /// <param name="control">Target control.</param>
+    /// <param name="size">Theme font size step.</param>
+    /// <returns>The control for chaining.</returns>
+    public static T FontSize<T>(this T control, ThemeFontSize size) where T : Control
+    {
+        control.FontSize = ResolveThemeFontSize(control.ThemeInternal.Metrics, size);
+        return control;
+    }
+
+    private static double ResolveThemeFontSize(ThemeMetrics metrics, ThemeFontSize size) => size switch
+    {
+        ThemeFontSize.Small => metrics.FontSizeSmall,
+        ThemeFontSize.Medium => metrics.FontSizeMedium,
+        ThemeFontSize.Large => metrics.FontSizeLarge,
+        ThemeFontSize.ExtraLarge => metrics.FontSizeExtraLarge,
+        _ => metrics.FontSize
+    };
 
     /// <summary>
     /// Sets the font weight.
@@ -1023,6 +1047,43 @@ public static class ControlExtensions
     public static TextBlock FontSize(this TextBlock textBlock, double fontSize)
     {
         textBlock.FontSize = fontSize;
+        return textBlock;
+    }
+
+    /// <summary>
+    /// Sets the extra gap between lines (in DIPs); negative values tighten.
+    /// </summary>
+    /// <param name="textBlock">Target text block.</param>
+    /// <param name="lineSpacing">Gap in DIPs added between line boxes.</param>
+    /// <returns>The text block for chaining.</returns>
+    public static TextBlock LineSpacing(this TextBlock textBlock, double lineSpacing)
+    {
+        textBlock.LineSpacing = lineSpacing;
+        return textBlock;
+    }
+
+    /// <summary>
+    /// Sets cap-height trimming of the outer line boxes; ink may paint outside the trimmed bounds.
+    /// </summary>
+    /// <param name="textBlock">Target text block.</param>
+    /// <param name="trim">Trim mode.</param>
+    /// <returns>The text block for chaining.</returns>
+    public static TextBlock LineBoxTrim(this TextBlock textBlock, LineBoxTrim trim)
+    {
+        textBlock.LineBoxTrim = trim;
+        return textBlock;
+    }
+
+    /// <summary>
+    /// Sets the font size resolved once from the current theme's <see cref="ThemeMetrics"/>;
+    /// themes with per-variant metrics re-resolve by calling this inside a WithTheme callback.
+    /// </summary>
+    /// <param name="textBlock">Target text block.</param>
+    /// <param name="size">Theme font size step.</param>
+    /// <returns>The text block for chaining.</returns>
+    public static TextBlock FontSize(this TextBlock textBlock, ThemeFontSize size)
+    {
+        textBlock.FontSize = ResolveThemeFontSize(textBlock.ThemeInternal.Metrics, size);
         return textBlock;
     }
 

@@ -78,17 +78,33 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
                     segments[index] = segments[index] with { X = segments[index].X + x };
                 }
             }
+            double trimTop = 0;
+            double trimBottom = 0;
+            if (snapshot.Paragraph.LineBoxTrim != LineBoxTrim.None)
+            {
+                trimTop = Math.Max(0, font.Ascent - font.CapHeight);
+                if (snapshot.Paragraph.LineBoxTrim == LineBoxTrim.CapAndBaseline)
+                {
+                    trimBottom = Math.Max(0, height - font.Ascent);
+                }
+            }
+            double boxHeight = height - trimTop - trimBottom;
             var line = new ManagedTextLine(
                 new TextLayoutLineMetrics(
-                    0, snapshot.Text.Length, 0, new Rect(x, 0, width, height), font.Ascent, trailingWhitespace),
+                    0, snapshot.Text.Length, 0, new Rect(x, 0, width, boxHeight), font.Ascent - trimTop, trailingWhitespace),
                 clusters: null,
-                fastSegments: segments);
-            return new ManagedTextLayout(this, snapshot, [line], new Size(width, height), isFastPath: true);
+                fastSegments: segments)
+            {
+                TrimTop = trimTop,
+                TrimBottom = trimBottom
+            };
+            return new ManagedTextLayout(this, snapshot, [line], new Size(width, boxHeight), isFastPath: true);
         }
 
         var clusters = MeasureClusters(context, snapshot, 0, snapshot.Text.Length);
         var lines = AssembleLines(context, snapshot, clusters);
         ApplyTrimming(context, snapshot, lines);
+        ApplyLineBoxTrim(snapshot, lines);
         double measuredWidth = 0;
         for (int index = 0; index < lines.Count; index++)
         {
@@ -432,7 +448,9 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
             var line = CreateLine(
                 context, snapshot, lineClusters, y, explicitBreak ? clusters[scan].Length : 0, lineStart);
             lines.Add(line);
-            y = line.Metrics.Bounds.Bottom + snapshot.Paragraph.LineSpacing;
+            // A tightening (negative) spacing may overlap lines but must never move the next line
+            // above the current one: line search by Y assumes monotonically increasing tops.
+            y = Math.Max(line.Metrics.Bounds.Y, line.Metrics.Bounds.Bottom + snapshot.Paragraph.LineSpacing);
 
             if (explicitBreak)
             {
@@ -669,6 +687,73 @@ internal sealed class ManagedTextEngine : ITextEngine, IDisposable
         => paragraph.LineHeight is > 0
             ? paragraph.LineHeight.Value
             : Math.Max(fontHeight, measuredHeight);
+
+    /// <summary>Trims the first line's box to its cap height and, when requested, the last line's bottom to its baseline.</summary>
+    private void ApplyLineBoxTrim(TextLayoutRequestSnapshot snapshot, List<ManagedTextLine> lines)
+    {
+        if (snapshot.Paragraph.LineBoxTrim == LineBoxTrim.None || lines.Count == 0)
+        {
+            return;
+        }
+
+        var first = lines[0];
+        double topTrim = Math.Max(0, first.Metrics.Baseline - ResolveLineCapHeight(first, snapshot));
+        if (topTrim > 0)
+        {
+            first.TrimTop = topTrim;
+            var metrics = first.Metrics;
+            first.Metrics = metrics with
+            {
+                Bounds = new Rect(metrics.Bounds.X, metrics.Bounds.Y, metrics.Bounds.Width, metrics.Bounds.Height - topTrim),
+                Baseline = metrics.Baseline - topTrim
+            };
+            for (int index = 1; index < lines.Count; index++)
+            {
+                var shifted = lines[index].Metrics;
+                lines[index].Metrics = shifted with
+                {
+                    Bounds = new Rect(shifted.Bounds.X, shifted.Bounds.Y - topTrim, shifted.Bounds.Width, shifted.Bounds.Height)
+                };
+            }
+        }
+
+        if (snapshot.Paragraph.LineBoxTrim == LineBoxTrim.CapAndBaseline)
+        {
+            var last = lines[^1];
+            var metrics = last.Metrics;
+            double bottomTrim = Math.Max(0, metrics.Bounds.Height - metrics.Baseline);
+            if (bottomTrim > 0)
+            {
+                last.TrimBottom = bottomTrim;
+                last.Metrics = metrics with
+                {
+                    Bounds = new Rect(metrics.Bounds.X, metrics.Bounds.Y, metrics.Bounds.Width, metrics.Bounds.Height - bottomTrim)
+                };
+            }
+        }
+    }
+
+    /// <summary>Cap height of the font that defines the line's baseline; the tallest ascent wins.</summary>
+    private double ResolveLineCapHeight(ManagedTextLine line, TextLayoutRequestSnapshot snapshot)
+    {
+        var clusters = line.Clusters;
+        if (clusters == null || clusters.Count == 0)
+        {
+            return GetFont(snapshot.DefaultStyle, snapshot.Dpi).CapHeight;
+        }
+
+        double maxAscent = double.MinValue;
+        double capHeight = 0;
+        foreach (var cluster in clusters)
+        {
+            if (cluster.Font.Ascent > maxAscent)
+            {
+                maxAscent = cluster.Font.Ascent;
+                capHeight = cluster.Font.CapHeight;
+            }
+        }
+        return capHeight;
+    }
 
     /// <summary>
     /// Applies character-ellipsis trimming, matching the legacy rasterizer rules: without wrapping
@@ -926,9 +1011,11 @@ internal sealed class TextLayoutRequestSnapshot
             TabStops = request.Paragraph.TabStops?.ToArray() ?? [],
             Culture = request.Paragraph.Culture ?? CultureInfo.CurrentUICulture
         };
-        if (paragraph.LineHeight is <= 0 || paragraph.LineSpacing < 0 || double.IsNaN(paragraph.MaxWidth))
+        if (paragraph.LineHeight is <= 0 ||
+            !double.IsFinite(paragraph.LineSpacing) ||
+            double.IsNaN(paragraph.MaxWidth))
         {
-            throw new ArgumentOutOfRangeException(nameof(request), "Paragraph metrics must be finite and non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(request), "Paragraph metrics must be finite; the line height must be positive.");
         }
 
         return new TextLayoutRequestSnapshot(
@@ -993,7 +1080,7 @@ internal sealed class TextLayoutRequestSnapshot
             .Append('\u001f').Append(Paragraph.LineHeight?.ToString("R", CultureInfo.InvariantCulture))
             .Append('\u001f').Append(Paragraph.LineSpacing.ToString("R", CultureInfo.InvariantCulture))
             .Append('\u001f').Append(Paragraph.LetterSpacing.ToString("R", CultureInfo.InvariantCulture))
-            .Append(':').Append(Paragraph.TabSize);
+            .Append('\u001f').Append((int)Paragraph.LineBoxTrim).Append(':').Append(Paragraph.TabSize);
         AppendStyle(builder, DefaultStyle);
         foreach (double tab in Paragraph.TabStops)
         {
@@ -1103,6 +1190,12 @@ internal sealed class ManagedTextLine(
 
     /// <summary>True when trimming dropped trailing content and an ellipsis follows the clusters.</summary>
     public bool IsTrimmed { get; set; }
+
+    /// <summary>Line-box trim taken off the top; the ink still renders at the untrimmed position.</summary>
+    public double TrimTop { get; set; }
+
+    /// <summary>Line-box trim taken off the bottom (descent and line-height surplus).</summary>
+    public double TrimBottom { get; set; }
 }
 
 internal sealed class ManagedTextLayoutCache : ITextLayoutCache, IDisposable

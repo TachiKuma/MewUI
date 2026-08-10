@@ -93,6 +93,11 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
     {
         foreach (var line in managed.ManagedLines)
         {
+            // Ink renders in the untrimmed box: a cap-trimmed line reports a smaller layout box,
+            // but the glyphs keep their font-metric position and may overflow it.
+            double inkY = origin.Y + line.Metrics.Bounds.Y - line.TrimTop;
+            double inkHeight = line.Metrics.Bounds.Height + line.TrimTop + line.TrimBottom;
+            double inkBaseline = line.Metrics.Baseline + line.TrimTop;
             var clusters = managed.EnsureClusters(line);
             int index = 0;
             while (index < clusters.Count)
@@ -100,7 +105,7 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
                 var cluster = clusters[index];
                 if (cluster.Kind == ManagedTextClusterKind.Inline)
                 {
-                    cluster.Inline!.Draw(this, new Point(origin.X + cluster.X, origin.Y + line.Metrics.Bounds.Y));
+                    cluster.Inline!.Draw(this, new Point(origin.X + cluster.X, inkY));
                     index++;
                     continue;
                 }
@@ -129,15 +134,15 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
                 double runWidth = last.X + last.Width - cluster.X;
                 var bounds = new Rect(
                     origin.X + cluster.X,
-                    origin.Y + line.Metrics.Bounds.Y,
+                    inkY,
                     Math.Max(1, runWidth),
-                    line.Metrics.Bounds.Height);
+                    inkHeight);
                 var realized = GetOrCreateRun(
-                    managed, textStart, textLength, cluster.Font, runWidth, line.Metrics.Bounds.Height);
+                    managed, textStart, textLength, cluster.Font, runWidth, inkHeight);
                 if (realized is not null)
                 {
                     DrawRunColorSegments(
-                        clusters, index, runEnd, origin, bounds, line.Metrics.Baseline, realized, in options);
+                        clusters, index, runEnd, origin, bounds, inkBaseline, realized, in options);
                 }
                 index = runEnd;
             }
@@ -166,9 +171,9 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
         {
             var bounds = new Rect(
                 origin.X + segment.X,
-                origin.Y + line.Metrics.Bounds.Y,
+                origin.Y + line.Metrics.Bounds.Y - line.TrimTop,
                 Math.Max(1, segment.Width),
-                line.Metrics.Bounds.Height);
+                line.Metrics.Bounds.Height + line.TrimTop + line.TrimBottom);
             var realized = GetOrCreateRun(managed, segment.Start, segment.Length, font, bounds.Width, bounds.Height);
             if (realized is not null)
             {
@@ -201,9 +206,9 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
         Rect endCaret = managed.GetCaretBounds(new CharacterHit(textEnd, 0));
         var bounds = new Rect(
             origin.X + startCaret.X,
-            origin.Y + line.Metrics.Bounds.Y,
+            origin.Y + line.Metrics.Bounds.Y - line.TrimTop,
             Math.Max(1, endCaret.X - startCaret.X),
-            line.Metrics.Bounds.Height);
+            line.Metrics.Bounds.Height + line.TrimTop + line.TrimBottom);
         var realized = GetOrCreateRun(managed, textStart, textEnd - textStart, font, bounds.Width, bounds.Height);
         if (realized is not null)
         {
@@ -224,13 +229,14 @@ internal sealed class ManagedTextRenderContext : ITextRenderContext, IDisposable
         var font = clusters.Count > 0 ? clusters[^1].Font : managed.GetDefaultFont();
         double x = clusters.Count > 0 ? clusters[^1].X + clusters[^1].Width : lineBounds.X;
         double width = Math.Max(1, lineBounds.Right - x);
-        using var run = _backend.CreateRun(ELLIPSIS, font, width, lineBounds.Height);
+        double inkHeight = lineBounds.Height + line.TrimTop + line.TrimBottom;
+        using var run = _backend.CreateRun(ELLIPSIS, font, width, inkHeight);
         if (run is null)
         {
             return;
         }
 
-        _backend.DrawRun(run, new Point(origin.X + x, origin.Y + lineBounds.Y), color, owner);
+        _backend.DrawRun(run, new Point(origin.X + x, origin.Y + lineBounds.Y - line.TrimTop), color, owner);
     }
 
     private void DrawBackgrounds(ManagedTextLayout layout, Point origin, ReadOnlySpan<TextPaintSpan> spans)

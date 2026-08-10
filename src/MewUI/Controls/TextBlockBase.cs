@@ -30,6 +30,16 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
             MewPropertyOptions.AffectsLayout,
             static (self, _, _) => self.OnTextTrimmingChanged());
 
+    public static readonly MewProperty<double> LineSpacingProperty =
+        MewProperty<double>.Register<TextBlockBase>(nameof(LineSpacing), 0.0,
+            MewPropertyOptions.AffectsLayout,
+            static (self, _, _) => self.InvalidateTextLayout());
+
+    public static readonly MewProperty<LineBoxTrim> LineBoxTrimProperty =
+        MewProperty<LineBoxTrim>.Register<TextBlockBase>(nameof(LineBoxTrim), LineBoxTrim.None,
+            MewPropertyOptions.AffectsLayout,
+            static (self, _, _) => self.InvalidateTextLayout());
+
     private double? _lastWrapMeasureWidth;
     private readonly List<TextPaintSpan> _paintSpans = [];
     private readonly List<GeometryStyleRun> _geometryRuns = [];
@@ -83,6 +93,26 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
     {
         get => GetValue(TextTrimmingProperty);
         set => SetValue(TextTrimmingProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the extra gap between lines (in DIPs); 0 keeps the natural leading and
+    /// negative values tighten.
+    /// </summary>
+    public double LineSpacing
+    {
+        get => GetValue(LineSpacingProperty);
+        set => SetValue(LineSpacingProperty, value);
+    }
+
+    /// <summary>
+    /// Gets or sets cap-height trimming of the outer line boxes; ink may paint outside the
+    /// trimmed bounds.
+    /// </summary>
+    public LineBoxTrim LineBoxTrim
+    {
+        get => GetValue(LineBoxTrimProperty);
+        set => SetValue(LineBoxTrimProperty, value);
     }
 
     private void OnTextWrappingChanged() => InvalidateTextLayout();
@@ -170,6 +200,8 @@ public abstract partial class TextBlockBase : TextElement, IDisposable
                     Wrapping = wrapping,
                     Trimming = TextTrimming,
                     Alignment = TextAlignment,
+                    LineSpacing = LineSpacing,
+                    LineBoxTrim = LineBoxTrim,
                     Culture = System.Globalization.CultureInfo.CurrentUICulture
                 },
                 Revision = _textRevision
