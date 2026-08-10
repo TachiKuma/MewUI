@@ -58,6 +58,44 @@
     <Project Path="meta/MewUI.Linux/MewUI.Linux.csproj" />
     <Project Path="meta/MewUI.MacOS/MewUI.MacOS.csproj" />
     <Project Path="meta/MewUI.Windows/MewUI.Windows.csproj" />
+    <Project Path="meta/MewUI.Skia.All/MewUI.Skia.All.csproj" />
+    <Project Path="meta/MewUI.Skia.Linux/MewUI.Skia.Linux.csproj" />
+    <Project Path="meta/MewUI.Skia.MacOS/MewUI.Skia.MacOS.csproj" />
+    <Project Path="meta/MewUI.Skia.Windows/MewUI.Skia.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/MewUI.VisualStudio/MewUI.VisualStudio.csproj" />
+  </Folder>
+  <Folder Name="/tools/vscode-mewui/">
+    <File Path="tools/vscode-mewui/README.md" />
+    <File Path="tools/vscode-mewui/package.json" />
+    <File Path="tools/vscode-mewui/tsconfig.json" />
+    <File Path="tools/vscode-mewui/src/extension.ts" />
+    <File Path="tools/vscode-mewui/src/panel.ts" />
+    <File Path="tools/vscode-mewui/src/protocol.ts" />
+    <File Path="tools/vscode-mewui/src/session.ts" />
+  </Folder>
+  <Folder Name="/tools/rider-mewui/">
+    <File Path="tools/rider-mewui/README.md" />
+    <File Path="tools/rider-mewui/build.gradle.kts" />
+    <File Path="tools/rider-mewui/settings.gradle.kts" />
+    <File Path="tools/rider-mewui/gradle.properties" />
+    <File Path="tools/rider-mewui/src/main/resources/META-INF/plugin.xml" />
+    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/OpenPreviewAction.kt" />
+    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/PreviewPanel.kt" />
+    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/PreviewProtocol.kt" />
+    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/PreviewSession.kt" />
+    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/PreviewToolWindowFactory.kt" />
+    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/ProjectLocator.kt" />
+    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/ShimProject.kt" />
+    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/W3cInput.kt" />
+  </Folder>
+  <Folder Name="/tools/scripts/">
+    <File Path="tools/bench/bench_trimmed.cmd" />
+    <File Path="tools/bench/bench_trimmed_analyze.ps1" />
+    <File Path="tools/pack/pack_mewui.cmd" />
+    <File Path="tools/publish/osx/Info.plist" />
+    <File Path="tools/publish/osx/create-app-bundle.sh" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MewUI.Analyzers.Test/MewUI.Analyzers.Test.csproj" />
