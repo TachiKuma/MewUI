@@ -1003,6 +1003,14 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     public void ReplaceRange(int start, int length, string? text)
         => _editor.ReplaceRange(start, length, text);
 
+    /// <summary>
+    /// Replaces a document range the way a user types over it: the caret lands at the end of the
+    /// inserted text, undo returns to where the caret was, and <see cref="EditableRegions"/> is
+    /// honored. <see cref="ReplaceRange"/> is the programmatic counterpart.
+    /// </summary>
+    public void EnterText(int start, int length, string? text)
+        => _editor.EnterText(start, length, text);
+
     /// <summary>Consulted before every edit. Null leaves the document fully editable.</summary>
     public IEditableRegionProvider? EditableRegions
     {

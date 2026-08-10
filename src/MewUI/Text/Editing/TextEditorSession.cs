@@ -299,6 +299,21 @@ public sealed class TextEditorSession
         }
     }
 
+    /// <summary>
+    /// Applies typed text over the given range instead of the selection: the caret lands at the end
+    /// of what was inserted, undo returns to where the caret was, and editable regions are honored.
+    /// <see cref="ReplaceRange"/> is the programmatic counterpart whose caret rides along instead.
+    /// </summary>
+    public void EnterText(int start, int length, string? text)
+    {
+        string normalized = Document.Normalize(text);
+        ApplyAndRecord(start, length, normalized);
+        if (normalized.Length > 0)
+        {
+            TextCommitted?.Invoke(normalized);
+        }
+    }
+
     private void ApplyAndRecord(int start, int removeLength, string inserted)
     {
         CommitComposition();

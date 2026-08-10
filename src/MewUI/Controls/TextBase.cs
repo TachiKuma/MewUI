@@ -682,6 +682,16 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
 
     void ITextInputClient.HandleTextInput(TextInputEventArgs e)
     {
+        // Win32 forwards the IME result string through TextInput while the preedit is still
+        // active; the preedit must be removed, not committed, or the candidate doubles up. It goes
+        // before the event, so a subscriber that edits the document itself, or reads it, sees the
+        // document without the preedit.
+        if (_editor.IsComposing && !IsReadOnly && NormalizeTypedText(e.Text ?? string.Empty).Length > 0)
+        {
+            _editor.CancelComposition();
+            _compositionLength = 0;
+            _compositionAttributes = null;
+        }
         TextInput?.Invoke(e);
         if (e.Handled || IsReadOnly) return;
         string text = e.Text ?? string.Empty;
@@ -702,14 +712,6 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
         {
             e.Handled = true;
             return;
-        }
-        if (_editor.IsComposing)
-        {
-            // Win32 forwards the IME result string through TextInput while the preedit is still
-            // active; the preedit must be removed, not committed, or the candidate doubles up.
-            _editor.CancelComposition();
-            _compositionLength = 0;
-            _compositionAttributes = null;
         }
         InsertText(text);
         EnsureCaretVisible();
