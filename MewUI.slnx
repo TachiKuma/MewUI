@@ -64,33 +64,6 @@
     <Project Path="meta/MewUI.Skia.Windows/MewUI.Skia.Windows.csproj" />
   </Folder>
   <Folder Name="/tools/">
-    <Project Path="tools/MewUI.VisualStudio/MewUI.VisualStudio.csproj" />
-  </Folder>
-  <Folder Name="/tools/vscode-mewui/">
-    <File Path="tools/vscode-mewui/README.md" />
-    <File Path="tools/vscode-mewui/package.json" />
-    <File Path="tools/vscode-mewui/tsconfig.json" />
-    <File Path="tools/vscode-mewui/src/extension.ts" />
-    <File Path="tools/vscode-mewui/src/panel.ts" />
-    <File Path="tools/vscode-mewui/src/protocol.ts" />
-    <File Path="tools/vscode-mewui/src/session.ts" />
-  </Folder>
-  <Folder Name="/tools/rider-mewui/">
-    <File Path="tools/rider-mewui/README.md" />
-    <File Path="tools/rider-mewui/build.gradle.kts" />
-    <File Path="tools/rider-mewui/settings.gradle.kts" />
-    <File Path="tools/rider-mewui/gradle.properties" />
-    <File Path="tools/rider-mewui/src/main/resources/META-INF/plugin.xml" />
-    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/OpenPreviewAction.kt" />
-    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/PreviewPanel.kt" />
-    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/PreviewProtocol.kt" />
-    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/PreviewSession.kt" />
-    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/PreviewToolWindowFactory.kt" />
-    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/ProjectLocator.kt" />
-    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/ShimProject.kt" />
-    <File Path="tools/rider-mewui/src/main/kotlin/com/aprillz/mewui/preview/W3cInput.kt" />
-  </Folder>
-  <Folder Name="/tools/scripts/">
     <File Path="tools/bench/bench_trimmed.cmd" />
     <File Path="tools/bench/bench_trimmed_analyze.ps1" />
     <File Path="tools/pack/pack_mewui.cmd" />
