@@ -16,6 +16,7 @@
     <Project Path="samples/MewUI.Svg.Sample/MewUI.Svg.Sample.csproj" />
     <Project Path="samples/MewUI.Video.Sample/MewUI.Video.Sample.csproj" />
     <Project Path="samples/MewUI.WebView2.Win32.Sample/MewUI.WebView2.Win32.Sample.csproj" />
+    <Project Path="samples/MewUI.Windowless.Sample/MewUI.Windowless.Sample.csproj" />
   </Folder>
   <Folder Name="/samples/FBA/">
     <File Path="samples/FBASample/fba_calculator.cs" />
@@ -32,6 +33,7 @@
     <Project Path="src/MewUI.Platform.MacOS/MewUI.Platform.MacOS.csproj" />
     <Project Path="src/MewUI.Platform.Win32/MewUI.Platform.Win32.csproj" />
     <Project Path="src/MewUI.Platform.X11/MewUI.Platform.X11.csproj" />
+    <Project Path="src/MewUI.Preview/MewUI.Preview.csproj" />
     <Project Path="src/MewUI/MewUI.csproj" />
   </Folder>
   <Folder Name="/extensions/">
