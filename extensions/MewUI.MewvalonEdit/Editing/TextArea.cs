@@ -645,7 +645,10 @@ public sealed class Caret(TextArea textArea)
         }
     }
 
-    /// <summary>Colour of the caret. Null follows the editor's foreground.</summary>
+    /// <summary>
+    /// Colour of the caret. Null follows the editor's foreground, except while a rectangle
+    /// selection has several carets live, where it takes a colour of its own to say so.
+    /// </summary>
     public Color? CaretBrush
     {
         get => _caretBrush;
@@ -658,9 +661,8 @@ public sealed class Caret(TextArea textArea)
     }
 
     /// <summary>
-    /// Colour of the carets a rectangle selection puts on the lines the caret is not on. Null draws
-    /// them in <see cref="CaretBrush"/> at reduced alpha, so the block reads as one caret and its
-    /// echoes without a second colour to keep in step.
+    /// Colour of the carets a rectangle selection puts on the lines the caret is not on. Null takes
+    /// the built-in colour that tells them apart from the one on the active corner.
     /// </summary>
     public Color? SecondaryCaretBrush
     {

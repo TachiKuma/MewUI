@@ -13,10 +13,13 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
 {
     // The overwritten character has to stay readable under the caret covering it.
     private const byte OVERSTRIKE_ALPHA = 100;
-    // The carets a rectangle puts on the lines the reader is not on. Dimmer than the one they are
-    // driving, so the block reads as one caret and its echoes rather than several equals.
-    private const byte SECONDARY_ALPHA = 100;
     private const double MINIMUM_WIDTH = 1;
+
+    // A rectangle selection types into every line it crosses, which is worth saying in the caret
+    // itself: Visual Studio colours its carets only while several are live, and leaves the ordinary
+    // one alone. The active corner and the lines following it are told apart the same way.
+    private static readonly Color _defaultPrimaryCaret = Color.FromRgb(214, 64, 64);
+    private static readonly Color _defaultSecondaryCaret = Color.FromRgb(64, 132, 214);
 
     public void Draw(ITextRenderContext context, Rect viewportBounds)
     {
@@ -30,13 +33,15 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
             return;
         }
 
-        var color = textArea.Caret.CaretBrush ?? textArea.Editor.Foreground;
+        bool several = textArea.Selection is RectangleSelection;
+        var color = textArea.Caret.CaretBrush
+            ?? (several ? _defaultPrimaryCaret : textArea.Editor.Foreground);
+        var secondary = textArea.Caret.SecondaryCaretBrush ?? _defaultSecondaryCaret;
         if (textArea.OverstrikeMode)
         {
             color = Color.FromArgb(OVERSTRIKE_ALPHA, color.R, color.G, color.B);
+            secondary = Color.FromArgb(OVERSTRIKE_ALPHA, secondary.R, secondary.G, secondary.B);
         }
-        var secondary = textArea.Caret.SecondaryCaretBrush
-            ?? Color.FromArgb((byte)(color.A * SECONDARY_ALPHA / 255), color.R, color.G, color.B);
         double dpiScale = textArea.TextView.DpiScale;
         foreach ((var rectangle, bool primary) in GetCaretRectangles(surface))
         {
