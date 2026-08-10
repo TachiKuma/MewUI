@@ -593,6 +593,7 @@ public sealed class Caret(TextArea textArea)
     internal const double MINIMUM_DISTANCE_TO_VIEW_BORDER = 30;
 
     private Color? _caretBrush;
+    private Color? _primaryCaretBrush;
     private Color? _secondaryCaretBrush;
     // An editor no one is typing in draws no caret; taking the focus is what turns it on.
     private bool _isVisible;
@@ -645,10 +646,7 @@ public sealed class Caret(TextArea textArea)
         }
     }
 
-    /// <summary>
-    /// Colour of the caret. Null follows the editor's foreground, except while a rectangle
-    /// selection has several carets live, where it takes a colour of its own to say so.
-    /// </summary>
+    /// <summary>Colour of the caret. Null follows the editor's foreground.</summary>
     public Color? CaretBrush
     {
         get => _caretBrush;
@@ -661,8 +659,25 @@ public sealed class Caret(TextArea textArea)
     }
 
     /// <summary>
+    /// Colour of the caret on the active corner while a rectangle selection has several carets
+    /// live. Null falls back to <see cref="CaretBrush"/>, and then to a built-in colour that says
+    /// typing goes to more than one line.
+    /// </summary>
+    public Color? PrimaryCaretBrush
+    {
+        get => _primaryCaretBrush;
+        set
+        {
+            if (_primaryCaretBrush == value) return;
+            _primaryCaretBrush = value;
+            textArea.Editor.Surface.InvalidateLayer(Aprillz.MewUI.Text.TextViewLayerAnchor.Caret);
+        }
+    }
+
+    /// <summary>
     /// Colour of the carets a rectangle selection puts on the lines the caret is not on. Null takes
-    /// the built-in colour that tells them apart from the one on the active corner.
+    /// a built-in colour that tells them apart from the one on the active corner; it does not fall
+    /// back to <see cref="CaretBrush"/>, which would erase that difference.
     /// </summary>
     public Color? SecondaryCaretBrush
     {

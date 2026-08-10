@@ -33,10 +33,12 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
             return;
         }
 
+        var caret = textArea.Caret;
         bool several = textArea.Selection is RectangleSelection;
-        var color = textArea.Caret.CaretBrush
-            ?? (several ? _defaultPrimaryCaret : textArea.Editor.Foreground);
-        var secondary = textArea.Caret.SecondaryCaretBrush ?? _defaultSecondaryCaret;
+        var color = several
+            ? caret.PrimaryCaretBrush ?? caret.CaretBrush ?? _defaultPrimaryCaret
+            : caret.CaretBrush ?? textArea.Editor.Foreground;
+        var secondary = caret.SecondaryCaretBrush ?? _defaultSecondaryCaret;
         if (textArea.OverstrikeMode)
         {
             color = Color.FromArgb(OVERSTRIKE_ALPHA, color.R, color.G, color.B);
