@@ -674,6 +674,18 @@ public abstract class TextBase : Control, ITextCompositionClient, ITextCompositi
     void ITextCompositionEditor.CommitActiveComposition()
     {
         if (!_editor.IsComposing) return;
+        // Through the same door typed text uses, which removes the preedit and inserts the result:
+        // platforms differ in how they deliver a commit (some send the result as text input while
+        // the preedit is still up, others commit what is already there), and a subscriber has to
+        // see one contract either way. HandleTextInput does the preedit removal itself.
+        string composed = _compositionLength > 0
+            ? _document.GetText(_compositionStart, _compositionLength)
+            : string.Empty;
+        if (composed.Length > 0)
+        {
+            ((ITextInputClient)this).HandleTextInput(new TextInputEventArgs(composed));
+            return;
+        }
         _editor.CommitComposition();
         _compositionLength = 0;
         _compositionAttributes = null;
