@@ -38,6 +38,8 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
     // so estimated-height corrections move the scroll bar, never the content. See MultiLineTextBox.
     private int _scrollAnchorOffset;
     private double _scrollAnchorDelta;
+    // A scroll moved the pixel offset; the row it lands on is read in the next layout pass.
+    private bool _scrollAnchorStale;
     private int _anchor;
     private int _caret;
     private long _documentVersion;
@@ -171,7 +173,6 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             BorderThickness,
             CornerRadius);
         _contentBounds = GetContentBounds();
-        UpdateViewport();
         if (_view is null) return;
 
         context.Save();
@@ -327,6 +328,13 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
         EnsureView();
         if (_view is null || _contentBounds.IsEmpty) return;
         if (Wrap) _horizontalOffset = 0;
+        // A scroll moved the pixel offset without standing any lines up; the row it landed on is
+        // read here, before the anchor below resolves the offset back from it.
+        if (_scrollAnchorStale)
+        {
+            _scrollAnchorStale = false;
+            CaptureScrollAnchor();
+        }
         // Pin the scroll anchor: materialization replaces estimated heights with measured ones,
         // and the derived pixel offset follows the anchor row so the content never drifts under a
         // stationary viewport. Same scheme as MultiLineTextBox.
@@ -474,13 +482,13 @@ public sealed class SyntaxViewer : Control, IVisualTreeHost, ITextViewHost
             return;
         }
         _verticalOffset = value;
-        CaptureScrollAnchor();
+        // Standing the lines up is the layout pass's, so the anchor is captured there too.
+        _scrollAnchorStale = true;
         UpdateScrollBarRanges();
         ScrollOffsetChanged?.Invoke(this);
         if (invalidate)
         {
-            UpdateViewport();
-            InvalidateVisual();
+            InvalidateArrange();
         }
     }
 

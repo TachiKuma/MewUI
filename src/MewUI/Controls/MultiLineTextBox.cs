@@ -51,6 +51,8 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     // target. The delta is the anchor row's distance above the viewport top.
     private int _scrollAnchorOffset;
     private double _scrollAnchorDelta;
+    // A scroll moved the pixel offset; the row it lands on is read in the next layout pass.
+    private bool _scrollAnchorStale;
     private readonly TextViewLayerStack _layers;
     private IGraphicsContext? _graphics;
     private double _preferredCaretX = double.NaN;
@@ -193,7 +195,6 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         var bounds = GetSnappedBorderBounds(Bounds);
         DrawBackgroundAndBorder(context, bounds, Background, BorderBrush, BorderThickness, CornerRadius);
         _contentBounds = GetEditorContentBounds();
-        UpdateViewport();
 
         context.Save();
         try
@@ -515,6 +516,13 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         if (_view is null || _contentBounds.Width <= 0 || _contentBounds.Height <= 0)
         {
             return;
+        }
+        // A scroll moved the pixel offset without standing any lines up; the row it landed on is
+        // read here, before the anchor below resolves the offset back from it.
+        if (_scrollAnchorStale)
+        {
+            _scrollAnchorStale = false;
+            CaptureAnchor();
         }
         // Pin the anchor: materializing the viewport may replace estimated heights above it with
         // measured ones, which moves the anchor's document Y; the derived offset follows until the
@@ -1066,15 +1074,19 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
 
     private void SetVerticalOffset(double value, bool invalidate = true)
     {
+        // Against the extent the last layout measured. Arrange clamps again once the lines for the
+        // new offset are up, which is what settles a scroll into estimated territory.
         double extent = _view?.ExtentHeight ?? 0;
         double maximum = Math.Max(0, extent - _contentBounds.Height);
         value = Math.Clamp(double.IsFinite(value) ? value : 0, 0, maximum);
         if (Math.Abs(_verticalOffset - value) < 0.001) return;
         _verticalOffset = value;
-        CaptureAnchor();
+        // Standing the lines up is the layout pass's, so the anchor is captured there too. A caller
+        // that scrolls and reads the viewport in the same breath asks for a layout first.
+        _scrollAnchorStale = true;
         UpdateScrollBarRanges();
         ScrollOffsetChanged?.Invoke(this);
-        if (invalidate) InvalidateVisual();
+        if (invalidate) InvalidateArrange();
     }
 
     private void SetHorizontalOffset(double value, bool invalidate = true)

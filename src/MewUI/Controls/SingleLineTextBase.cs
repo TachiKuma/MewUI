@@ -118,7 +118,6 @@ public abstract class SingleLineTextBase : TextBase
         var bounds = GetSnappedBorderBounds(Bounds);
         DrawBackgroundAndBorder(context, bounds, Background, BorderBrush, BorderThickness, CornerRadius);
         _contentBounds = GetEditorContentBounds();
-        UpdateViewport();
 
         context.Save();
         try
