@@ -129,8 +129,8 @@ https://github.com/user-attachments/assets/fc2d6ad8-3317-4784-a6e5-a00c68e9ed3b
                         .FontSize(18)
                         .Bold(),
                     new Button()
-                        .Content("Quit")
-                        .OnClick(() => Application.Quit())
+                        .Content("Exit")
+                        .OnClick(Application.Shutdown)
                 )
         );
 

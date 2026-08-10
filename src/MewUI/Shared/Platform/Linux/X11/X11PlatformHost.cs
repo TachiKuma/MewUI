@@ -152,7 +152,7 @@ public sealed class X11PlatformHost : IPlatformHost
         }
         finally
         {
-            // Application.Quit exits the loop with windows still alive; their GL and input-method
+            // Application.Shutdown exits the loop with windows still alive; their GL and input-method
             // teardown talks to the X server, so it must run BEFORE XCloseDisplay frees the Display.
             // Backends cache the display pointer, making a later teardown a use-after-free.
             foreach (var backend in _windows.Values.ToArray())

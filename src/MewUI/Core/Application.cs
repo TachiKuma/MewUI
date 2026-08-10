@@ -29,14 +29,32 @@ public sealed class Application
     // Run-scoped state (window registry, main-window identity) and its ordered teardown. Non-null only
     // for the duration of a Run; created at run start, disposed at run end.
     private ApplicationRuntime? _runtime;
-    private Action? _startup;
+    private Action<string[]>? _startup;
 
     /// <summary>
-    /// Determines when the run loop ends automatically as windows close. Process-level policy; set
-    /// before <see cref="Run(Window)"/> or <see cref="Run(Action)"/>. Defaults to
-    /// <see cref="MewUI.ShutdownMode.OnLastWindowClose"/>.
+    /// Determines when the run loop ends automatically as windows close. Scoped to this run; configure it
+    /// before the run through <see cref="AppOptions.ShutdownMode"/>, or assign it from the startup
+    /// callback. Defaults to <see cref="MewUI.ShutdownMode.OnLastWindowClose"/>.
     /// </summary>
-    public static ShutdownMode ShutdownMode { get; set; } = ShutdownMode.OnLastWindowClose;
+    public ShutdownMode ShutdownMode { get; set; } = ShutdownMode.OnLastWindowClose;
+
+    /// <summary>
+    /// The window whose close ends the run under <see cref="MewUI.ShutdownMode.OnMainWindowClose"/>.
+    /// Set by the window-based <see cref="Run(Window)"/> overloads; assign it to promote a window opened
+    /// later, which is the only way a run started without a main window can use that mode. Null clears
+    /// the identity, leaving that mode with nothing to trigger on.
+    /// </summary>
+    public Window? MainWindow
+    {
+        get => _runtime?.MainWindow;
+        set
+        {
+            if (_runtime != null)
+            {
+                _runtime.MainWindow = value;
+            }
+        }
+    }
     private readonly ThemeManager _themeManager;
     private readonly RenderLoopSettings _renderLoopSettings = new();
     private IGraphicsFactory? _graphicsFactory;
@@ -312,7 +330,7 @@ public sealed class Application
     public static void Run(Window mainWindow)
     {
         ArgumentNullException.ThrowIfNull(mainWindow);
-        RunInternal(mainWindow, startup: null);
+        RunInternal(mainWindow, startup: null, shutdownMode: null);
     }
 
     /// <summary>
@@ -323,7 +341,18 @@ public sealed class Application
     {
         ArgumentNullException.ThrowIfNull(mainWindow);
         ArgumentNullException.ThrowIfNull(startup);
-        RunInternal(mainWindow, startup);
+        RunInternal(mainWindow, _ => startup(), shutdownMode: null);
+    }
+
+    /// <summary>
+    /// Runs the application with the specified main window and invokes <paramref name="startup"/> with the
+    /// command-line arguments on the UI thread after the dispatcher is installed and before the window is shown.
+    /// </summary>
+    public static void Run(Window mainWindow, Action<string[]> startup)
+    {
+        ArgumentNullException.ThrowIfNull(mainWindow);
+        ArgumentNullException.ThrowIfNull(startup);
+        RunInternal(mainWindow, startup, shutdownMode: null);
     }
 
     /// <summary>
@@ -333,10 +362,21 @@ public sealed class Application
     public static void Run(Action startup)
     {
         ArgumentNullException.ThrowIfNull(startup);
-        RunInternal(mainWindow: null, startup);
+        RunInternal(mainWindow: null, _ => startup(), shutdownMode: null);
     }
 
-    private static void RunInternal(Window? mainWindow, Action? startup)
+    /// <summary>
+    /// Runs the application without a main window and invokes <paramref name="startup"/> with the
+    /// command-line arguments on the UI thread after the dispatcher is installed and before the platform
+    /// message loop begins.
+    /// </summary>
+    public static void Run(Action<string[]> startup)
+    {
+        ArgumentNullException.ThrowIfNull(startup);
+        RunInternal(mainWindow: null, startup, shutdownMode: null);
+    }
+
+    internal static void RunInternal(Window? mainWindow, Action<string[]>? startup, ShutdownMode? shutdownMode)
     {
         if (_current != null)
         {
@@ -358,10 +398,14 @@ public sealed class Application
                 _current = app;
                 app._runtime = new ApplicationRuntime();
                 app._startup = startup;
+                if (shutdownMode != null)
+                {
+                    app.ShutdownMode = shutdownMode.Value;
+                }
                 _ = app.Theme;
                 if (mainWindow != null)
                 {
-                    app._runtime.SetMainWindow(mainWindow);
+                    app._runtime.MainWindow = mainWindow;
                     app.RegisterWindow(mainWindow);
                 }
                 app.RunCore(mainWindow);
@@ -460,7 +504,7 @@ public sealed class Application
 
     // The shutdown decision is owned by ApplicationRuntime (policy-driven, one place) rather than each
     // platform host; hosts only maintain their own hwnd registry for routing.
-    internal void UnregisterWindow(Window window) => _runtime?.Unregister(window);
+    internal void UnregisterWindow(Window window) => _runtime?.Unregister(window, ShutdownMode);
 
     // Pure decision so the policy is unit-testable in isolation.
     internal static bool ShouldShutdownAfterClose(ShutdownMode mode, bool wasMainWindow, int remainingWindows)
@@ -474,8 +518,16 @@ public sealed class Application
     internal void OnHostLoopStarting(Window? mainWindow)
     {
         var startup = Interlocked.Exchange(ref _startup, null);
-        startup?.Invoke();
+        startup?.Invoke(GetCommandLineArguments());
         mainWindow?.Show();
+    }
+
+    // The framework supplies the arguments rather than the caller, so startup logic assembled outside the
+    // entry point still receives them. Matches what a Main(string[] args) sees: no executable path.
+    private static string[] GetCommandLineArguments()
+    {
+        var arguments = Environment.GetCommandLineArgs();
+        return arguments.Length > 1 ? arguments[1..] : [];
     }
 
     private void RunCore(Window? mainWindow)
@@ -490,15 +542,26 @@ public sealed class Application
     }
 
     /// <summary>
-    /// Quits the application.
+    /// Ends the run loop with exit code 0. Does nothing when no run is in progress.
     /// </summary>
-    public static void Quit()
+    // Separate from the exit-code overload rather than an optional parameter, so the method group still
+    // converts to Action for command and event handlers.
+    public static void Shutdown() => Shutdown(0);
+
+    /// <summary>
+    /// Ends the run loop and sets the process exit code. Does nothing when no run is in progress.
+    /// </summary>
+    /// <param name="exitCode">Value assigned to <see cref="Environment.ExitCode"/>.</param>
+    public static void Shutdown(int exitCode)
     {
         if (_current == null)
         {
             return;
         }
 
+        // Assigned before the loop exit request so the code survives even when Run rethrows a fatal
+        // exception instead of returning normally.
+        Environment.ExitCode = exitCode;
         _current.PlatformHost.Quit(_current);
     }
 

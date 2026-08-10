@@ -146,7 +146,7 @@ internal sealed class DispatcherQueue
                     if (Application.IsRunning)
                     {
                         Application.Current.NotifyFatalDispatcherException(ex);
-                        Application.Quit();
+                        Application.Shutdown();
                     }
 
                     return;
@@ -194,7 +194,7 @@ internal sealed class DispatcherQueue
             if (Application.IsRunning && !Application.Current.TryHandleDispatcherException(ex))
             {
                 Application.Current.NotifyFatalDispatcherException(ex);
-                Application.Quit();
+                Application.Shutdown();
             }
         }
     }

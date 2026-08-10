@@ -11,11 +11,11 @@ public sealed class ApplicationBuilder
     public Func<Window>? MainWindowFactory { get; set; }
 
     /// <summary>
-    /// Gets the callback invoked on the UI thread after the dispatcher is installed and before the
-    /// main window is shown. A configured callback without a main window factory starts without a
-    /// main window.
+    /// Gets the callback invoked with the command-line arguments on the UI thread after the dispatcher is
+    /// installed and before the main window is shown. A configured callback without a main window factory
+    /// starts without a main window.
     /// </summary>
-    internal Action? Startup { get; set; }
+    internal Action<string[]>? Startup { get; set; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ApplicationBuilder"/> class.
@@ -61,7 +61,7 @@ public sealed class ApplicationBuilder
         }
         else
         {
-            Application.Run(Startup!);
+            Application.RunInternal(mainWindow: null, Startup, Options.ShutdownMode);
         }
     }
 
@@ -102,16 +102,7 @@ public sealed class ApplicationBuilder
     }
 
     private void RunApplication(Window mainWindow)
-    {
-        if (Startup != null)
-        {
-            Application.Run(mainWindow, Startup);
-        }
-        else
-        {
-            Application.Run(mainWindow);
-        }
-    }
+        => Application.RunInternal(mainWindow, Startup, Options.ShutdownMode);
 
     private void ApplyOptions()
     {

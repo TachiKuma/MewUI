@@ -102,8 +102,8 @@ curl -sL https://raw.githubusercontent.com/aprillz/MewUI/refs/heads/main/samples
                         .FontSize(18)
                         .Bold(),
                     new Button()
-                        .Content("Quit")
-                        .OnClick(() => Application.Quit())
+                        .Content("Exit")
+                        .OnClick(Application.Shutdown)
                 )
         );
 

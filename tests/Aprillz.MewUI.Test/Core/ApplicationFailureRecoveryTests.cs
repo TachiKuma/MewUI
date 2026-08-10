@@ -168,46 +168,32 @@ public sealed class ApplicationFailureRecoveryTests
     public void OnExplicitShutdown_ClosingSoleWindow_DoesNotQuit()
     {
         EnsureRegistered();
-        var previous = Application.ShutdownMode;
-        Application.ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        try
-        {
-            var host = new FailurePlatformHost(onRun: (app, window) => app.UnregisterWindow(window));
-            Hosts.Enqueue(host);
+        var host = new FailurePlatformHost(onRun: (app, window) => app.UnregisterWindow(window));
+        Hosts.Enqueue(host);
 
-            Application.Run(new Window());
+        Application.Create()
+            .WithShutdownMode(ShutdownMode.OnExplicitShutdown)
+            .Run(new Window());
 
-            Assert.IsFalse(host.QuitCalled);
-        }
-        finally
-        {
-            Application.ShutdownMode = previous;
-        }
+        Assert.IsFalse(host.QuitCalled);
     }
 
     [TestMethod]
     public void OnMainWindowClose_ClosingMainWhileOthersRemain_Quits()
     {
         EnsureRegistered();
-        var previous = Application.ShutdownMode;
-        Application.ShutdownMode = ShutdownMode.OnMainWindowClose;
-        try
+        var host = new FailurePlatformHost(onRun: (app, mainWindow) =>
         {
-            var host = new FailurePlatformHost(onRun: (app, mainWindow) =>
-            {
-                app.RegisterWindow(new Window());
-                app.UnregisterWindow(mainWindow);
-            });
-            Hosts.Enqueue(host);
+            app.RegisterWindow(new Window());
+            app.UnregisterWindow(mainWindow);
+        });
+        Hosts.Enqueue(host);
 
-            Application.Run(new Window());
+        Application.Create()
+            .WithShutdownMode(ShutdownMode.OnMainWindowClose)
+            .Run(new Window());
 
-            Assert.IsTrue(host.QuitCalled);
-        }
-        finally
-        {
-            Application.ShutdownMode = previous;
-        }
+        Assert.IsTrue(host.QuitCalled);
     }
 
     private static void EnsureRegistered() => TestPlatformHosts.EnsureRegistered();
