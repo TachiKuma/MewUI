@@ -1640,7 +1640,18 @@ internal static unsafe class MacOSWindowInterop
                     if (TryGetActiveTextInputTarget(self, out var backend) &&
                         backend.Window.FocusManager.FocusedElement is ITextCompositionClient client)
                     {
-                        var caretRect = client.GetCharRectInWindow(client.CompositionStartIndex);
+                        // The caret, not the composition start: this is asked before anything is
+                        // composed - the input source indicator is placed from it - and the
+                        // composition start still holds where the last one began, zero until the
+                        // first. Win32 and X11 choose the same way.
+                        int caretIndex = client is ITextCompositionEditor editor
+                            ? editor.CaretPosition
+                            : client.CompositionStartIndex;
+                        if (client.IsComposing)
+                        {
+                            caretIndex = client.CompositionStartIndex;
+                        }
+                        var caretRect = client.GetCharRectInWindow(caretIndex);
 
                         // frame = window outer frame (includes title bar), screen coords (y-up).
                         // caretRect = content area coords (y-down from top of content).
