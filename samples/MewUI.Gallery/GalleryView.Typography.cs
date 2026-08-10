@@ -137,8 +137,11 @@ partial class GalleryView
 
     private FrameworkElement LineBoxDemo()
     {
+        var lineSpacing = new ObservableValue<double>();
+
         var sample = new TextBlock()
             .FontSize(ThemeFontSize.Large)
+            .Bind(TextBlock.LineSpacingProperty, lineSpacing)
             .Text("Àccents float above the cap line,\nglyphs like g, y and p hang\ntheir descenders below the baseline,\nand spacing opens the leading.");
 
         // The border's height tracks the measured box, so trimming visibly pulls the top and
@@ -147,14 +150,13 @@ partial class GalleryView
         var border = new Border()
             .Left()
             .BorderThickness(1)
-            .WithTheme((t, b) => b.BorderBrush(t.Palette.Accent))
+            .WithTheme((t, b) => b.BorderBrush(t.Palette.Accent.WithAlpha(128)))
             .Child(sample);
 
         var spacingLabel = new TextBlock()
             .FontSize(ThemeFontSize.Small)
-            .Text("LineSpacing: 0")
             .CenterVertical()
-            .Bind(TextBlock.TextProperty, sample, TextBlock.LineSpacingProperty, x => $"LineSpacing: {x:0.#}");
+            .Bind(TextBlock.TextProperty, lineSpacing, x => $"LineSpacing: {x:0.#}");
 
         return new StackPanel()
             .Vertical()
@@ -184,7 +186,7 @@ partial class GalleryView
                             .Minimum(-16)
                             .Maximum(16)
                             .Value(0)
-                            .OnValueChanged(value => sample.LineSpacing = value),
+                            .BindValue(lineSpacing),
                         new Button()
                             .Content("Reset")
                             .OnClick(() => sample.LineSpacing = 0),
@@ -264,7 +266,7 @@ partial class GalleryView
         var description = new TextBlock()
                    .DockBottom()
                    .FontSize(ThemeFontSize.Small)
-                   .Text("Run.Background becomes a paint span behind the matched glyphs; items stay plain TextBlocks.")
+                   .Text("Run.Background becomes a paint span behind the matched glyphs; items stay plain TextBlocks.");
 
         // A fresh template instance is the public rebind trigger: the setter rebuilds realized
         // containers while selection and expansion state stay on the control.
