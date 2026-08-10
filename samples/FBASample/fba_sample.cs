@@ -10,7 +10,7 @@
 #:property DebugType=none
 #:property StripSymbols=true
 
-#:package Aprillz.MewUI@0.19.1
+#:package Aprillz.MewUI@0.20.0
 
 using System.Diagnostics;
 
@@ -163,7 +163,7 @@ Element MenuDemo()
         .Item(MenuCommand("file.new", "New", () => NativeMessageBox.Show("New", "Menu")))
         .Item(MenuCommand("file.open", "Open...", () => NativeMessageBox.Show("Open", "Menu")))
         .Separator()
-        .Item(MenuCommand("file.exit", "Exit", Application.Quit));
+        .Item(MenuCommand("file.exit", "Exit", Application.Shutdown));
 
     var deepMenu = new Menu()
         .Item(MenuCommand("recent.deepA", "Deep A", () => NativeMessageBox.Show("Deep A", "Menu")))
@@ -279,7 +279,7 @@ Element Buttons() => new StackPanel()
         new Button()
             .Content("Quit")
             .Width(80)
-            .OnClick(() => Application.Quit())
+            .OnClick(() => Application.Shutdown())
     );
 
 Element NormalControls()

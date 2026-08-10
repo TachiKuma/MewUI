@@ -20,11 +20,13 @@ var brushColors = new[]
 };
 
 var chartData = GenerateRandomData(20);
+var exitCommand = new Command("sample.file.exit", "Exit");
 
 var root = new Window()
     .Resizable(900, 700)
     .Build(x => x
         .Ref(out window)
+        .Apply(w => w.Commands.Register(exitCommand, Application.Shutdown))
         .Title("WriteableBitmap Sample - Custom Control Development")
         .Padding(0)
         .Content(
@@ -35,7 +37,7 @@ var root = new Window()
                         .Items(
                             new MenuItem("File").Menu(
                                 new Menu()
-                                    .Item("Exit", () => Application.Quit())
+                                    .Item(exitCommand)
                             )
                         ),
 
