@@ -361,11 +361,13 @@ public sealed class TextArea : MewObject, ITextEditorComponent
             int start = _editor.SelectionStart;
             int end = start + _editor.SelectionLength;
             if (_selection is RectangleSelection rectangle
-                && end == start && CaretSitsOnCorner(rectangle))
+                && end == start && (CaretSitsOnCorner(rectangle) || SurfaceIsComposing))
             {
                 // The caret resting on the rectangle's active corner is the rectangle's own
-                // bookkeeping; anything else the surface did (a click, a plain caret move, a
-                // drag) dissolves the rectangle into what the surface holds.
+                // bookkeeping, and so is the preedit an IME composes there: the caret rides the
+                // preedit until the committed text arrives for the rectangle to write. Anything
+                // else the surface did (a click, a plain caret move, a drag) dissolves the
+                // rectangle into what the surface holds.
             }
             else
             {
@@ -380,6 +382,8 @@ public sealed class TextArea : MewObject, ITextEditorComponent
         }
         SelectionChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    private bool SurfaceIsComposing => ((ITextCompositionClient)_editor.Surface).IsComposing;
 
     /// <summary>
     /// The rectangle cannot be rebuilt inside the change notification: the surface's layout has
