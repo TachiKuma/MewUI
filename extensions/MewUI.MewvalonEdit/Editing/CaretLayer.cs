@@ -13,6 +13,9 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
 {
     // The overwritten character has to stay readable under the caret covering it.
     private const byte OVERSTRIKE_ALPHA = 100;
+    // The carets a rectangle puts on the lines the reader is not on. Dimmer than the one they are
+    // driving, so the block reads as one caret and its echoes rather than several equals.
+    private const byte SECONDARY_ALPHA = 100;
     private const double MINIMUM_WIDTH = 1;
 
     public void Draw(ITextRenderContext context, Rect viewportBounds)
@@ -32,31 +35,34 @@ internal sealed class CaretLayer(TextArea textArea) : ITextViewLayer
         {
             color = Color.FromArgb(OVERSTRIKE_ALPHA, color.R, color.G, color.B);
         }
+        var secondary = Color.FromArgb((byte)(color.A * SECONDARY_ALPHA / 255), color.R, color.G, color.B);
         double dpiScale = textArea.TextView.DpiScale;
-        foreach (var rectangle in GetCaretRectangles(surface))
+        foreach ((var rectangle, bool primary) in GetCaretRectangles(surface))
         {
             if (!rectangle.IsEmpty)
             {
-                context.Graphics.FillRectangle(SnapToPixels(rectangle, dpiScale), color);
+                context.Graphics.FillRectangle(SnapToPixels(rectangle, dpiScale), primary ? color : secondary);
             }
         }
     }
 
     /// <summary>
-    /// Every caret to draw. A rectangle selection edits each line it crosses, so each of them shows
-    /// where typing will land; the original draws its one caret and leaves the rest to the box.
+    /// Every caret to draw, and which one the reader is driving. A rectangle selection edits each
+    /// line it crosses, so each of them shows where typing will land; the original draws its one
+    /// caret and leaves the rest to the box.
     /// </summary>
-    internal IEnumerable<Rect> GetCaretRectangles(Controls.MultiLineTextBox surface)
+    internal IEnumerable<(Rect Rectangle, bool Primary)> GetCaretRectangles(Controls.MultiLineTextBox surface)
     {
         if (textArea.Selection is RectangleSelection rectangle)
         {
+            int caretOffset = textArea.Caret.Offset;
             foreach ((int offset, int visualColumn) in rectangle.CaretEdges())
             {
-                yield return GetCaretRectangle(surface, offset, visualColumn);
+                yield return (GetCaretRectangle(surface, offset, visualColumn), offset == caretOffset);
             }
             yield break;
         }
-        yield return GetCaretRectangle(surface);
+        yield return (GetCaretRectangle(surface), true);
     }
 
     /// <summary>

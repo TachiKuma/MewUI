@@ -73,10 +73,14 @@ public sealed class CaretVirtualSpaceTests
         Assert.HasCount(3, carets, "the box crossed three lines but not every line got a caret");
         foreach (var caret in carets)
         {
-            Assert.AreEqual(carets[0].X, caret.X, 1.0, "the carets did not line up under one another");
+            Assert.AreEqual(carets[0].Rectangle.X, caret.Rectangle.X, 1.0,
+                "the carets did not line up under one another");
         }
-        Assert.AreEqual(3, carets.Select(static caret => caret.Y).Distinct().Count(),
+        Assert.AreEqual(3, carets.Select(static caret => caret.Rectangle.Y).Distinct().Count(),
             "the carets landed on top of each other instead of one per line");
+        Assert.ContainsSingle(carets.Where(static caret => caret.Primary),
+            "exactly one caret is the one the reader is driving");
+        Assert.AreEqual(editor.CaretOffset, editor.TextArea.Caret.Offset);
     }
 
     private static void StepDown(Window window, TextEditor editor)
