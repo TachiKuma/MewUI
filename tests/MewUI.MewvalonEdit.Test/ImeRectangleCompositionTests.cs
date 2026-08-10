@@ -46,6 +46,31 @@ public sealed class ImeRectangleCompositionTests
     }
 
     /// <summary>
+    /// The other way a platform delivers a commit: the preedit standing in the document is what is
+    /// committed, with no text input of its own. The rectangle has to write every line for that
+    /// shape as well, or the syllable lands on the corner line only.
+    /// </summary>
+    [TestMethod]
+    public void ACommittedPreeditWritesEveryLineToo()
+    {
+        if (!OperatingSystem.IsWindows()) { Assert.Inconclusive("The GDI backend is Windows-only."); return; }
+
+        var editor = HostWithRectangle(out _);
+        var composition = (ITextCompositionClient)editor.Surface;
+
+        composition.HandleTextCompositionStart(new TextCompositionEventArgs());
+        composition.HandleTextCompositionUpdate(new TextCompositionEventArgs("안"));
+        Assert.AreEqual("abc\ndef\ng안hi", Text(editor), "the preedit belongs on the corner line alone");
+
+        ((ITextCompositionEditor)editor.Surface).CommitActiveComposition();
+
+        Assert.AreEqual("a안bc\nd안ef\ng안hi", Text(editor),
+            "the committed preedit landed on the corner line only");
+        Assert.IsFalse(composition.IsComposing);
+        Assert.IsInstanceOfType<RectangleSelection>(editor.TextArea.Selection);
+    }
+
+    /// <summary>
     /// Composing without a rectangle stays exactly what the surface does on its own: one line,
     /// preedit replaced by the committed text.
     /// </summary>
