@@ -12,6 +12,7 @@ namespace Aprillz.MewUI.MewvalonEdit.Sample;
 
 public sealed class MainWindow : Window
 {
+    private readonly EditorTheme _theme = EditorTheme.Load("2026-palette.json");
     private readonly TextEditor _editor;
     private readonly SearchPanel _search;
     private readonly FoldingManager _foldingManager;
@@ -31,9 +32,9 @@ public sealed class MainWindow : Window
         Title = "MewvalonEdit Sample";
         WindowSize = WindowSize.Resizable(1200, 800);
 
-        // Before the editor exists, so the first document is already drawn in the 2026 colours: the
-        // palette is consulted while painting but nothing repaints on a later swap.
-        EditorTheme2026.Install();
+        // Before the editor exists, so the first document is already drawn in the theme's colours:
+        // the palette is consulted while painting but nothing repaints on a later swap.
+        _theme.Install();
 
         _editor = new TextEditor
         {
@@ -44,7 +45,7 @@ public sealed class MainWindow : Window
             ShowLineNumbers = true,
             WordWrap = false
         };
-        _editor.WithTheme((theme, editor) => EditorTheme2026.ApplyEditorColors(editor, theme.IsDark));
+        _editor.WithTheme((theme, editor) => _theme.Apply(editor, theme.IsDark));
         _search = SearchPanel.Install(_editor.TextArea);
         // Ctrl+Space opens the completion window at the current word, VS-style.
         _editor.InputMap.Map(

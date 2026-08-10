@@ -1,5 +1,5 @@
 {
-  "$comment": "Colours resolved from the VS Code 2026 themes. Each token key is the TextMate scope the colour was taken from, resolved against the flattened include chain (2026-dark -> dark_modern -> dark_plus -> dark_vs, and the light equivalent). Which xshd colour name maps to which scope lives in EditorTheme2026.",
+  "$comment": "Colours resolved from the VS Code 2026 themes. Each token key is the TextMate scope the colour was taken from, resolved against the flattened include chain (2026-dark -> dark_modern -> dark_plus -> dark_vs, and the light equivalent). Which xshd colour name maps to which scope lives in XshdScopeMap.",
   "tokens": {
     "comment": { "dark": "#8b949e", "light": "#6e7781" },
     "string": { "dark": "#a5d6ff", "light": "#0a3069" },
