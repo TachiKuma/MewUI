@@ -18,17 +18,14 @@ public class DefaultIndentationStrategy : IIndentationStrategy
         document.Replace(line.Offset, currentIndentationLength, indentation);
     }
 
+    /// <summary>
+    /// Does nothing, as the original leaves it. Copying the previous line's indentation is the
+    /// right answer for one new line and the wrong one for a block: run down a range and each line
+    /// takes what the line above it was just given, flattening the whole block to the indentation
+    /// it started at. Reindenting a block needs a strategy that reads the language.
+    /// </summary>
     public virtual void IndentLines(TextDocument document, int beginLine, int endLine)
     {
-        ArgumentNullException.ThrowIfNull(document);
-        if (beginLine <= 0 || endLine < beginLine || endLine > document.LineCount)
-            throw new ArgumentOutOfRangeException(nameof(beginLine));
-
-        // One step, not one per line: indenting a block edits every line in it, and undoing it a
-        // line at a time is not what the caller asked for.
-        using var group = document.UndoStack.OpenUndoGroup();
-        for (int lineNumber = beginLine; lineNumber <= endLine; lineNumber++)
-            IndentLine(document, document.GetLineByNumber(lineNumber));
     }
 
     private static string TakeIndentation(string text)

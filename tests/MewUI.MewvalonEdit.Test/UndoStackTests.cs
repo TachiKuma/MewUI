@@ -334,22 +334,34 @@ public sealed class UndoStackTests
     }
 
     /// <summary>
-    /// The case the group was measured against: indenting a block edits every line in it, and
-    /// undoing it a line at a time is not what the caller asked for.
+    /// The case the group was measured against: reindenting a block edits every line in it, and
+    /// undoing it a line at a time is not what the caller asked for. The grouping belongs to the
+    /// caller, which is why a strategy that edits line by line still undoes as one step.
     /// </summary>
     [TestMethod]
     public void IndentingABlockUndoesAsOneStep()
     {
         var document = new TextDocument("a\n    b\nc\nd");
-        var strategy = new DefaultIndentationStrategy();
+        var strategy = new PrefixingIndentationStrategy();
 
-        strategy.IndentLines(document, 2, 4);
-        string indented = document.Text;
-        Assert.AreNotEqual("a\n    b\nc\nd", indented, "The strategy changed nothing to undo.");
+        document.RunUpdate(() => strategy.IndentLines(document, 2, 4));
+        Assert.AreNotEqual("a\n    b\nc\nd", document.Text, "The strategy changed nothing to undo.");
 
         document.UndoStack.Undo();
 
         Assert.AreEqual("a\n    b\nc\nd", document.Text);
         Assert.IsFalse(document.UndoStack.CanUndo);
+    }
+
+    /// <summary>Reindents by giving every line one more level, so each line is its own edit.</summary>
+    private sealed class PrefixingIndentationStrategy : DefaultIndentationStrategy
+    {
+        public override void IndentLines(TextDocument document, int beginLine, int endLine)
+        {
+            for (int lineNumber = beginLine; lineNumber <= endLine; lineNumber++)
+            {
+                document.Insert(document.GetLineByNumber(lineNumber).Offset, "  ");
+            }
+        }
     }
 }

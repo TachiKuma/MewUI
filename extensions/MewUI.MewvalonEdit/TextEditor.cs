@@ -117,6 +117,10 @@ public class TextEditor : Control, ITextEditorComponent
         _surface.Commands.Register(StandardCommands.Cut, this,
             static editor => editor.CutSelectionCommand(),
             static editor => !editor.IsReadOnly && editor.HasCopyableSelection());
+        Commands.Register(EditingCommands.IndentSelection, this,
+            static editor => editor.IndentSelection(),
+            static editor => !editor.IsReadOnly && editor.IndentationStrategy is not null);
+        InputMap.Map(EditingCommands.IndentSelection, new KeyGesture(Key.I, ModifierKeys.Primary));
         UpdateBuiltInElementGenerators();
         _backgroundRenderers.RegisterInto(_surface);
         _surface.InsertLayer(_endOfLineMarkers, TextViewLayerAnchor.Text, TextLayerPosition.Below);
@@ -857,6 +861,28 @@ public class TextEditor : Control, ITextEditorComponent
         {
             _surface.Cut();
         }
+    }
+
+    /// <summary>
+    /// Runs <see cref="IndentationStrategy"/> over the selected lines, or the whole document when
+    /// nothing is selected, as one undo step. The default strategy reindents nothing, so this does
+    /// something only where a host supplied one that reads the language.
+    /// </summary>
+    public void IndentSelection()
+    {
+        if (IndentationStrategy is not IIndentationStrategy strategy || IsReadOnly)
+        {
+            return;
+        }
+        int first = 1;
+        int last = Document.LineCount;
+        if (TextArea.Selection.SurroundingSegment is ISegment segment)
+        {
+            first = Document.GetLineByOffset(segment.Offset).LineNumber;
+            last = Document.GetLineByOffset(segment.EndOffset).LineNumber;
+        }
+        Document.RunUpdate(() => strategy.IndentLines(Document, first, last));
+        TextArea.Caret.BringCaretToView();
     }
 
     private void OnSurfaceMouseDown(MouseEventArgs e)
