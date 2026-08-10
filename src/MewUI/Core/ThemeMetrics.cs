@@ -36,7 +36,9 @@ public sealed record class ThemeMetrics
         FontFamily = SystemFontFamily,
         FontSizeSmall = 11,
         FontSize = 12,
-        FontSizeLarge = 14,
+        FontSizeMedium = 14,
+        FontSizeLarge = 18,
+        FontSizeExtraLarge = 22,
         FontWeight = FontWeight.Normal,
         ScrollBarThickness = 4,
         ScrollBarHitThickness = 10,
@@ -94,14 +96,24 @@ public sealed record class ThemeMetrics
     public required double FontSize { get; init; }
 
     /// <summary>
-    /// Gets the default small font size (in DIPs).
+    /// Gets the small font size, one step below <see cref="FontSize"/> (in DIPs).
     /// </summary>
     public required double FontSizeSmall { get; init; }
 
     /// <summary>
-    /// Gets the default large font size (in DIPs).
+    /// Gets the medium font size, one step above <see cref="FontSize"/> (in DIPs).
     /// </summary>
-    public required double FontSizeLarge { get; init; }
+    public required double FontSizeMedium { get; init; }
+
+    /// <summary>
+    /// Gets the large font size, for section headings (in DIPs).
+    /// </summary>
+    public double FontSizeLarge { get; init; } = 18;
+
+    /// <summary>
+    /// Gets the extra large font size, for page titles (in DIPs).
+    /// </summary>
+    public double FontSizeExtraLarge { get; init; } = 22;
 
     /// <summary>
     /// Gets the default font weight.
