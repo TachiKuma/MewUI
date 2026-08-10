@@ -42,12 +42,14 @@ public sealed partial class MewVGWin32GraphicsFactory
     private partial IFont CreateFontCore(string family, double size, FontWeight weight, bool italic, bool underline, bool strikethrough)
     {
         uint dpi = DpiHelper.GetSystemDpi();
+        family = GdiFont.SelectFamilyCandidate(family);
         family = ResolveWin32FontFamilyOrFile(family);
         return new GdiFont(family, size, weight, italic, underline, strikethrough, dpi);
     }
 
     private partial IFont CreateFontCore(string family, double size, uint dpi, FontWeight weight, bool italic, bool underline, bool strikethrough)
     {
+        family = GdiFont.SelectFamilyCandidate(family);
         family = ResolveWin32FontFamilyOrFile(family);
         return new GdiFont(family, size, weight, italic, underline, strikethrough, dpi);
     }

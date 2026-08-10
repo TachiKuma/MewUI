@@ -313,7 +313,7 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
     public IFont CreateFont(string family, double size, FontWeight weight = FontWeight.Normal, bool italic = false, bool underline = false, bool strikethrough = false)
     {
         EnsureInitialized();
-        family = ValidateFamilyName(family);
+        family = SelectFamilyCandidate(ValidateFamilyName(family));
         var (resolvedFamily, fontCollection) = ResolveWithCollection(family);
         return new DirectWriteFont(resolvedFamily, size, weight, italic, underline, strikethrough, _dwriteFactory, fontCollection);
     }
@@ -321,9 +321,44 @@ public sealed unsafe partial class Direct2DGraphicsFactory : IGraphicsFactory, I
     public IFont CreateFont(string family, double size, uint dpi, FontWeight weight = FontWeight.Normal, bool italic = false, bool underline = false, bool strikethrough = false)
     {
         EnsureInitialized();
-        family = ValidateFamilyName(family);
+        family = SelectFamilyCandidate(ValidateFamilyName(family));
         var (resolvedFamily, fontCollection) = ResolveWithCollection(family);
         return new DirectWriteFont(resolvedFamily, size, weight, italic, underline, strikethrough, _dwriteFactory, fontCollection, dpi);
+    }
+
+    /// <summary>Picks the first installed family from a comma-separated list; single names pass through.</summary>
+    private string SelectFamilyCandidate(string family)
+    {
+        if (!FontFamilyList.IsList(family))
+        {
+            return family;
+        }
+
+        string[] candidates = FontFamilyList.Split(family);
+        foreach (string candidate in candidates)
+        {
+            if (FontRegistry.Resolve(candidate) != null || IsSystemFamilyInstalled(candidate))
+            {
+                return candidate;
+            }
+        }
+        return candidates.Length > 0 ? candidates[0] : family;
+    }
+
+    private bool IsSystemFamilyInstalled(string family)
+    {
+        if (DWriteVTable.GetSystemFontCollection((IDWriteFactory*)_dwriteFactory, out nint collection, false) < 0 || collection == 0)
+        {
+            return false;
+        }
+        try
+        {
+            return DWriteVTable.FindFamilyName(collection, family, out _, out int exists) >= 0 && exists != 0;
+        }
+        finally
+        {
+            ComHelpers.Release(collection);
+        }
     }
 
     // Cache: familyName → DWrite custom font collection (nint)

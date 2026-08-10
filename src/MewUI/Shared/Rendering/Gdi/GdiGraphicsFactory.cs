@@ -36,6 +36,7 @@ public sealed class GdiGraphicsFactory : IGraphicsFactory, ITextBackendFactory, 
         bool italic = false, bool underline = false, bool strikethrough = false)
     {
         uint dpi = DpiHelper.GetSystemDpi();
+        family = GdiFont.SelectFamilyCandidate(family);
         family = ResolveFontFamilyOrFile(family);
         return new GdiFont(family, size, weight, italic, underline, strikethrough, dpi);
     }
@@ -46,6 +47,7 @@ public sealed class GdiGraphicsFactory : IGraphicsFactory, ITextBackendFactory, 
     public IFont CreateFont(string family, double size, uint dpi, FontWeight weight = FontWeight.Normal,
         bool italic = false, bool underline = false, bool strikethrough = false)
     {
+        family = GdiFont.SelectFamilyCandidate(family);
         family = ResolveFontFamilyOrFile(family);
         return new GdiFont(family, size, weight, italic, underline, strikethrough, dpi);
     }

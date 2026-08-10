@@ -198,16 +198,36 @@ public sealed partial class MewVGX11GraphicsFactory
 
     private partial IFont CreateFontCore(string family, double size, FontWeight weight, bool italic, bool underline, bool strikethrough)
     {
-        var path = LinuxFontResolver.ResolveFontPath(family, weight, italic);
+        (family, string? path) = ResolveFamilyCandidate(family, weight, italic);
         int px = (int)Math.Max(1, Math.Round(size)); // Assume 96 dpi.
         return path != null
             ? new FreeTypeFont(family, size, weight, italic, underline, strikethrough, path, px)
             : new BasicFont(family, size, weight, italic, underline, strikethrough);
     }
 
+    /// <summary>Picks the first family from a comma-separated list that resolves to a font file.</summary>
+    private static (string Family, string? Path) ResolveFamilyCandidate(string family, FontWeight weight, bool italic)
+    {
+        if (!FontFamilyList.IsList(family))
+        {
+            return (family, LinuxFontResolver.ResolveFontPath(family, weight, italic));
+        }
+
+        string[] candidates = FontFamilyList.Split(family);
+        foreach (string candidate in candidates)
+        {
+            var candidatePath = LinuxFontResolver.ResolveFontPath(candidate, weight, italic);
+            if (candidatePath != null)
+            {
+                return (candidate, candidatePath);
+            }
+        }
+        return (candidates.Length > 0 ? candidates[0] : family, null);
+    }
+
     private partial IFont CreateFontCore(string family, double size, uint dpi, FontWeight weight, bool italic, bool underline, bool strikethrough)
     {
-        var path = LinuxFontResolver.ResolveFontPath(family, weight, italic);
+        (family, string? path) = ResolveFamilyCandidate(family, weight, italic);
         int px = (int)Math.Max(1, Math.Round(size * dpi / 96.0, MidpointRounding.AwayFromZero));
         return path != null
             ? new FreeTypeFont(family, size, weight, italic, underline, strikethrough, path, px)
