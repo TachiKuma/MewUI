@@ -55,6 +55,8 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
     private IGraphicsContext? _graphics;
     private double _preferredCaretX = double.NaN;
     private bool _dragSelecting;
+    // True while UpdateScrollBarRanges mirrors the offsets into the bars.
+    private bool _syncingScrollBars;
 
     static MultiLineTextBox()
     {
@@ -78,8 +80,14 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         _horizontalScrollBar = new ScrollBar { Orientation = Orientation.Horizontal, IsVisible = false };
         _verticalScrollBar.Parent = this;
         _horizontalScrollBar.Parent = this;
-        _verticalScrollBar.ValueChanged += value => SetVerticalOffset(value);
-        _horizontalScrollBar.ValueChanged += value => SetHorizontalOffset(value);
+        _verticalScrollBar.ValueChanged += value =>
+        {
+            if (!_syncingScrollBars) SetVerticalOffset(value);
+        };
+        _horizontalScrollBar.ValueChanged += value =>
+        {
+            if (!_syncingScrollBars) SetHorizontalOffset(value);
+        };
     }
 
     public string Text
@@ -638,19 +646,30 @@ public sealed class MultiLineTextBox : TextBase, IVisualTreeHost, ITextViewHost
         {
             return;
         }
-        if (_verticalScrollBar.IsVisible)
+        // Shrinking Maximum below the bar's standing Value coerces it and fires ValueChanged,
+        // which would re-enter SetVertical/HorizontalOffset and clobber a freshly set offset.
+        // The bars only mirror state here; the offsets are already authoritative.
+        _syncingScrollBars = true;
+        try
         {
-            _verticalScrollBar.Minimum = 0;
-            _verticalScrollBar.Maximum = Math.Max(0, _view.ExtentHeight - _contentBounds.Height);
-            _verticalScrollBar.ViewportSize = _contentBounds.Height;
-            _verticalScrollBar.Value = _verticalOffset;
+            if (_verticalScrollBar.IsVisible)
+            {
+                _verticalScrollBar.Minimum = 0;
+                _verticalScrollBar.Maximum = Math.Max(0, _view.ExtentHeight - _contentBounds.Height);
+                _verticalScrollBar.ViewportSize = _contentBounds.Height;
+                _verticalScrollBar.Value = _verticalOffset;
+            }
+            if (_horizontalScrollBar.IsVisible)
+            {
+                _horizontalScrollBar.Minimum = 0;
+                _horizontalScrollBar.Maximum = Math.Max(0, _view.ExtentWidth - _contentBounds.Width + CARET_SLACK);
+                _horizontalScrollBar.ViewportSize = _contentBounds.Width;
+                _horizontalScrollBar.Value = _horizontalOffset;
+            }
         }
-        if (_horizontalScrollBar.IsVisible)
+        finally
         {
-            _horizontalScrollBar.Minimum = 0;
-            _horizontalScrollBar.Maximum = Math.Max(0, _view.ExtentWidth - _contentBounds.Width + CARET_SLACK);
-            _horizontalScrollBar.ViewportSize = _contentBounds.Width;
-            _horizontalScrollBar.Value = _horizontalOffset;
+            _syncingScrollBars = false;
         }
     }
 

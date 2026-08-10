@@ -2,7 +2,10 @@ namespace Aprillz.MewUI.Text;
 
 public sealed class TextViewLayout : ITextViewLayout
 {
-    private const int VirtualLineThreshold = 64 * 1024;
+    private const int VIRTUAL_WRAP_LINE_THRESHOLD = 64 * 1024;
+    // NoWrap slices cut around the caret and viewport, so the threshold sits low enough that a
+    // keystroke in a long single-line editor re-measures a slice, never the whole line.
+    private const int VIRTUAL_NOWRAP_LINE_THRESHOLD = 1024;
     private const int VirtualWrapSampleLength = 8 * 1024;
     private const int VirtualSliceMinimumLength = 512;
     private const int VirtualWrapOverscanRows = 3;
@@ -309,11 +312,11 @@ public sealed class TextViewLayout : ITextViewLayout
             _engine.ManagedCache.ReleaseOwner(state.Owner);
             state.Layout = null;
             state.Dirty = true;
-            state.Virtual = null;
-            state.VirtualNoWrap = null;
+            // Virtual estimate states and the layout width survive dirtying: dropping them made
+            // every keystroke in a virtualized line re-measure the sample text. GetOrCreateLine
+            // resizes or re-samples them against the current line.
             state.SliceStart = -1;
             state.SliceLength = -1;
-            state.Width = -1;
             SetStateMetrics(i, _estimatedLineHeight, 0);
         }
     }
@@ -503,15 +506,36 @@ public sealed class TextViewLayout : ITextViewLayout
             // system than the text on screen, and the two would disagree by the estimate error.
             return state.Layout;
         }
-        if (ShouldVirtualizeWrap(source) &&
-            (state.Virtual is null || state.Dirty || state.SourceLength != source.Length || state.Width != Viewport.Width))
+        if (ShouldVirtualizeWrap(source))
         {
-            InitializeVirtualWrapState(lineNumber, state, source);
+            if (state.Virtual is null || state.Width != Viewport.Width || !state.Virtual.CanAdopt(source.Length))
+            {
+                InitializeVirtualWrapState(lineNumber, state, source);
+            }
+            else if (state.Dirty || state.SourceLength != source.Length)
+            {
+                // An edit barely moves the refined estimates, so re-sampling kilobytes on every
+                // keystroke bought nothing and reset the offset mapping the viewport stands on.
+                state.Virtual.Resize(source.Length);
+            }
         }
-        else if (ShouldVirtualizeNoWrap(source) &&
-                 (state.VirtualNoWrap is null || state.Dirty || state.SourceLength != source.Length))
+        else if (ShouldVirtualizeNoWrap(source))
         {
-            InitializeVirtualNoWrapState(lineNumber, state, source);
+            if (state.VirtualNoWrap is null || !state.VirtualNoWrap.CanAdopt(source.Length))
+            {
+                InitializeVirtualNoWrapState(lineNumber, state, source);
+            }
+            else if (state.Dirty || state.SourceLength != source.Length)
+            {
+                state.VirtualNoWrap.Resize(source.Length);
+            }
+        }
+        else
+        {
+            // A line that shrank below the threshold must stop slicing, or the stale mapping
+            // keeps answering with the old length.
+            state.Virtual = null;
+            state.VirtualNoWrap = null;
         }
 
         int sliceStart = 0;
@@ -693,13 +717,13 @@ public sealed class TextViewLayout : ITextViewLayout
 
     private bool ShouldVirtualizeWrap(IReadOnlyDocumentLine source)
         => _paragraph.Wrapping == TextWrapping.Wrap &&
-           source.Length >= VirtualLineThreshold &&
+           source.Length >= VIRTUAL_WRAP_LINE_THRESHOLD &&
            double.IsFinite(Viewport.Width) &&
            Viewport.Width > 0;
 
     private bool ShouldVirtualizeNoWrap(IReadOnlyDocumentLine source)
         => _paragraph.Wrapping == TextWrapping.NoWrap &&
-           source.Length >= VirtualLineThreshold &&
+           source.Length >= VIRTUAL_NOWRAP_LINE_THRESHOLD &&
            double.IsFinite(Viewport.Width) &&
            Viewport.Width > 0;
 
@@ -943,20 +967,29 @@ public sealed class TextViewLayout : ITextViewLayout
 
     private sealed class VirtualWrapState(int sourceLength, int sampleLength, int sampleRows, double rowHeight)
     {
+        private readonly int _sampledLength = sourceLength;
+        private int _sourceLength = sourceLength;
         private double _charactersPerRow = Math.Max(1, (double)sampleLength / Math.Max(1, sampleRows));
 
         public double RowHeight { get; private set; } = rowHeight;
         public double EstimatedHeight
-            => Math.Max(RowHeight, Math.Ceiling(sourceLength / _charactersPerRow) * RowHeight);
+            => Math.Max(RowHeight, Math.Ceiling(_sourceLength / _charactersPerRow) * RowHeight);
+
+        /// <summary>Whether the edited length is close enough to the sampled one to keep the estimates.</summary>
+        public bool CanAdopt(int sourceLength)
+            => Math.Abs((long)sourceLength - _sampledLength) * 4 <= _sampledLength;
+
+        /// <summary>Adopts the edited line length, keeping the refined row estimates.</summary>
+        public void Resize(int sourceLength) => _sourceLength = sourceLength;
 
         public int GetRowForY(double y)
             => Math.Max(0, (int)Math.Floor(y / RowHeight));
 
         public int GetRowForOffset(int offset)
-            => Math.Max(0, (int)Math.Floor(Math.Clamp(offset, 0, sourceLength) / _charactersPerRow));
+            => Math.Max(0, (int)Math.Floor(Math.Clamp(offset, 0, _sourceLength) / _charactersPerRow));
 
         public int GetOffsetForRow(int row)
-            => Math.Clamp((int)Math.Floor(Math.Max(0, row) * _charactersPerRow), 0, sourceLength);
+            => Math.Clamp((int)Math.Floor(Math.Max(0, row) * _charactersPerRow), 0, _sourceLength);
 
         public int GetLengthForRows(int rows)
             => Math.Max(1, (int)Math.Ceiling(Math.Max(1, rows) * _charactersPerRow));
@@ -984,6 +1017,8 @@ public sealed class TextViewLayout : ITextViewLayout
     /// </remarks>
     private sealed class VirtualNoWrapState(int sourceLength, double averageCharacterWidth, bool isUniform)
     {
+        private readonly int _sampledLength = sourceLength;
+        private int _sourceLength = sourceLength;
         private readonly double _mappingCharacterWidth = Math.Max(0.01, averageCharacterWidth);
         private double _averageCharacterWidth = Math.Max(0.01, averageCharacterWidth);
 
@@ -993,13 +1028,20 @@ public sealed class TextViewLayout : ITextViewLayout
         /// </summary>
         public bool IsUniform => isUniform;
 
-        public double EstimatedWidth => sourceLength * _averageCharacterWidth;
+        public double EstimatedWidth => _sourceLength * _averageCharacterWidth;
+
+        /// <summary>Whether the edited length is close enough to the sampled one to keep the estimates.</summary>
+        public bool CanAdopt(int sourceLength)
+            => Math.Abs((long)sourceLength - _sampledLength) * 4 <= _sampledLength;
+
+        /// <summary>Adopts the edited line length, keeping the refined width estimate and mapping.</summary>
+        public void Resize(int sourceLength) => _sourceLength = sourceLength;
 
         public int GetOffsetForX(double x)
-            => Math.Clamp((int)Math.Floor(Math.Max(0, x) / _mappingCharacterWidth), 0, sourceLength);
+            => Math.Clamp((int)Math.Floor(Math.Max(0, x) / _mappingCharacterWidth), 0, _sourceLength);
 
         public double GetXForOffset(int offset)
-            => Math.Clamp(offset, 0, sourceLength) * _mappingCharacterWidth;
+            => Math.Clamp(offset, 0, _sourceLength) * _mappingCharacterWidth;
 
         public int GetLengthForWidth(double width)
             => Math.Max(1, (int)Math.Ceiling(Math.Max(1, width) / _mappingCharacterWidth));
