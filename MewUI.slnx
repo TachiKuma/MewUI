@@ -7,8 +7,8 @@
     <File Path="build/MewUI.Meta.props" />
   </Folder>
   <Folder Name="/samples/">
-    <Project Path="samples/MewDock.Sample/MewDock.Sample.csproj" />
     <Project Path="samples/MewUI.Gallery/MewUI.Gallery.csproj" />
+    <Project Path="samples/MewUI.MewDock.Sample/MewUI.MewDock.Sample.csproj" />
     <Project Path="samples/MewUI.MewvalonEdit.Sample/MewUI.MewvalonEdit.Sample.csproj" />
     <Project Path="samples/MewUI.MewCharts.Sample/MewUI.MewCharts.Sample.csproj" />
     <Project Path="samples/MewUI.Sample/MewUI.Sample.csproj" />
