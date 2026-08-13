@@ -79,5 +79,6 @@
     <Project Path="tests/MewUI.GraphicsBackendTest/MewUI.GraphicsBackendTest.csproj" />
     <Project Path="tests/Aprillz.MewUI.Test/Aprillz.MewUI.Test.csproj" />
     <Project Path="tests/MewUI.MewvalonEdit.Test/MewUI.MewvalonEdit.Test.csproj" />
+    <Project Path="tests/MewUI.WindowAutomationTest/MewUI.WindowAutomationTest.csproj" />
   </Folder>
 </Solution>
