@@ -14,8 +14,8 @@ obj/
 [Dd]ebug*/
 [Rr]elease*/
 # Release tooling and shared MSBuild files, which the build-output rules above would otherwise swallow
-!tools/release/
-!build/
+!/tools/release/
+!/build/
 
 # User-specific files
 *.rsuser
