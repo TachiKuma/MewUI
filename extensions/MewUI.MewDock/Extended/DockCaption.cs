@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.MewDock.Controls;
 using Aprillz.MewUI.MewDock.Model;
@@ -15,23 +17,32 @@ namespace Aprillz.MewUI.MewDock.Extended;
 internal sealed class DockCaption : ContentControl, IToolHeader
 {
     private const double BarHeight = 26;
+    private const string CaptionControlsConfigKey = "captionControls";
+    private const string CaptionControlsNone = "none";
+    private const string CaptionControlsMaximize = "maximize";
 
     private readonly DockModel _model;
     private readonly Func<string?> _title;
     private readonly Func<Node?> _dragNode;
     private readonly Action<Point> _floatOut;
     private readonly Action<ContextMenu, CommandScope> _buildMenu;
+    private readonly CaptionButtonMode _buttonMode;
+    private readonly Func<bool>? _isMaximized;
     private readonly TextBlock _label;
-    private readonly Button _menuButton;
+    private readonly Button? _menuButton;
+    private readonly Button? _maximizeButton;
 
     private DockCaption(
         DockModel model,
         Func<string?> title,
         Func<Node?> dragNode,
+        CaptionButtonMode buttonMode,
         GlyphKind pinGlyph,
         ObservableValue<string> pinToolTip,
         Action onPin,
         Action onClose,
+        Func<bool>? isMaximized,
+        Action? onMaximize,
         Action<ContextMenu, CommandScope> buildMenu,
         Action<Point> floatOut)
     {
@@ -40,24 +51,39 @@ internal sealed class DockCaption : ContentControl, IToolHeader
         _dragNode = dragNode;
         _floatOut = floatOut;
         _buildMenu = buildMenu;
+        _buttonMode = buttonMode;
+        _isMaximized = isMaximized;
 
         _label = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
         _label.WithTheme((theme, label) => label.Foreground = theme.Palette.WindowText);
 
-        _menuButton = GlyphButton(new GlyphElement { Kind = GlyphKind.ChevronDown });
-        _menuButton.Click += ShowMenu;
-        _menuButton.ToolTip = ToolTipLabel(MewUIDockString.ToolTipOptions);
-        var pin = GlyphButton(new GlyphElement { Kind = pinGlyph });
-        pin.Click += onPin;
-        pin.ToolTip = ToolTipLabel(pinToolTip);
-        var close = GlyphButton(new GlyphElement { Kind = GlyphKind.Cross });
-        close.Click += onClose;
-        close.ToolTip = ToolTipLabel(MewUIDockString.ToolTipClose);
-
         var dock = new DockPanel { LastChildFill = true, Spacing = 2 };
-        dock.Add(close.DockRight());
-        dock.Add(pin.DockRight());
-        dock.Add(_menuButton.DockRight());
+        if (buttonMode == CaptionButtonMode.Default)
+        {
+            _menuButton = GlyphButton(new GlyphElement { Kind = GlyphKind.ChevronDown });
+            _menuButton.Click += ShowMenu;
+            _menuButton.ToolTip = ToolTipLabel(MewUIDockString.ToolTipOptions);
+            var pin = GlyphButton(new GlyphElement { Kind = pinGlyph });
+            pin.Click += onPin;
+            pin.ToolTip = ToolTipLabel(pinToolTip);
+            var close = GlyphButton(new GlyphElement { Kind = GlyphKind.Cross });
+            close.Click += onClose;
+            close.ToolTip = ToolTipLabel(MewUIDockString.ToolTipClose);
+
+            dock.Add(close.DockRight());
+            dock.Add(pin.DockRight());
+            dock.Add(_menuButton.DockRight());
+        }
+        else if (buttonMode == CaptionButtonMode.Maximize && onMaximize is not null)
+        {
+            _maximizeButton = GlyphButton(new GlyphElement
+            {
+                Kind = isMaximized?.Invoke() == true ? GlyphKind.WindowRestore : GlyphKind.WindowMaximize
+            });
+            _maximizeButton.Click += onMaximize;
+            _maximizeButton.ToolTip = ToolTipLabel(isMaximized?.Invoke() == true ? MewUIDockString.ToolTipRestore : MewUIDockString.ToolTipMaximize);
+            dock.Add(_maximizeButton.DockRight());
+        }
         dock.Add(_label);
         Content = dock;
 
@@ -71,7 +97,18 @@ internal sealed class DockCaption : ContentControl, IToolHeader
         Refresh();
     }
 
-    public void Refresh() => _label.Text = _title() ?? MewUIDockString.TitleUnnamedTab.Value;
+    public void Refresh()
+    {
+        _label.Text = _title() ?? MewUIDockString.TitleUnnamedTab.Value;
+        if (_buttonMode == CaptionButtonMode.Maximize
+            && _maximizeButton?.Content is GlyphElement glyph
+            && _isMaximized is not null)
+        {
+            bool isMaximized = _isMaximized();
+            glyph.Kind = isMaximized ? GlyphKind.WindowRestore : GlyphKind.WindowMaximize;
+            _maximizeButton.ToolTip = ToolTipLabel(isMaximized ? MewUIDockString.ToolTipRestore : MewUIDockString.ToolTipMaximize);
+        }
+    }
 
     private static TextBlock ToolTipLabel(ObservableValue<string> source) => new TextBlock().BindText(source);
 
@@ -80,10 +117,13 @@ internal sealed class DockCaption : ContentControl, IToolHeader
         tabSet.Model,
         () => tabSet.GetSelectedNode()?.Name,
         () => tabSet,
+        ButtonMode(tabSet.GetSelectedNode()),
         GlyphKind.Minus, // unpin (auto-hide)
         MewUIDockString.ToolTipAutoHide,
         () => tabSet.Model.DoAction(DockAction.UnpinTool(tabSet.GetId())),
         () => CloseSelected(tabSet.Model, tabSet.GetSelectedNode()),
+        () => tabSet.IsMaximized,
+        () => tabSet.Model.DoAction(DockAction.MaximizeToggle(tabSet.GetId())),
         (menu, commands) =>
         {
             DockMenuCommands.Add(menu, commands, "floatGroup", MewUIDockString.MenuFloat.Value, () => tabSet.Model.DoAction(DockAction.PopoutTabset(tabSet.GetId())));
@@ -97,10 +137,13 @@ internal sealed class DockCaption : ContentControl, IToolHeader
         border.Model,
         () => border.GetSelectedNode()?.Name,
         () => border.GetSelectedNode(),
+        ButtonMode(border.GetSelectedNode()),
         GlyphKind.Plus, // dock (pin)
         MewUIDockString.ToolTipDock,
         () => Pin(border),
         () => CloseSelected(border.Model, border.GetSelectedNode()),
+        null,
+        null,
         (menu, commands) =>
         {
             DockMenuCommands.Add(menu, commands, "dock", MewUIDockString.MemuDock.Value, () => Pin(border));
@@ -182,11 +225,41 @@ internal sealed class DockCaption : ContentControl, IToolHeader
 
     private void ShowMenu()
     {
+        if (_menuButton is null)
+        {
+            return;
+        }
+
         var menu = new ContextMenu();
         var commands = new CommandScope();
         _buildMenu(menu, commands);
         menu.SetCommandTarget(CommandTarget.From(commands));
         var bounds = _menuButton.Bounds;
         menu.ShowAt(_menuButton, new Point(bounds.X, bounds.Bottom));
+    }
+
+    private static CaptionButtonMode ButtonMode(TabNode? selected)
+    {
+        if (selected?.Config is not JsonElement config
+            || config.ValueKind != JsonValueKind.Object
+            || !config.TryGetProperty(CaptionControlsConfigKey, out var value)
+            || value.ValueKind != JsonValueKind.String)
+        {
+            return CaptionButtonMode.Default;
+        }
+
+        return value.GetString() switch
+        {
+            CaptionControlsNone => CaptionButtonMode.None,
+            CaptionControlsMaximize => CaptionButtonMode.Maximize,
+            _ => CaptionButtonMode.Default
+        };
+    }
+
+    private enum CaptionButtonMode
+    {
+        Default,
+        None,
+        Maximize
     }
 }
