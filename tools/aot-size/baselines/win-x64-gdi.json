@@ -1,47 +1,47 @@
 {
   "schemaVersion": 1,
   "status": "pay-for-play-reachability-baseline",
-  "measuredAtUtc": "2026-09-06",
-  "commit": "a469219f96ce3f404495bb1c88837ecdf7e1c2af",
+  "measuredAtUtc": "2026-09-28",
+  "commit": "803f0b3d0229ef33dd62aa310ec79ba21431ef4a",
   "dotnetSdk": "10.0.303",
   "runtimeIdentifier": "win-x64",
   "backend": "Gdi",
   "probes": [
     {
       "probe": "Empty",
-      "executableBytes": 2966016,
-      "methodCodeBytes": 1178751,
-      "constructedTypeBytes": 392352,
-      "metadataBytes": 201505,
-      "methodCount": 7143,
-      "constructedTypeCount": 4055
+      "executableBytes": 3290112,
+      "methodCodeBytes": 1360632,
+      "constructedTypeBytes": 433368,
+      "metadataBytes": 218163,
+      "methodCount": 7833,
+      "constructedTypeCount": 4491
     },
     {
       "probe": "Text",
-      "executableBytes": 3320832,
-      "methodCodeBytes": 1365555,
-      "constructedTypeBytes": 436888,
-      "metadataBytes": 220378,
-      "methodCount": 8014,
-      "constructedTypeCount": 4525
+      "executableBytes": 3763712,
+      "methodCodeBytes": 1620975,
+      "constructedTypeBytes": 487888,
+      "metadataBytes": 241572,
+      "methodCount": 8910,
+      "constructedTypeCount": 5072
     },
     {
       "probe": "Button",
-      "executableBytes": 3404800,
-      "methodCodeBytes": 1398787,
-      "constructedTypeBytes": 453964,
-      "metadataBytes": 224304,
-      "methodCount": 8234,
-      "constructedTypeCount": 4672
+      "executableBytes": 3845632,
+      "methodCodeBytes": 1653998,
+      "constructedTypeBytes": 504668,
+      "metadataBytes": 245680,
+      "methodCount": 9135,
+      "constructedTypeCount": 5214
     },
     {
       "probe": "Image",
-      "executableBytes": 3461120,
-      "methodCodeBytes": 1420444,
-      "constructedTypeBytes": 428292,
-      "metadataBytes": 220466,
-      "methodCount": 7925,
-      "constructedTypeCount": 4440
+      "executableBytes": 3784704,
+      "methodCodeBytes": 1601225,
+      "constructedTypeBytes": 469152,
+      "metadataBytes": 236881,
+      "methodCount": 8616,
+      "constructedTypeCount": 4874
     }
   ]
 }
