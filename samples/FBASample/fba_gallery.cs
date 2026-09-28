@@ -3,7 +3,7 @@
 #:property TargetFramework=net10.0
 #:property PublishAot=true
 #:property TrimMode=full
-#:package Aprillz.MewUI@0.21.1
+#:package Aprillz.MewUI@0.22.0
 
 using System.Net.Http;
 
@@ -12,6 +12,7 @@ using Aprillz.MewUI.Controls;
 using Aprillz.MewUI.Platform;
 using Aprillz.MewUI.Rendering;
 using Aprillz.MewUI.Animation;
+using Aprillz.MewUI.Resources;
 using Aprillz.MewUI.Text;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -165,8 +166,7 @@ FrameworkElement TopBar() => new Border()
                     .DockLeft()
                     .Children(
                         new Image()
-                            .BindSource(GalleryView.Resources.Logo)
-                            .ImageScaleQuality(ImageScaleQuality.HighQuality)
+                            .BindSource(GalleryView.Resources.LogoVector)
                             .Width(200)
                             .CenterVertical(),
 
@@ -308,6 +308,7 @@ void EnsureMaxFpsLoop()
 string ResourceUrl(string fileName) => fileName switch
 {
     "logo_h-480.png" => AssetsBase + "logo/logo_h-1280.png",
+    "logo_h.svg" => AssetsBase + "logo/logo_h.svg",
     "april.jpg" => AssetsBase + "images/april.jpg",
     "soonduk.jpg" => AssetsBase + "images/soonduk.jpg",
     _ => SampleResourcesBase + fileName,
@@ -394,7 +395,7 @@ async Task LoadResourcesAsync()
 /// </summary>
 public sealed class ConfettiOverlay : FrameworkElement
 {
-    private enum ParticleShape { Rectangle, Ellipse, Triangle }
+    private enum ParticleShape { Rectangle, Triangle }
 
     // 128 bytes - doubles first, small fields packed at end. No IsDead (swap-remove instead).
     private struct Particle
@@ -447,6 +448,9 @@ public sealed class ConfettiOverlay : FrameworkElement
     private Color[]? _rainColors;
 
     private static readonly Random Rng = new();
+
+    // How far past the area a particle may drift before it is dropped: beyond its size and wobble.
+    private const double OFFSCREEN_MARGIN = 50;
         
     public ConfettiOverlay()
     {
@@ -518,7 +522,9 @@ public sealed class ConfettiOverlay : FrameworkElement
         RenderParticles(context);
     }
 
-    private readonly PathGeometry _reusablePath = new();
+    // A triangle of size 1 around the origin, scaled and turned into place for each particle. It never
+    // changes, so a backend can keep what it builds from it instead of building it again per particle.
+    private static readonly PathGeometry UnitTriangle = CreateUnitTriangle();
 
     private void RenderParticles(IGraphicsContext ctx)
     {
@@ -531,25 +537,25 @@ public sealed class ConfettiOverlay : FrameworkElement
             double h = p.IsWide ? p.Size / 2 : p.Size * 2;
             double cx = p.X + w / 2;
             double cy = p.Y + h / 2;
-            double rad = p.Rotation * Math.PI / 180.0;
-            double cos = Math.Cos(rad);
-            double sin = Math.Sin(rad);
 
             switch (p.Shape)
             {
                 case ParticleShape.Rectangle:
-                    _reusablePath.Clear();
-                    AppendRotatedRect(_reusablePath, cx, cy, w, h, cos, sin);
-                    ctx.FillPath(_reusablePath, p.Color);
-                    break;
-                case ParticleShape.Ellipse:
-                    double r = p.Size / 2;
-                    ctx.FillEllipse(new Rect(cx - r, cy - r, r * 2, r * 2), p.Color);
-                    break;
+                    // A turned rectangle is a primitive every backend fills directly, where an outline
+                    // would be built and tessellated again for every particle.
+                    ctx.Save();
+                    ctx.Translate(cx, cy);
+                    ctx.Rotate(p.Rotation * Math.PI / 180.0);
+                    ctx.FillRectangle(new Rect(-w / 2, -h / 2, w, h), p.Color);
+                    ctx.Restore();
+                    break; 
                 case ParticleShape.Triangle:
-                    _reusablePath.Clear();
-                    AppendRotatedTriangle(_reusablePath, cx, cy, p.Size, cos, sin);
-                    ctx.FillPath(_reusablePath, p.Color);
+                    ctx.Save();
+                    ctx.Translate(cx, cy);
+                    ctx.Rotate(p.Rotation * Math.PI / 180.0);
+                    ctx.Scale(p.Size, p.Size);
+                    ctx.FillPath(UnitTriangle, p.Color);
+                    ctx.Restore();
                     break;
             }
         }
@@ -618,7 +624,7 @@ public sealed class ConfettiOverlay : FrameworkElement
             }
         }
 
-        UpdateParticles(dt, h);
+        UpdateParticles(dt, w, h);
 
         if (_particles.Count == 0 && !_isRaining && _cannonQueue.Count == 0)
             StopTimer();
@@ -626,10 +632,12 @@ public sealed class ConfettiOverlay : FrameworkElement
         InvalidateVisual();
     }
 
-    private void UpdateParticles(double dt, double areaHeight)
+    private void UpdateParticles(double dt, double areaWidth, double areaHeight)
     {
         var span = CollectionsMarshal.AsSpan(_particles);
-        double killY = areaHeight + 50;
+        double killLeft = -OFFSCREEN_MARGIN;
+        double killRight = areaWidth + OFFSCREEN_MARGIN;
+        double killY = areaHeight + OFFSCREEN_MARGIN;
         int alive = span.Length;
 
         for (int i = 0; i < alive; i++)
@@ -650,8 +658,10 @@ public sealed class ConfettiOverlay : FrameworkElement
             p.Y = p.BaseY;
             p.Rotation += p.RotationSpeed * dt;
 
+            // Gravity brings back a particle above the top, but drag only slows one that left through
+            // a side, so it never returns and would be drawn off screen until it fell past the bottom.
             // Swap-remove: move last alive particle here, recheck this index
-            if (p.Y > killY)
+            if (p.Y > killY || p.BaseX < killLeft || p.BaseX > killRight)
             {
                 alive--;
                 if (i < alive)
@@ -703,7 +713,6 @@ public sealed class ConfettiOverlay : FrameworkElement
             Size = minSize + Rng.NextDouble() * (maxSize - minSize),
             Color = colorList[Rng.Next(colorList.Length)],
             Shape = shapeRoll < 0.7 ? ParticleShape.Rectangle
-                  : shapeRoll < 0.95 ? ParticleShape.Ellipse
                   : ParticleShape.Triangle,
             Drag = 0.65 + Rng.NextDouble() * 0.3,
             IsWide = Rng.Next(2) == 0,
@@ -716,39 +725,16 @@ public sealed class ConfettiOverlay : FrameworkElement
         });
     }
 
-    private static void AppendRotatedRect(PathGeometry path, double cx, double cy,
-        double w, double h, double cos, double sin)
+    private static PathGeometry CreateUnitTriangle()
     {
-        double hw = w / 2, hh = h / 2;
-        Span<double> lx = stackalloc double[] { -hw, hw, hw, -hw };
-        Span<double> ly = stackalloc double[] { -hh, -hh, hh, hh };
-
-        for (int i = 0; i < 4; i++)
-        {
-            double rx = lx[i] * cos - ly[i] * sin + cx;
-            double ry = lx[i] * sin + ly[i] * cos + cy;
-            if (i == 0) path.MoveTo(rx, ry);
-            else path.LineTo(rx, ry);
-        }
+        var path = new PathGeometry();
+        path.MoveTo(0, -1);
+        path.LineTo(1, 1);
+        path.LineTo(-1, 1);
         path.Close();
+        path.Freeze();
+        return path;
     }
-
-    private static void AppendRotatedTriangle(PathGeometry path, double cx, double cy,
-        double size, double cos, double sin)
-    {
-        Span<double> lx = stackalloc double[] { 0, size, -size };
-        Span<double> ly = stackalloc double[] { -size, size, size };
-
-        for (int i = 0; i < 3; i++)
-        {
-            double rx = lx[i] * cos - ly[i] * sin + cx;
-            double ry = lx[i] * sin + ly[i] * cos + cy;
-            if (i == 0) path.MoveTo(rx, ry);
-            else path.LineTo(rx, ry);
-        }
-        path.Close();
-    }
-
 }
 
 /// <summary>
@@ -1229,6 +1215,360 @@ internal class CustomWindowSample : CustomWindow
 
 partial class GalleryView
 {
+    private FrameworkElement MewPropertyBindingCard()
+    {
+        var source = new Slider()
+            .Width(280)
+            .Minimum(0)
+            .Maximum(100)
+            .Value(35);
+        var propertyPath = BindingPath
+            .From<Slider>()
+            .Then(RangeBase.ValueProperty);
+
+        return Card(
+            "MewProperty source",
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    BindingDescription(
+                        "Source: Slider.ValueProperty; Target: ProgressBar.ValueProperty; Mode: OneWay"),
+                    new TextBlock()
+                        .Text("This binds framework properties directly, without an ObservableValue wrapper. The readout uses a MewProperty BindingPath segment.")
+                        .TextWrapping(TextWrapping.Wrap),
+                    BindingDescription("Source Slider:"),
+                    source,
+                    BindingDescription("Direct MewProperty target:"),
+                    new ProgressBar()
+                        .Width(280)
+                        .Minimum(0)
+                        .Maximum(100)
+                        .Bind(RangeBase.ValueProperty, source, RangeBase.ValueProperty),
+                    new TextBlock()
+                        .Bind(
+                            TextBlock.TextProperty,
+                            source,
+                            propertyPath,
+                            static value => $"BindingPath value: {value:0.0}",
+                            mode: BindingMode.OneWay)),
+            minWidth: 380);
+    }
+
+    private FrameworkElement BindingPathCard()
+    {
+        const string fallbackText = "No profile selected";
+        var profileA = new BindingPathDemoProfile("Profile A", "Alice");
+        var profileB = new BindingPathDemoProfile("Profile B", "Bob");
+        var root = new BindingPathDemoRoot(profileA);
+        var path = BindingPath
+            .From<BindingPathDemoRoot>()
+            .Then(static value => value.SelectedProfile)
+            .Then(static value => value!.Name);
+
+        return Card(
+            "Follow the selected object",
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    BindingDescription(
+                        "Path: root.SelectedProfile.Value?.Name.Value; Target: TextBox.Text; Mode: TwoWay"),
+                    new TextBlock()
+                        .Text("Edit both source names, then choose which Profile object the root points to. The target follows only the selected object's Name.")
+                        .TextWrapping(TextWrapping.Wrap),
+                    new StackPanel()
+                        .Horizontal()
+                        .Spacing(8)
+                        .Children(
+                            new TextBlock()
+                                .Width(110)
+                                .Text("Profile A.Name")
+                                .CenterVertical(),
+                            new TextBox()
+                                .Width(220)
+                                .BindText(profileA.Name)),
+                    new StackPanel()
+                        .Horizontal()
+                        .Spacing(8)
+                        .Children(
+                            new TextBlock()
+                                .Width(110)
+                                .Text("Profile B.Name")
+                                .CenterVertical(),
+                            new TextBox()
+                                .Width(220)
+                                .BindText(profileB.Name)),
+                    new TextBlock()
+                        .BindText(
+                            root.SelectedProfile,
+                            static profile =>
+                                $"root.SelectedProfile = {profile?.Id ?? "null"}"),
+                    new StackPanel()
+                        .Horizontal()
+                        .Spacing(6)
+                        .Children(
+                            new Button()
+                                .Content("Select A")
+                                .OnClick(() => root.SelectedProfile.Value = profileA),
+                            new Button()
+                                .Content("Select B")
+                                .OnClick(() => root.SelectedProfile.Value = profileB),
+                            new Button()
+                                .Content("Select null")
+                                .OnClick(() => root.SelectedProfile.Value = null)),
+                    BindingDescription("BindingPath target (edit to write the selected Profile.Name):"),
+                    new TextBox()
+                        .Width(280)
+                        .Bind(
+                            TextBox.TextProperty,
+                            root,
+                            path,
+                            BindingMode.TwoWay,
+                            fallbackValue: fallbackText),
+                    new TextBlock()
+                        .Text("Try Select B, then edit Profile A: the target must stay on B. Select null to see the fallback; null-state target edits are not buffered.")
+                        .FontSize(ThemeFontSize.Small)
+                        .TextWrapping(TextWrapping.Wrap)),
+            minWidth: 440);
+    }
+
+    private FrameworkElement InpcBindingCard()
+    {
+        var viewModel = new InpcDemoViewModel { UserName = "Alice", Temperature = 21.5 };
+        var nextName = 1;
+
+        return Card(
+            "INotifyPropertyChanged source",
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    BindingDescription(
+                        "Source: INotifyPropertyChanged viewmodel; Target: TextBox.Text; Mode: TwoWay"),
+                    new TextBlock()
+                        .Text("A plain viewmodel that raises PropertyChanged binds without an ObservableValue wrapper. The getter alone is enough for TwoWay: the generator writes the setter from it. The subscription is weak, so the viewmodel does not keep the view alive.")
+                        .TextWrapping(TextWrapping.Wrap),
+                    BindingDescription("TwoWay target (edit this):"),
+                    new TextBox()
+                        .Width(280)
+                        .Bind(TextBox.TextProperty, viewModel, value => value.UserName),
+                    new TextBlock()
+                        .Bind(
+                            TextBlock.TextProperty,
+                            viewModel,
+                            static value => value.Temperature,
+                            static value => $"Temperature: {value:0.0} C"),
+                    new Button()
+                        .Content("Change from the viewmodel")
+                        .HorizontalAlignment(HorizontalAlignment.Left)
+                        .OnClick(() =>
+                        {
+                            viewModel.UserName = $"User {nextName++}";
+                            viewModel.Temperature += 0.5;
+                        })),
+            minWidth: 380);
+    }
+
+    private FrameworkElement InpcNestedPathCard()
+    {
+        var firstProfile = new InpcDemoProfile("Profile A", "Alice");
+        var secondProfile = new InpcDemoProfile("Profile B", "Bob");
+        var root = new InpcDemoRoot(firstProfile);
+
+        return Card(
+            "Nested path",
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    BindingDescription(
+                        "Path: root.CurrentProfile.DisplayName; Target: TextBox.Text; Mode: TwoWay"),
+                    new TextBlock()
+                        .Text("The dotted lambda is split into observed segments at compile time. Replacing CurrentProfile rewires the downstream subscription, and edits follow the selected profile.")
+                        .TextWrapping(TextWrapping.Wrap),
+                    BindingDescription("Nested path target (edit to write the selected profile):"),
+                    new TextBox()
+                        .Width(280)
+                        .Bind(
+                            TextBox.TextProperty,
+                            root,
+                            static value => value.CurrentProfile.DisplayName),
+                    new TextBlock()
+                        .Bind(
+                            TextBlock.TextProperty,
+                            root,
+                            static value => value.CurrentProfile,
+                            static profile => $"root.CurrentProfile = {profile.Id}"),
+                    new StackPanel()
+                        .Horizontal()
+                        .Spacing(6)
+                        .Children(
+                            new Button()
+                                .Content("Select A")
+                                .OnClick(() => root.CurrentProfile = firstProfile),
+                            new Button()
+                                .Content("Select B")
+                                .OnClick(() => root.CurrentProfile = secondProfile)),
+                    new TextBlock()
+                        .Text("Select B, then edit the text: Profile A must keep its own name.")
+                        .FontSize(ThemeFontSize.Small)
+                        .TextWrapping(TextWrapping.Wrap)),
+            minWidth: 420);
+    }
+
+    private FrameworkElement CollectionPathCard()
+    {
+        var root = new InpcDemoLibrary();
+        var nextTitle = 1;
+
+        return Card(
+            "Collection path",
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    BindingDescription(
+                        "Paths: library.Books.Count and library.Books[0].Title; Mode: OneWay"),
+                    new TextBlock()
+                        .Text("A collection reports its own Count through PropertyChanged, and an indexed segment follows the element at a fixed position as the collection changes.")
+                        .TextWrapping(TextWrapping.Wrap),
+                    new TextBlock()
+                        .Bind(
+                            TextBlock.TextProperty,
+                            root,
+                            value => value.Books.Count,
+                            count => $"Books.Count = {count}"),
+                    BindingDescription("Books[0].Title (empty when the list is empty):"),
+                    new TextBlock()
+                        .Bind(TextBlock.TextProperty, root, value => value.Books[0].Title),
+                    new StackPanel()
+                        .Horizontal()
+                        .Spacing(6)
+                        .Children(
+                            new Button()
+                                .Content("Insert at front")
+                                .OnClick(() => root.Books.Insert(
+                                    0, new InpcDemoBook($"Book {nextTitle++}"))),
+                            new Button()
+                                .Content("Rename first")
+                                .OnClick(() =>
+                                {
+                                    if (root.Books.Count > 0)
+                                    {
+                                        root.Books[0] = new InpcDemoBook($"Book {nextTitle++}");
+                                    }
+                                }),
+                            new Button()
+                                .Content("Remove first")
+                                .OnClick(() =>
+                                {
+                                    if (root.Books.Count > 0)
+                                    {
+                                        root.Books.RemoveAt(0);
+                                    }
+                                })),
+                    new TextBlock()
+                        .Text("Insert at front shifts the observed element, so the title follows the new first book. Removing the last book leaves the target empty rather than reporting an error.")
+                        .FontSize(ThemeFontSize.Small)
+                        .TextWrapping(TextWrapping.Wrap)),
+            minWidth: 420);
+    }
+
+    private sealed class BindingPathDemoRoot(BindingPathDemoProfile initialProfile)
+    {
+        public ObservableValue<BindingPathDemoProfile?> SelectedProfile { get; } =
+            new(initialProfile);
+    }
+
+    private sealed class BindingPathDemoProfile(string id, string name)
+    {
+        public string Id { get; } = id;
+
+        public ObservableValue<string> Name { get; } = new(name);
+    }
+}
+
+// The generated interceptors name these types, so they cannot be private members of GalleryView.
+internal abstract class InpcDemoObject : INotifyPropertyChanged
+{
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected void SetField<T>(
+        ref T field,
+        T value,
+        [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+        {
+            return;
+        }
+
+        field = value;
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
+}
+
+internal sealed class InpcDemoViewModel : InpcDemoObject
+{
+    private string _userName = string.Empty;
+    private double _temperature;
+
+    public string UserName
+    {
+        get => _userName;
+        set => SetField(ref _userName, value);
+    }
+
+    public double Temperature
+    {
+        get => _temperature;
+        set => SetField(ref _temperature, value);
+    }
+}
+
+internal sealed class InpcDemoRoot(InpcDemoProfile profile) : InpcDemoObject
+{
+    private InpcDemoProfile _currentProfile = profile;
+
+    public InpcDemoProfile CurrentProfile
+    {
+        get => _currentProfile;
+        set => SetField(ref _currentProfile, value);
+    }
+}
+
+internal sealed class InpcDemoLibrary : InpcDemoObject
+{
+    public ObservableCollection<InpcDemoBook> Books { get; } = [];
+}
+
+internal sealed class InpcDemoBook(string title) : InpcDemoObject
+{
+    private string _title = title;
+
+    public string Title
+    {
+        get => _title;
+        set => SetField(ref _title, value);
+    }
+}
+
+internal sealed class InpcDemoProfile(string id, string displayName) : InpcDemoObject
+{
+    private string _displayName = displayName;
+
+    public string Id { get; } = id;
+
+    public string DisplayName
+    {
+        get => _displayName;
+        set => SetField(ref _displayName, value);
+    }
+}
+
+partial class GalleryView
+{
     private FrameworkElement ButtonsPage()
     {
         // Labeled variant (label above), mirroring the SegmentedControl samples.
@@ -1277,14 +1617,15 @@ partial class GalleryView
                 return icon;
             });
 
-        // The card is the command scope: every drop-down below registers on it, so one panel owns the
-        // handlers, the gate and the shortcut map.
-        StackPanel dropDownGroup = new();
+        // The page is the command scope: the drop-down and split button cards both register on it, so one
+        // element owns the handlers, the gate and the shortcut map.
+        Border commandScope = new();
 
-        // What ran goes to a line under the card rather than a message box: a dialog takes the focus the
+        // What ran goes to a line under each card rather than a message box: a dialog takes the focus the
         // buttons are being tried with, and a menu row that runs on close would be judged by the dialog.
-        var dropDownLog = new TextBlock().Text("Nothing run yet");
-        void Log(string what) => dropDownLog.Text = $"Ran: {what}";
+        var lastRun = new ObservableValue<string>("Nothing run yet");
+        void Log(string what) => lastRun.Value = $"Ran: {what}";
+        TextBlock RunLog() => new TextBlock().BindText(lastRun);
 
         // One set of commands for every button below: what differs between them is how a button presents a
         // command, not the command. Save All carries no handler of its own so a dead menu row shows too.
@@ -1299,18 +1640,18 @@ partial class GalleryView
 
         // Save and Save As share the gate: the primary face and a menu row grey out together, so the
         // checkbox shows command state reaching both surfaces.
-        dropDownGroup.Commands.Register(save, () => Log("Save"), () => canSave);
-        dropDownGroup.Commands.Register(saveAs, () => Log("Save As"), () => canSave);
-        dropDownGroup.Commands.Register(newDocument, () => Log("New document"));
-        dropDownGroup.Commands.Register(saveCopy, () => Log("Save a Copy"));
-        dropDownGroup.Commands.Register(saveAll, () => Log("Save All"), () => false);
-        dropDownGroup.Commands.Register(exportPdf, () => Log("Export PDF"));
-        dropDownGroup.Commands.Register(print, () => Log("Print"));
+        commandScope.Commands.Register(save, () => Log("Save"), () => canSave);
+        commandScope.Commands.Register(saveAs, () => Log("Save As"), () => canSave);
+        commandScope.Commands.Register(newDocument, () => Log("New document"));
+        commandScope.Commands.Register(saveCopy, () => Log("Save a Copy"));
+        commandScope.Commands.Register(saveAll, () => Log("Save All"), () => false);
+        commandScope.Commands.Register(exportPdf, () => Log("Export PDF"));
+        commandScope.Commands.Register(print, () => Log("Print"));
 
-        dropDownGroup.InputMap.Map(save, new KeyGesture(Key.S, ModifierKeys.Primary));
-        dropDownGroup.InputMap.Map(newDocument, new KeyGesture(Key.N, ModifierKeys.Primary));
-        dropDownGroup.InputMap.Map(saveCopy, new KeyGesture(Key.S, ModifierKeys.Primary | ModifierKeys.Shift));
-        dropDownGroup.InputMap.Map(print, new KeyGesture(Key.P, ModifierKeys.Primary));
+        commandScope.InputMap.Map(save, new KeyGesture(Key.S, ModifierKeys.Primary));
+        commandScope.InputMap.Map(newDocument, new KeyGesture(Key.N, ModifierKeys.Primary));
+        commandScope.InputMap.Map(saveCopy, new KeyGesture(Key.S, ModifierKeys.Primary | ModifierKeys.Shift));
+        commandScope.InputMap.Map(print, new KeyGesture(Key.P, ModifierKeys.Primary));
 
         // The checkbox gates Save and Save As wherever they appear: the dispatcher re-evaluates command
         // state after each drain, so flipping the flag is enough.
@@ -1336,13 +1677,13 @@ partial class GalleryView
         var splitButton = new SplitButton()
             .DropDownMenu(CommandMenu())
             .Command(save)
-            .Left()
-            .Content(new TextBlock().Text("Save"));
+            .Content("Save")
+            .Left();
 
         // No primary action at all: every part of it opens the menu.
         var dropDownButton = new DropDownButton()
             .DropDownMenu(new Menu().Item(exportPdf).Separator().Item(print))
-            .Content(new TextBlock().Text("More actions"))
+            .Content("More actions")
             .Left();
 
         // The face and the menu rows materialize text and icons from the Commands themselves, and the menu
@@ -1358,9 +1699,9 @@ partial class GalleryView
             .DropDownMenu(CommandMenu())
             .Left();
 
-        return CardGrid(
+        return commandScope.Child(CardGrid(
             Card(
-                "Buttons",
+                "Button",
                 new StackPanel()
                     .Vertical()
                     .Spacing(8)
@@ -1400,34 +1741,31 @@ partial class GalleryView
             ),
 
             Card(
-                "ToggleButton",
+                "DropDownButton",
                 new StackPanel()
                     .Vertical()
                     .Spacing(8)
                     .Children(
-                        new ToggleButton().Content("Toggle"),
-                        new ToggleButton().Content("Checked").IsChecked(true),
-                        new ToggleButton().Content("Disabled").Disable(),
-                        new ToggleButton().Content("Disabled (Checked)").IsChecked(true).Disable()
+                        Row("Menu only", dropDownButton),
+                        RunLog()
                     )
             ),
 
             Card(
-                "Drop-down buttons",
-                dropDownGroup
+                "SplitButton",
+                new StackPanel()
                     .Vertical()
                     .Spacing(8)
                     .Children(
-                        Row("DropDownButton (menu only)", dropDownButton),
-                        Row("SplitButton (primary + menu)", new StackPanel()
+                        Row("Primary + menu", new StackPanel()
                             .Horizontal()
                             .Spacing(8)
                             .Children(splitButton, saveGate.CenterVertical())),
-                        Row("SplitButton command presentation", new StackPanel()
+                        Row("Command presentation", new StackPanel()
                             .Horizontal()
                             .Spacing(8)
                             .Children(presentedSplitButton, accentSplitButton)),
-                        dropDownLog
+                        RunLog()
                     )
             ),
 
@@ -1476,33 +1814,94 @@ partial class GalleryView
                                 .Disable()
                                 .Left())
                     )
-            ),
+            )
+        ));
+    }
+}
 
+partial class GalleryView
+{
+    private FrameworkElement ContainersPage()
+    {
+        return CardGrid(
             Card(
-                "Toggle / Switch",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new ToggleSwitch().IsChecked(true),
-                        new ToggleSwitch().IsChecked(false),
-                        new ToggleSwitch().IsChecked(true).Disable(),
-                        new ToggleSwitch().IsChecked(false).Disable()
+                "GroupBox",
+                new GroupBox()
+                    .Header("Header")
+                    .Content(
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(6)
+                            .Children(
+                                new TextBlock().Text("GroupBox content"),
+                                new Button().Content("Action")
+                            )
                     )
             ),
 
             Card(
-                "Progress",
+                "Expander",
                 new StackPanel()
                     .Vertical()
                     .Spacing(8)
                     .Children(
-                        new ProgressBar().Value(20),
-                        new ProgressBar().Value(65),
-                        new ProgressBar().Value(65).Disable(),
-                        new ProgressBar().IsIndeterminate(),
-                        new Slider().Minimum(0).Maximum(100).Value(25),
-                        new Slider().Minimum(0).Maximum(100).Value(25).Disable()
+                        new Expander()
+                            .Header("Details")
+                            .Content(
+                                new StackPanel()
+                                    .Vertical()
+                                    .Spacing(6)
+                                    .Children(
+                                        new TextBlock().Text("Click the header to collapse."),
+                                        new Button().Content("Action")
+                                    )),
+                        new Expander { IsExpanded = false }
+                            .Header("More options")
+                            .Content(new TextBlock().Text("Hidden until expanded."))
+                    )
+            ),
+
+            Card(
+                "Border + Alignment",
+                new Border()
+                    .Height(120)
+                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                    .BorderThickness(1)
+                    .CornerRadius(12)
+                    .Child(new TextBlock()
+                            .Text("Centered Text")
+                            .Center()
+                            .Bold())
+            ),
+
+            Card(
+                "Border Top + Wrap Growth",
+                new Border()
+                    .Width(260)
+                    .Top()
+                    .Padding(8)
+                    .BorderThickness(1)
+                    .CornerRadius(8)
+                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                    .Child(
+                        new TextBlock()
+                            .TextWrapping(TextWrapping.Wrap)
+                            .Text("Top-aligned border should grow with wrapped text. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.")
+                    )
+            ),
+
+            Card(
+                "ScrollViewer",
+                new ScrollViewer()
+                    .Height(120)
+                    .Width(200)
+                    .VerticalScroll(ScrollMode.Auto)
+                    .HorizontalScroll(ScrollMode.Auto)
+                    .Content(
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(6)
+                            .Children(Enumerable.Range(1, 15).Select(i => new TextBlock().Text($"Line {i} - The quick brown fox jumps over the lazy dog.")).ToArray())
                     )
             )
         );
@@ -1511,13 +1910,57 @@ partial class GalleryView
 
 partial class GalleryView
 {
-    private FrameworkElement CustomRenderingPage() =>
-        CardGrid(
+    private FrameworkElement CustomRenderingPage()
+    {
+        ConfettiOverlay confetti = new();
+        window.OverlayLayer.Add(confetti);
+
+        return CardGrid(
             Card("Offscreen", new SampleOffscreenControl { Height = 240, Width = 280 }),
-            // Result bitmap changes after every worker-thread render, so a stale BitmapCache
-            // blit would hide the update until something else invalidates the border.
-            Card("Async Rendering", AsyncConfettiContent()).Cached(false)
+            Card("Async Rendering", AsyncConfettiContent()),
+
+            Card("Confetti",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new TextBlock()
+                            .Text("Port of WpfConfetti by caefale")
+                            .WithTheme((t, c) => c.Foreground(t.Palette.DisabledText))
+                            .FontSize(ThemeFontSize.Small),
+                        new Grid()
+                            .Columns("*,*")
+                            .Rows("Auto,Auto,Auto,Auto")
+                            .Spacing(4)
+                            .Children(
+                                new Button()
+                                    .Content("Burst")
+                                    .OnClick(() => confetti?.Burst())
+                                    .ColumnSpan(2),
+                                new Button()
+                                    .Content("Start Cannons")
+                                    .OnClick(() => confetti?.Cannons())
+                                    .Row(1),
+                                new Button()
+                                    .Content("Stop Cannons")
+                                    .OnClick(() => confetti?.StopCannons())
+                                    .Row(1).Column(1),
+                                new Button()
+                                    .Content("Start Rain")
+                                    .OnClick(() => confetti?.StartRain())
+                                    .Row(2),
+                                new Button()
+                                    .Content("Stop Rain")
+                                    .OnClick(() => confetti?.StopRain())
+                                    .Row(2).Column(1),
+                                new Button()
+                                    .Content("Clear All")
+                                    .OnClick(() => confetti?.Clear())
+                                    .Row(3).ColumnSpan(2)
+                            )
+                    ))
         );
+    }
 
     private static readonly int[] ConfettiCountOptions = [500, 5_000, 50_000, 100_000];
 
@@ -1732,12 +2175,13 @@ partial class GalleryView
             ObservableValueBindingCard(),
             ConvertedBindingCard(),
             BindingValidationCard(),
+            BindingLifetimeCard(),
             MewPropertyBindingCard(),
-            BindingPathCard(),
             InpcBindingCard(),
+            BindingPathCard(),
             InpcNestedPathCard(),
-            CollectionPathCard(),
-            BindingLifetimeCard());
+            CollectionPathCard()
+        );
 
     private FrameworkElement ObservableValueBindingCard()
     {
@@ -1745,7 +2189,7 @@ partial class GalleryView
         var nextValue = 1;
 
         return Card(
-            "ObservableValue / TwoWay",
+            "TwoWay",
             new StackPanel()
                 .Vertical()
                 .Spacing(8)
@@ -1772,7 +2216,7 @@ partial class GalleryView
         var source = new ObservableValue<double>(42);
 
         return Card(
-            "Conversion / mixed modes",
+            "Conversion",
             new StackPanel()
                 .Vertical()
                 .Spacing(8)
@@ -1826,7 +2270,7 @@ partial class GalleryView
             .TextWrapping(TextWrapping.Wrap);
 
         return Card(
-            "Validation / Invalid state",
+            "Validation",
             new StackPanel()
                 .Vertical()
                 .Spacing(8)
@@ -1848,124 +2292,6 @@ partial class GalleryView
             minWidth: 420);
     }
 
-    private FrameworkElement MewPropertyBindingCard()
-    {
-        var source = new Slider()
-            .Width(280)
-            .Minimum(0)
-            .Maximum(100)
-            .Value(35);
-        var propertyPath = BindingPath
-            .From<Slider>()
-            .Then(RangeBase.ValueProperty);
-
-        return Card(
-            "MewProperty source",
-            new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    BindingDescription(
-                        "Source: Slider.ValueProperty; Target: ProgressBar.ValueProperty; Mode: OneWay"),
-                    new TextBlock()
-                        .Text("This binds framework properties directly, without an ObservableValue wrapper. The readout uses a MewProperty BindingPath segment.")
-                        .TextWrapping(TextWrapping.Wrap),
-                    BindingDescription("Source Slider:"),
-                    source,
-                    BindingDescription("Direct MewProperty target:"),
-                    new ProgressBar()
-                        .Width(280)
-                        .Minimum(0)
-                        .Maximum(100)
-                        .Bind(RangeBase.ValueProperty, source, RangeBase.ValueProperty),
-                    new TextBlock()
-                        .Bind(
-                            TextBlock.TextProperty,
-                            source,
-                            propertyPath,
-                            static value => $"BindingPath value: {value:0.0}",
-                            mode: BindingMode.OneWay)),
-            minWidth: 380);
-    }
-
-    private FrameworkElement BindingPathCard()
-    {
-        const string fallbackText = "No profile selected";
-        var profileA = new BindingPathDemoProfile("Profile A", "Alice");
-        var profileB = new BindingPathDemoProfile("Profile B", "Bob");
-        var root = new BindingPathDemoRoot(profileA);
-        var path = BindingPath
-            .From<BindingPathDemoRoot>()
-            .Then(static value => value.SelectedProfile)
-            .Then(static value => value!.Name);
-
-        return Card(
-            "BindingPath / follow the selected object",
-            new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    BindingDescription(
-                        "Path: root.SelectedProfile.Value?.Name.Value; Target: TextBox.Text; Mode: TwoWay"),
-                    new TextBlock()
-                        .Text("Edit both source names, then choose which Profile object the root points to. The target follows only the selected object's Name.")
-                        .TextWrapping(TextWrapping.Wrap),
-                    new StackPanel()
-                        .Horizontal()
-                        .Spacing(8)
-                        .Children(
-                            new TextBlock()
-                                .Width(110)
-                                .Text("Profile A.Name")
-                                .CenterVertical(),
-                            new TextBox()
-                                .Width(220)
-                                .BindText(profileA.Name)),
-                    new StackPanel()
-                        .Horizontal()
-                        .Spacing(8)
-                        .Children(
-                            new TextBlock()
-                                .Width(110)
-                                .Text("Profile B.Name")
-                                .CenterVertical(),
-                            new TextBox()
-                                .Width(220)
-                                .BindText(profileB.Name)),
-                    new TextBlock()
-                        .BindText(
-                            root.SelectedProfile,
-                            static profile =>
-                                $"root.SelectedProfile = {profile?.Id ?? "null"}"),
-                    new StackPanel()
-                        .Horizontal()
-                        .Spacing(6)
-                        .Children(
-                            new Button()
-                                .Content("Select A")
-                                .OnClick(() => root.SelectedProfile.Value = profileA),
-                            new Button()
-                                .Content("Select B")
-                                .OnClick(() => root.SelectedProfile.Value = profileB),
-                            new Button()
-                                .Content("Select null")
-                                .OnClick(() => root.SelectedProfile.Value = null)),
-                    BindingDescription("BindingPath target (edit to write the selected Profile.Name):"),
-                    new TextBox()
-                        .Width(280)
-                        .Bind(
-                            TextBox.TextProperty,
-                            root,
-                            path,
-                            BindingMode.TwoWay,
-                            fallbackValue: fallbackText),
-                    new TextBlock()
-                        .Text("Try Select B, then edit Profile A: the target must stay on B. Select null to see the fallback; null-state target edits are not buffered.")
-                        .FontSize(ThemeFontSize.Small)
-                        .TextWrapping(TextWrapping.Wrap)),
-            minWidth: 440);
-    }
-
     private FrameworkElement BindingLifetimeCard()
     {
         var source = new ObservableValue<string>("Bound value 1");
@@ -1982,7 +2308,7 @@ partial class GalleryView
         BindTarget();
 
         return Card(
-            "Binding lifetime / ClearBinding",
+            "Lifetime (ClearBinding)",
             new StackPanel()
                 .Vertical()
                 .Spacing(8)
@@ -2022,245 +2348,186 @@ partial class GalleryView
             minWidth: 440);
     }
 
-    private FrameworkElement InpcBindingCard()
-    {
-        var viewModel = new InpcDemoViewModel { UserName = "Alice", Temperature = 21.5 };
-        var nextName = 1;
-
-        return Card(
-            "INotifyPropertyChanged source",
-            new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    BindingDescription(
-                        "Source: INotifyPropertyChanged viewmodel; Target: TextBox.Text; Mode: TwoWay"),
-                    new TextBlock()
-                        .Text("A plain viewmodel that raises PropertyChanged binds without an ObservableValue wrapper. The getter alone is enough for TwoWay: the generator writes the setter from it. The subscription is weak, so the viewmodel does not keep the view alive.")
-                        .TextWrapping(TextWrapping.Wrap),
-                    BindingDescription("TwoWay target (edit this):"),
-                    new TextBox()
-                        .Width(280)
-                        .Bind(TextBox.TextProperty, viewModel, value => value.UserName),
-                    new TextBlock()
-                        .Bind(
-                            TextBlock.TextProperty,
-                            viewModel,
-                            static value => value.Temperature,
-                            static value => $"Temperature: {value:0.0} C"),
-                    new Button()
-                        .Content("Change from the viewmodel")
-                        .HorizontalAlignment(HorizontalAlignment.Left)
-                        .OnClick(() =>
-                        {
-                            viewModel.UserName = $"User {nextName++}";
-                            viewModel.Temperature += 0.5;
-                        })),
-            minWidth: 380);
-    }
-
-    private FrameworkElement InpcNestedPathCard()
-    {
-        var firstProfile = new InpcDemoProfile("Profile A", "Alice");
-        var secondProfile = new InpcDemoProfile("Profile B", "Bob");
-        var root = new InpcDemoRoot(firstProfile);
-
-        return Card(
-            "INotifyPropertyChanged nested path",
-            new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    BindingDescription(
-                        "Path: root.CurrentProfile.DisplayName; Target: TextBox.Text; Mode: TwoWay"),
-                    new TextBlock()
-                        .Text("The dotted lambda is split into observed segments at compile time. Replacing CurrentProfile rewires the downstream subscription, and edits follow the selected profile.")
-                        .TextWrapping(TextWrapping.Wrap),
-                    BindingDescription("Nested path target (edit to write the selected profile):"),
-                    new TextBox()
-                        .Width(280)
-                        .Bind(
-                            TextBox.TextProperty,
-                            root,
-                            static value => value.CurrentProfile.DisplayName),
-                    new TextBlock()
-                        .Bind(
-                            TextBlock.TextProperty,
-                            root,
-                            static value => value.CurrentProfile,
-                            static profile => $"root.CurrentProfile = {profile.Id}"),
-                    new StackPanel()
-                        .Horizontal()
-                        .Spacing(6)
-                        .Children(
-                            new Button()
-                                .Content("Select A")
-                                .OnClick(() => root.CurrentProfile = firstProfile),
-                            new Button()
-                                .Content("Select B")
-                                .OnClick(() => root.CurrentProfile = secondProfile)),
-                    new TextBlock()
-                        .Text("Select B, then edit the text: Profile A must keep its own name.")
-                        .FontSize(ThemeFontSize.Small)
-                        .TextWrapping(TextWrapping.Wrap)),
-            minWidth: 420);
-    }
-
-    private FrameworkElement CollectionPathCard()
-    {
-        var root = new InpcDemoLibrary();
-        var nextTitle = 1;
-
-        return Card(
-            "Collection path",
-            new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    BindingDescription(
-                        "Paths: library.Books.Count and library.Books[0].Title; Mode: OneWay"),
-                    new TextBlock()
-                        .Text("A collection reports its own Count through PropertyChanged, and an indexed segment follows the element at a fixed position as the collection changes.")
-                        .TextWrapping(TextWrapping.Wrap),
-                    new TextBlock()
-                        .Bind(
-                            TextBlock.TextProperty,
-                            root,
-                            value => value.Books.Count,
-                            count => $"Books.Count = {count}"),
-                    BindingDescription("Books[0].Title (empty when the list is empty):"),
-                    new TextBlock()
-                        .Bind(TextBlock.TextProperty, root, value => value.Books[0].Title),
-                    new StackPanel()
-                        .Horizontal()
-                        .Spacing(6)
-                        .Children(
-                            new Button()
-                                .Content("Insert at front")
-                                .OnClick(() => root.Books.Insert(
-                                    0, new InpcDemoBook($"Book {nextTitle++}"))),
-                            new Button()
-                                .Content("Rename first")
-                                .OnClick(() =>
-                                {
-                                    if (root.Books.Count > 0)
-                                    {
-                                        root.Books[0] = new InpcDemoBook($"Book {nextTitle++}");
-                                    }
-                                }),
-                            new Button()
-                                .Content("Remove first")
-                                .OnClick(() =>
-                                {
-                                    if (root.Books.Count > 0)
-                                    {
-                                        root.Books.RemoveAt(0);
-                                    }
-                                })),
-                    new TextBlock()
-                        .Text("Insert at front shifts the observed element, so the title follows the new first book. Removing the last book leaves the target empty rather than reporting an error.")
-                        .FontSize(ThemeFontSize.Small)
-                        .TextWrapping(TextWrapping.Wrap)),
-            minWidth: 420);
-    }
-
     private static TextBlock BindingDescription(string text) =>
         new TextBlock()
             .Text(text)
             .FontSize(ThemeFontSize.Small)
             .TextWrapping(TextWrapping.Wrap);
 
-    private sealed class BindingPathDemoRoot(BindingPathDemoProfile initialProfile)
-    {
-        public ObservableValue<BindingPathDemoProfile?> SelectedProfile { get; } =
-            new(initialProfile);
-    }
-
-    private sealed class BindingPathDemoProfile(string id, string name)
-    {
-        public string Id { get; } = id;
-
-        public ObservableValue<string> Name { get; } = new(name);
-    }
-
 }
 
-// The generated interceptors name these types, so they cannot be private members of GalleryView.
-internal abstract class InpcDemoObject : INotifyPropertyChanged
+partial class GalleryView
 {
-    public event PropertyChangedEventHandler? PropertyChanged;
+    private FrameworkElement DevToolsPage() =>
+        CardGrid(
+            Card(
+                "Hot-reload",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new TextBlock()
+                            .FontSize(ThemeFontSize.Small)
+                            .TextWrapping(TextWrapping.Wrap)
+                            .Text("Modify the code and save to see hot-reload in action.\nThis card will update with the current time."),
+                        new TextBlock()
+                            .Text($"Loaded: {DateTime.Now}"))
+            ),
 
-    protected void SetField<T>(
-        ref T field,
-        T value,
-        [CallerMemberName] string? propertyName = null)
+            DevToolsCard(),
+            PerformanceToolsCard(),
+            DirtyRegionOverlayCard(),
+            BitmapCacheOverlayCard()
+        );
+
+    private FrameworkElement DevToolsCard()
     {
-        if (EqualityComparer<T>.Default.Equals(field, value))
+        var shortcuts = ShortcutList(
+            "Inspector: Ctrl/Cmd+Shift+I",
+            "Visual Tree: Ctrl/Cmd+Shift+T");
+
+        if (window.DevTools is WindowDevTools devTools)
         {
-            return;
+            return Card(
+                "DevTools",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        ToolToggle(
+                            "Inspector Overlay",
+                            () => devTools.InspectorIsVisible,
+                            devTools.ToggleInspector,
+                            sync => devTools.InspectorVisibleChanged += sync),
+                        ToolToggle(
+                            "Visual Tree Window",
+                            () => devTools.VisualTreeIsOpen,
+                            devTools.ToggleVisualTree,
+                            sync => devTools.VisualTreeOpenChanged += sync),
+                        shortcuts
+                    )
+            );
         }
 
-        field = value;
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        return Card("DevTools", DevToolsOffContent(shortcuts));
     }
-}
 
-internal sealed class InpcDemoViewModel : InpcDemoObject
-{
-    private string _userName = string.Empty;
-    private double _temperature;
-
-    public string UserName
+    private FrameworkElement PerformanceToolsCard()
     {
-        get => _userName;
-        set => SetField(ref _userName, value);
+        var shortcuts = ShortcutList(
+            "Performance Monitor: Ctrl/Cmd+Shift+P",
+            "Profiler: Ctrl/Cmd+Alt+Shift+P");
+
+        if (window.DevTools is WindowDevTools devTools)
+        {
+            return Card(
+                "Performance Monitor / Profiler",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        ToolToggle(
+                            "Performance Monitor",
+                            () => devTools.PerformanceMonitorIsVisible,
+                            devTools.TogglePerformanceMonitor,
+                            sync => devTools.PerformanceMonitorVisibleChanged += sync),
+                        ToolToggle(
+                            "Profiler Window",
+                            () => devTools.ProfilerIsOpen,
+                            devTools.ToggleProfiler,
+                            sync => devTools.ProfilerOpenChanged += sync),
+                        shortcuts
+                    )
+            );
+        }
+
+        return Card("Performance Monitor / Profiler", DevToolsOffContent(shortcuts));
     }
 
-    public double Temperature
+    private FrameworkElement DirtyRegionOverlayCard() =>
+        Card(
+            "Dirty Region Overlay",
+            new StackPanel()
+                .Width(280)
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    new TextBlock()
+                        .FontSize(ThemeFontSize.Small)
+                        .TextWrapping(TextWrapping.Wrap)
+                        .Text("Tints the areas each frame repainted, in a color that changes per frame, and shows how many visuals the frame visited, recorded and replayed. Available in release builds too."),
+                    ShortcutList("Dirty Region Overlay: Ctrl/Cmd+Shift+D")
+                )
+        );
+
+    private FrameworkElement BitmapCacheOverlayCard() =>
+        Card(
+            "BitmapCache Overlay",
+            new StackPanel()
+                .Width(280)
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    new TextBlock()
+                        .FontSize(ThemeFontSize.Small)
+                        .TextWrapping(TextWrapping.Wrap)
+                        .Text("Covers BitmapCache regions with a translucent color that changes whenever the cache is rebuilt."),
+                    ShortcutList("BitmapCache Overlay: Ctrl/Cmd+Shift+B")
+                )
+        );
+
+    /// <summary>A toggle that switches a tool and follows the tool's own change event, so a shortcut or a closed window updates it too.</summary>
+    private static ToggleButton ToolToggle(string text, Func<bool> isOn, Action toggle, Action<Action<bool>> subscribe)
     {
-        get => _temperature;
-        set => SetField(ref _temperature, value);
+        bool updating = false;
+        var button = new ToggleButton().Content(text);
+
+        void Sync()
+        {
+            updating = true;
+            try
+            {
+                button.IsChecked = isOn();
+            }
+            finally
+            {
+                updating = false;
+            }
+        }
+
+        button.CheckedChanged += _ =>
+        {
+            if (updating)
+            {
+                return;
+            }
+
+            toggle();
+            Sync();
+        };
+
+        subscribe(_ => Sync());
+        Sync();
+        return button;
     }
-}
 
-internal sealed class InpcDemoRoot(InpcDemoProfile profile) : InpcDemoObject
-{
-    private InpcDemoProfile _currentProfile = profile;
+    private static TextBlock ShortcutList(params string[] shortcuts) =>
+        new TextBlock()
+            .FontSize(ThemeFontSize.Small)
+            .Text("Shortcuts:\n" + string.Join("\n", shortcuts.Select(shortcut => "- " + shortcut)));
 
-    public InpcDemoProfile CurrentProfile
-    {
-        get => _currentProfile;
-        set => SetField(ref _currentProfile, value);
-    }
-}
-
-internal sealed class InpcDemoLibrary : InpcDemoObject
-{
-    public ObservableCollection<InpcDemoBook> Books { get; } = [];
-}
-
-internal sealed class InpcDemoBook(string title) : InpcDemoObject
-{
-    private string _title = title;
-
-    public string Title
-    {
-        get => _title;
-        set => SetField(ref _title, value);
-    }
-}
-
-internal sealed class InpcDemoProfile(string id, string displayName) : InpcDemoObject
-{
-    private string _displayName = displayName;
-
-    public string Id { get; } = id;
-
-    public string DisplayName
-    {
-        get => _displayName;
-        set => SetField(ref _displayName, value);
-    }
+    private static FrameworkElement DevToolsOffContent(TextBlock shortcuts) =>
+        new StackPanel()
+            .Width(280)
+            .Vertical()
+            .Spacing(8)
+            .Children(
+                new TextBlock()
+                    .FontSize(ThemeFontSize.Small)
+                    .TextWrapping(TextWrapping.Wrap)
+                    .Text("DevTools are off in this build. Set <MewUIDevTools>true</MewUIDevTools> to enable them."),
+                shortcuts
+            );
 }
 
 partial class GalleryView
@@ -2660,6 +2927,210 @@ partial class GalleryView
         return CardGrid(
             BackendCard("Managed", preferNative: false),
             BackendCard("Prefer Native", preferNative: true));
+    }
+}
+
+partial class GalleryView
+{
+    private FrameworkElement FontsPage()
+    {
+        // Font Inheritance: Border sets FontSize=16, children inherit
+        var inheritanceDemo = new Border()
+            .FontSize(16)
+            .Padding(12)
+            .BorderThickness(1)
+            .CornerRadius(8)
+            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+            .Child(
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(6)
+                    .Children(
+                        new TextBlock().Text("Inherited 16pt (from parent Border)"),
+                        new TextBlock().Text("Also inherited 16pt"),
+                        new TextBlock().Text("Override: 10pt").FontSize(10),
+                        new Button().Content("Button (inherited 16pt)"),
+                        new TextBox().Placeholder("TextBox (inherited 16pt)")
+                    ));
+
+        // FontFamily Inheritance
+        var fontFamilyDemo = new Border()
+            .FontFamily("Consolas, Menlo, DejaVu Sans Mono")
+            .Padding(12)
+            .BorderThickness(1)
+            .CornerRadius(8)
+            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+            .Child(
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(6)
+                    .Children(
+                        new TextBlock().Text("Inherited Fixed"),
+                        new TextBlock().Text("Also Fixed"),
+                        new TextBlock().Text("Override: Default").FontFamily(Theme.Metrics.FontFamily),
+                        new Button().Content("Fixed Button")
+                    ));
+
+        // FontWeight Inheritance
+        var fontWeightDemo = new Border()
+            .Bold()
+            .Padding(12)
+            .BorderThickness(1)
+            .CornerRadius(8)
+            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+            .Child(
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(6)
+                    .Children(
+                        new TextBlock().Text("Inherited Bold"),
+                        new TextBlock().Text("Also Bold"),
+                        new TextBlock().Text("Override: Normal").FontWeight(FontWeight.Normal),
+                        new Button().Content("Bold Button")
+                    ));
+
+        // FontStyle Inheritance. Times New Roman because its italic is a face of its own: a family without
+        // one is slanted by the backend, which reads as italic but is not the same drawing.
+        var italicLabel = new TextBlock().Text("Inherited Italic");
+        var uprightLabel = new TextBlock().Text("Override: Normal").Italic(false);
+        var italicButton = new Button().Content("Italic Button");
+
+        var fontStyleDemo = new Border()
+            .FontFamily("Times New Roman")
+            .FontSize(16)
+            .Italic()
+            .Padding(12)
+            .BorderThickness(1)
+            .CornerRadius(8)
+            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+            .Child(
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(6)
+                    .Children(
+                        italicLabel,
+                        new TextBlock().Text("Bold Italic").Bold(),
+                        uprightLabel,
+                        italicButton
+                    ));
+
+        // Nested inheritance: outer=20pt, inner=12pt
+        var nestedDemo = new Border()
+            .FontSize(20)
+            .Padding(12)
+            .BorderThickness(1)
+            .CornerRadius(8)
+            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+            .Child(
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(6)
+                    .Children(
+                        new TextBlock().Text("20pt (from outer)"),
+                        new Border()
+                            .FontSize(12)
+                            .Padding(8)
+                            .BorderThickness(1)
+                            .CornerRadius(6)
+                            .WithTheme((t, b) => b.BorderBrush(t.Palette.ControlBorder))
+                            .Child(
+                                new StackPanel()
+                                    .Vertical()
+                                    .Spacing(4)
+                                    .Children(
+                                        new TextBlock().Text("12pt (from inner Border)"),
+                                        new TextBlock().Text("Also 12pt")
+                                    )),
+                        new TextBlock().Text("Back to 20pt")
+                    ));
+
+        return CardGrid(
+            Card("Font Size Inheritance", inheritanceDemo),
+            Card("Font Family Inheritance", fontFamilyDemo),
+            Card("Font Weight Inheritance", fontWeightDemo),
+            Card("Font Style Inheritance", fontStyleDemo),
+            Card("Nested Inheritance", nestedDemo),
+            Card("Font Weight Ramp (100 to 900)", FontWeightRampDemo(), minWidth: 400),
+            Card(
+                "Emoji",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new TextBlock()
+                            .Text("\U0001F36B \U0001F600 \U0001F389 \U0001F680 \U0001F308 \U0001F40D \U0001F3B5 \U00002764\U0000FE0F \U0001F525 \U0001F4A1")
+                            .FontSize(24),
+                        new TextBlock()
+                            .Text("\U0001F36B \U0001F600 \U0001F389 \U0001F680 \U0001F308 \U0001F40D \U0001F3B5 \U00002764\U0000FE0F \U0001F525 \U0001F4A1")
+                            .FontSize(20),
+                        new TextBlock()
+                            .Text("\U0001F36B \U0001F600 \U0001F389 \U0001F680 \U0001F308 \U0001F40D \U0001F3B5 \U00002764\U0000FE0F \U0001F525 \U0001F4A1")
+                            .FontSize(16),
+                        new TextBlock()
+                            .Text("\U0001F36B \U0001F600 \U0001F389 \U0001F680 \U0001F308 \U0001F40D \U0001F3B5 \U00002764\U0000FE0F \U0001F525 \U0001F4A1")
+                            .FontSize(12),
+                        new TextBox()
+                            .Placeholder("Type or paste emoji here...")
+                            .Text("\U0001F36B\U0001F600\U0001F389"),
+                        new TextBlock()
+                            .Text("Mixed: Hello \U0001F30D World \U0001F680!")
+                            .FontSize(14)
+                    )
+            )
+        );
+    }
+
+    private static readonly FontWeight[] _weightRamp =
+    [
+        FontWeight.Thin, FontWeight.ExtraLight, FontWeight.Light, FontWeight.Normal,
+        FontWeight.Medium, FontWeight.SemiBold, FontWeight.Bold, FontWeight.ExtraBold, FontWeight.Black 
+    ];
+
+    private FrameworkElement FontWeightRampDemo()
+    {
+        var rows = new List<FrameworkElement>(_weightRamp.Length + 1);
+        foreach (var weight in _weightRamp)
+        {
+            var sample = new TextBlock()
+                .FontSize(22)
+                .FontWeight(weight)
+                .Text("Hamburgefonstiv 123");
+            // The font arrives with the other gallery resources; until then the row uses the theme font.
+            sample.SetBinding(TextElement.FontFamilyProperty, Resources.InterVariable,
+                family => family ?? Theme.Metrics.FontFamily);
+            rows.Add(new StackPanel()
+                .Horizontal()
+                .Spacing(12)
+                .Children(
+                    new TextBlock()
+                        .Width(104)
+                        .FontSize(ThemeFontSize.Small)
+                        .WithTheme((t, b) => b.Foreground(t.Palette.PlaceholderText))
+                        .Text($"{(int)weight}  {weight}"),
+                    // The tinted box ends where the run ends, so a weight the family cannot supply
+                    // shows up as a row whose sample is exactly as wide as the one above it.
+                    new Border()
+                        .Padding(4, 2)
+                        .CornerRadius(4)
+                        .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground))
+                        .Child(sample)));
+        }
+
+        rows.Add(new TextBlock()
+            .FontSize(ThemeFontSize.Small)
+            .TextWrapping(TextWrapping.Wrap)
+            .Width(380)
+            .WithTheme((t, b) => b.Foreground(t.Palette.PlaceholderText))
+            .BindText(Resources.InterVariable, family => family != null
+                ? "Inter Variable, registered through FontResources.Register: one file with a weight axis "
+                    + "supplies every row."
+                : "The rows use the theme font until Inter Variable is loaded. The browser backend draws "
+                    + "with the browser's fonts, so a font registered through FontResources is not used there."));
+
+        return new StackPanel()
+            .Vertical()
+            .Spacing(6)
+            .Children([.. rows]);
     }
 }
 
@@ -3259,7 +3730,7 @@ sealed record SimpleGridRow(int Id, string Name, string Status);
 
 partial class GalleryView
 {
-    private FrameworkElement IconsPage()
+    private FrameworkElement IconsCard()
     {
         IconItem[] AllIcons() => IconResource.GetAll(Resources.Icons.Value)
             .Select(e => new IconItem(e.Name, e.PathData))
@@ -3313,36 +3784,36 @@ partial class GalleryView
             );
 
         return Card(
-            "Icons (Path)",
-            new DockPanel()
-                .Height(400)
-                .Spacing(6)
-                .Children(
-                    new StackPanel()
-                        .DockTop()
-                        .Horizontal()
-                        .Spacing(8)
-                        .Children(
-                            new TextBox()
-                                .Width(200)
-                                .Placeholder("Filter icons...")
-                                .BindText(query),
-                            new TextBlock()
-                                .BindText(countText)
-                                .CenterVertical()
-                                .FontSize(ThemeFontSize.Small),
+                "Icons (Path)",
+                new DockPanel()
+                    .Height(400)
+                    .Spacing(6)
+                    .Children(
+                        new StackPanel()
+                            .DockTop()
+                            .Horizontal()
+                            .Spacing(8)
+                            .Children(
+                                new TextBox()
+                                    .Width(200)
+                                    .Placeholder("Filter icons...")
+                                    .BindText(query),
+                                new TextBlock()
+                                    .BindText(countText)
+                                    .CenterVertical()
+                                    .FontSize(ThemeFontSize.Small),
 
-                            new TextBlock()
-                                .Text("Fluent System Icons by Microsoft (MIT License)")
-                                .WithTheme((t, c) => c.Foreground(t.Palette.DisabledText))
-                                .CenterVertical()
-                                .FontSize(ThemeFontSize.Small)
-                        ),
+                                new TextBlock()
+                                    .Text("Fluent System Icons by Microsoft (MIT License)")
+                                    .WithTheme((t, c) => c.Foreground(t.Palette.DisabledText))
+                                    .CenterVertical()
+                                    .FontSize(ThemeFontSize.Small)
+                            ),
 
-                    grid
-                ),
-            minWidth: 460
-        );
+                        grid
+                    ),
+                minWidth: 460
+            );
     }
 
     private sealed class IconItem(string name, string pathData)
@@ -3351,632 +3822,31 @@ partial class GalleryView
         private PathGeometry? _geometry;
         public PathGeometry Geometry => _geometry ??= PathGeometry.Parse(pathData);
     }
-}
 
-partial class GalleryView
-{
-    private ObservableValue<string> name = new ObservableValue<string>("This is my name");
-    private ObservableValue<int> intBinding = new ObservableValue<int>(1);
-    private ObservableValue<double> doubleBinding = new ObservableValue<double>(42.5);
+    private FrameworkElement PromptIconsCard()
+        => new WrapPanel()
+            .Orientation(Orientation.Horizontal)
+            .Spacing(12)
+            .Children(
+                PromptIconTile("Question", new PromptIcon { Kind = PromptIconKind.Question }),
+                PromptIconTile("Info", new PromptIcon { Kind = PromptIconKind.Info }),
+                PromptIconTile("Warning", new PromptIcon { Kind = PromptIconKind.Warning }),
+                PromptIconTile("Error", new PromptIcon { Kind = PromptIconKind.Error }),
+                PromptIconTile("Success", new PromptIcon { Kind = PromptIconKind.Success }),
+                PromptIconTile("Shield", new PromptIcon { Kind = PromptIconKind.Shield }),
+                PromptIconTile("Crash", new PromptIcon { Kind = PromptIconKind.Crash })
+            );
 
-    // Multi-line text box demo that shows the live selection (start / length) bound to the read-only
-    // SelectionStart/SelectionLength MewProperties - used to inspect selection geometry.
-    private FrameworkElement MultiLineTextBoxDemo()
-    {
-        var box = new MultiLineTextBox()
-            .Height(120)
-            .Width(290)
-            .Wrap(false)
-            .Text("The quick brown fox jumps over the lazy dog, then keeps running far beyond the visible editor width.\n\n- Wrap supported\n- Selection supported\n- Scroll supported");
-
-        return new StackPanel()
+    private FrameworkElement PromptIconTile(string title, FrameworkElement icon)
+        => new StackPanel()
+            .Width(90)
             .Vertical()
             .Spacing(6)
             .Children(
-                new CheckBox()
-                    .Content("Wrap")
-                    .IsChecked(box.Wrap)
-                    .OnCheckedChanged(isChecked => box.Wrap = isChecked == true),
-                box,
-                new TextBlock()
-                    .FontSize(ThemeFontSize.Small)
-                    .Bind(TextBlock.TextProperty, box, TextBase.SelectionStartProperty,
-                        (int start) => $"SelectionStart: {start}"),
-                new TextBlock()
-                    .FontSize(ThemeFontSize.Small)
-                    .Bind(TextBlock.TextProperty, box, TextBase.SelectionLengthProperty,
-                        (int length) => $"SelectionLength: {length}")
+                icon.Width(60).Height(60).Center(),
+
+                new TextBlock().Text(title).Center()
             );
-    }
-
-
-    private const string FIND_DEMO_TEXT =
-        "The text engine assembles logical lines into visual lines, wraps them to the viewport, " +
-        "and materializes only the lines that are visible.\n\n" +
-        "Classifiers attach paint spans to a line without changing its geometry. A search classifier " +
-        "is the smallest useful classifier: it scans the line, emits a background span per match, " +
-        "and the engine paints the span behind the glyphs.\n\n" +
-        "Wrapped lines keep highlight spans consistent: a match that crosses a wrap boundary is " +
-        "painted on both visual lines. Scrolling does not recompute matches, because the match " +
-        "offsets live in the document, not in the view.\n\n" +
-        "Editing the document refreshes the matches. Type into this editor and the highlight " +
-        "follows the text. Search for the word line to see many matches, or search for engine " +
-        "to see a few.\n\n" +
-        "The chevron buttons move the current match, select it, and scroll it into view. The " +
-        "current match uses a stronger highlight than the other matches.";
-
-    // Search-match highlighter for the demo: recomputes absolute match offsets on text change and
-    // emits line-relative background spans; the current match gets a stronger color.
-    private sealed class FindHighlightClassifier : ITextClassifier
-    {
-        private static readonly Color _matchColor = Color.FromArgb(88, 255, 214, 0);
-        private static readonly Color _currentColor = Color.FromArgb(176, 255, 150, 40);
-
-        public List<int> Matches { get; } = new();
-        public int QueryLength { get; private set; }
-        public int CurrentIndex { get; set; } = -1;
-
-        public void Update(string documentText, string query)
-        {
-            Matches.Clear();
-            CurrentIndex = -1;
-            QueryLength = query.Length;
-            if (query.Length == 0)
-            {
-                return;
-            }
-
-            int searchStart = 0;
-            while (true)
-            {
-                int hit = documentText.IndexOf(query, searchStart, StringComparison.OrdinalIgnoreCase);
-                if (hit < 0)
-                {
-                    break;
-                }
-
-                Matches.Add(hit);
-                searchStart = hit + query.Length;
-            }
-        }
-
-        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
-        {
-            if (Matches.Count == 0)
-            {
-                return;
-            }
-
-            int lineStart = context.LogicalLine.Offset;
-            int lineEnd = lineStart + context.LogicalLine.Length;
-
-            for (int index = 0; index < Matches.Count; index++)
-            {
-                int matchStart = Matches[index];
-                if (matchStart >= lineEnd)
-                {
-                    break;
-                }
-
-                int clampedStart = Math.Max(lineStart, matchStart);
-                int clampedEnd = Math.Min(lineEnd, matchStart + QueryLength);
-                if (clampedEnd > clampedStart)
-                {
-                    output.Add(new TextPaintSpan(
-                        new TextRange(clampedStart - lineStart, clampedEnd - clampedStart),
-                        Background: index == CurrentIndex ? _currentColor : _matchColor));
-                }
-            }
-        }
-    }
-
-    private FrameworkElement FindHighlightDemo()
-    {
-        var classifier = new FindHighlightClassifier();
-
-        var box = new MultiLineTextBox()
-            .Height(240)
-            .Width(360)
-            .Wrap(true)
-            .Text(FIND_DEMO_TEXT);
-        box.Extensions.Classifiers.Add(classifier);
-
-        var searchBox = new TextBox().Placeholder("Find...").Width(150);
-        var countLabel = new TextBlock().FontSize(ThemeFontSize.Small).CenterVertical();
-        var previousMatch = new Command("gallery.find.previous", "Previous match");
-        var nextMatch = new Command("gallery.find.next", "Next match");
-
-        void UpdateCountLabel()
-            => countLabel.Text = classifier.Matches.Count == 0
-                ? "0/0"
-                : $"{classifier.CurrentIndex + 1}/{classifier.Matches.Count}";
-
-        void RefreshMatches()
-        {
-            classifier.Update(box.Text, searchBox.Text);
-            box.InvalidateTextView();
-            UpdateCountLabel();
-        }
-
-        void MoveCurrent(int direction)
-        {
-            int count = classifier.Matches.Count;
-            if (count == 0)
-            {
-                return;
-            }
-
-            if (classifier.CurrentIndex < 0)
-            {
-                classifier.CurrentIndex = direction > 0 ? 0 : count - 1;
-            }
-            else
-            {
-                classifier.CurrentIndex = (classifier.CurrentIndex + direction + count) % count;
-            }
-
-            int offset = classifier.Matches[classifier.CurrentIndex];
-            box.Select(offset, classifier.QueryLength);
-            box.ScrollToCaret();
-            box.InvalidateTextView();
-            UpdateCountLabel();
-        }
-
-        var findNavigation = new ButtonGroup()
-            .Items([previousMatch, nextMatch], command => command.Text ?? string.Empty)
-            .ItemTemplate<Command>(
-                build: _ => new GlyphElement(),
-                bind: (view, _, index, _) =>
-                    ((GlyphElement)view).Kind = index == 0
-                        ? GlyphKind.ChevronUp
-                        : GlyphKind.ChevronDown)
-            .ItemPadding(Thickness.Zero)
-            .PrepareContainer<Command>((segment, command, _) =>
-            {
-                segment.Command = command;
-                segment.ToolTip(command.Text);
-                segment.WithTheme((theme, current) =>
-                    current.MinWidth(theme.Metrics.BaseControlHeight));
-            });
-        findNavigation.Commands.Register(
-            previousMatch,
-            () => MoveCurrent(-1),
-            () => classifier.Matches.Count > 0);
-        findNavigation.Commands.Register(
-            nextMatch,
-            () => MoveCurrent(+1),
-            () => classifier.Matches.Count > 0);
-
-        searchBox.TextChanged += _ => RefreshMatches();
-        box.DocumentChanged += _ => RefreshMatches();
-        UpdateCountLabel();
-
-        return new StackPanel()
-            .Vertical()
-            .Spacing(8)
-            .Children(
-                new StackPanel()
-                    .Horizontal()
-                    .Spacing(8)
-                    .Children(
-                        searchBox,
-                        findNavigation,
-                        countLabel),
-                box);
-    }
-
-    private FrameworkElement InputsPage() =>
-            CardGrid(
-                Card(
-                    "TextBox",
-                    new StackPanel()
-                        .Vertical()
-                        .Spacing(8)
-                        .Children(
-                            new TextBox(),
-                            new TextBox().Placeholder("Type your name..."),
-                            new TextBox().BindText(name),
-                            new TextBox().Text("Disabled").Disable()
-                        )
-                ),
-
-                Card(
-                    "PasswordBox",
-                    new StackPanel()
-                        .Vertical()
-                        .Spacing(8)
-                        .Children(
-                            new PasswordBox().Placeholder("Password"),
-                            new PasswordBox { PasswordChar = '★' }.Placeholder("Custom mask"),
-                            new PasswordBox().Password("Disabled").Disable()
-                        )
-                ),
-
-                Card(
-                    "NumericUpDown (int/double)",
-                    new Grid()
-                        .Columns("Auto,Auto,Auto")
-                        .Rows("Auto,Auto,Auto")
-                        .Spacing(8)
-                        .AutoIndexing()
-                        .Children(
-                            new TextBlock()
-                                .Text("Int")
-                                .CenterVertical(),
-
-                            new NumericUpDown()
-                                .Width(140)
-                                .Minimum(0)
-                                .Maximum(100)
-                                .Step(1)
-                                .Format("0")
-                                .BindValue(intBinding)
-                                .CenterVertical(),
-
-                            new TextBlock()
-                                .BindText(intBinding, value => $"Value: {value}")
-                                .CenterVertical(),
-
-                            new TextBlock()
-                                .Text("Double")
-                                .CenterVertical(),
-
-                            new NumericUpDown()
-                                .Width(140)
-                                .Minimum(0)
-                                .Maximum(100)
-                                .Step(0.1)
-                                .Format("0.##")
-                                .BindValue(doubleBinding)
-                                .CenterVertical(),
-
-                            new TextBlock()
-                                .BindText(doubleBinding, value => $"Value: {value:0.##}")
-                                .CenterVertical(),
-
-                            new TextBlock()
-                                .Text("Disabled")
-                                .CenterVertical(),
-
-                            new NumericUpDown()
-                                .Disable()
-                                .Width(140)
-                                .Minimum(0)
-                                .Maximum(100)
-                                .Step(0.1)
-                                .Format("0.##")
-                                .BindValue(doubleBinding)
-                                .CenterVertical()
-                        )
-                ),
-
-                Card(
-                    "Emoji",
-                    new StackPanel()
-                        .Vertical()
-                        .Spacing(8)
-                        .Children(
-                            new TextBlock()
-                                .Text("\U0001F36B \U0001F600 \U0001F389 \U0001F680 \U0001F308 \U0001F40D \U0001F3B5 \U00002764\U0000FE0F \U0001F525 \U0001F4A1")
-                                .FontSize(24),
-                            new TextBlock()
-                                .Text("\U0001F36B \U0001F600 \U0001F389 \U0001F680 \U0001F308 \U0001F40D \U0001F3B5 \U00002764\U0000FE0F \U0001F525 \U0001F4A1")
-                                .FontSize(20),
-                            new TextBlock()
-                                .Text("\U0001F36B \U0001F600 \U0001F389 \U0001F680 \U0001F308 \U0001F40D \U0001F3B5 \U00002764\U0000FE0F \U0001F525 \U0001F4A1")
-                                .FontSize(16),
-                            new TextBlock()
-                                .Text("\U0001F36B \U0001F600 \U0001F389 \U0001F680 \U0001F308 \U0001F40D \U0001F3B5 \U00002764\U0000FE0F \U0001F525 \U0001F4A1")
-                                .FontSize(12),
-                            new TextBox()
-                                .Placeholder("Type or paste emoji here...")
-                                .Text("\U0001F36B\U0001F600\U0001F389"),
-                            new TextBlock()
-                                .Text("Mixed: Hello \U0001F30D World \U0001F680!")
-                                .FontSize(14)
-                        )
-                ),
-
-                Card(
-                    "MultiLineTextBox",
-                    MultiLineTextBoxDemo()
-                ),
-
-                Card(
-                    "Find Highlight",
-                    FindHighlightDemo()
-                ),
-
-                Card(
-                    "ToolTip / ContextMenu",
-                    new StackPanel()
-                        .Vertical()
-                        .Spacing(8)
-                        .Children(
-                            new TextBlock()
-                                .Text("Hover to show a tooltip. Right-click to open a context menu.")
-                                .TextWrapping(TextWrapping.Wrap)
-                                .Width(290)
-                                .FontSize(ThemeFontSize.Small),
-
-                            new Button()
-                                .Content("Hover / Right-click me")
-                                .ToolTip("ToolTip text")
-                                .ContextMenu(
-                                    new ContextMenu()
-                                        .Item("Copy")
-                                        .Item("Paste")
-                                        .Separator()
-                                        .SubMenu("Transform", new ContextMenu()
-                                            .Item("Uppercase")
-                                            .Item("Lowercase")
-                                            .Separator()
-                                            .SubMenu("More", new ContextMenu()
-                                                .Item("Trim")
-                                                .Item("Normalize")
-                                                .Item("Sort"))
-                                        )
-                                        .SubMenu("View", new ContextMenu()
-                                            .Item("Zoom In")
-                                            .Item("Zoom Out")
-                                            .Item("Reset Zoom")
-                                        )
-                                        .Separator()
-                                        .Item("Disabled", isEnabled: false)
-                                ),
-
-                            new Button()
-                                .Content("Right-click: opens below")
-                                .ContextMenu(
-                                    new ContextMenu { Placement = MenuPlacement.Below, PlacementOffset = new Point(0, 2) }
-                                        .Item("First")
-                                        .Item("Second")
-                                        .Item("Third")
-                                )
-                         )
-                 )
-             );
-
-}
-
-partial class GalleryView
-{
-    private FrameworkElement LayoutPage()
-    {
-        FrameworkElement LabelBox(string title, TextAlignment horizontal, TextAlignment vertical, TextWrapping wrapping)
-        {
-            const string sample =
-                "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog";
-
-            return new StackPanel()
-                .Vertical()
-                .Spacing(4)
-                .Children(
-                    new TextBlock()
-                        .Text(title)
-                        .FontSize(ThemeFontSize.Small),
-                    new Border()
-                        .Width(240)
-                        .Height(80)
-                        .Padding(6)
-                        .BorderThickness(1)
-                        .CornerRadius(6)
-                        .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                        .Child(
-                            new TextBlock()
-                                .Text(sample)
-                                .TextWrapping(wrapping)
-                                .TextAlignment(horizontal)
-                                .VerticalTextAlignment(vertical)
-                        )
-                );
-        }
-
-        return CardGrid(
-            Card(
-                "GroupBox",
-                new GroupBox()
-                    .Header("Header")
-                    .Content(
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(6)
-                            .Children(
-                                new TextBlock().Text("GroupBox content"),
-                                new Button().Content("Action")
-                            )
-                    )
-            ),
-
-            Card(
-                "Expander",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new Expander()
-                            .Header("Details")
-                            .Content(
-                                new StackPanel()
-                                    .Vertical()
-                                    .Spacing(6)
-                                    .Children(
-                                        new TextBlock().Text("Click the header to collapse."),
-                                        new Button().Content("Action")
-                                    )),
-                        new Expander { IsExpanded = false }
-                            .Header("More options")
-                            .Content(new TextBlock().Text("Hidden until expanded."))
-                    )
-            ),
-
-            Card(
-                "Border + Alignment",
-                new Border()
-                    .Height(120)
-                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                    .BorderThickness(1)
-                    .CornerRadius(12)
-                    .Child(new TextBlock()
-                            .Text("Centered Text")
-                            .Center()
-                            .Bold())
-            ),
-
-            Card(
-                "Label Wrap/Alignment",
-                new UniformGrid()
-                    .Columns(3)
-                    .Spacing(8)
-                    .Children(
-                        LabelBox("Left/Top + Wrap", TextAlignment.Left, TextAlignment.Top, TextWrapping.Wrap),
-                        LabelBox("Center/Top + Wrap", TextAlignment.Center, TextAlignment.Top, TextWrapping.Wrap),
-                        LabelBox("Right/Top + Wrap", TextAlignment.Right, TextAlignment.Top, TextWrapping.Wrap),
-                        LabelBox("Left/Center + Wrap", TextAlignment.Left, TextAlignment.Center, TextWrapping.Wrap),
-                        LabelBox("Left/Bottom + Wrap", TextAlignment.Left, TextAlignment.Bottom, TextWrapping.Wrap),
-                        LabelBox("Left/Top + NoWrap", TextAlignment.Left, TextAlignment.Top, TextWrapping.NoWrap),
-                        LabelBox("Right/Top + NoWrap", TextAlignment.Right, TextAlignment.Top, TextWrapping.NoWrap)
-                    )
-            ),
-
-            Card(
-                "Border Top + Wrap Growth",
-                new Border()
-                    .Width(260)
-                    .Top()
-                    .Padding(8)
-                    .BorderThickness(1)
-                    .CornerRadius(8)
-                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                    .Child(
-                        new TextBlock()
-                            .TextWrapping(TextWrapping.Wrap)
-                            .Text("Top-aligned border should grow with wrapped text. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.")
-                    )
-            ),
-
-            Card(
-                "StackPanel Wrap Growth",
-                new Border()
-                    .Width(260)
-                    .Top()
-                    .Padding(8)
-                    .BorderThickness(1)
-                    .CornerRadius(8)
-                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                    .Child(
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(6)
-                            .Children(
-                                new TextBlock()
-                                    .TextWrapping(TextWrapping.Wrap)
-                                    .Text("First wrapped label. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog."),
-                                new TextBlock()
-                                    .TextWrapping(TextWrapping.Wrap)
-                                    .Text("Second wrapped label. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.")
-                            )
-                    )
-            ),
-
-            Card(
-                "Wrap + Button",
-                new Border()
-                    .Width(260)
-                    .Top()
-                    .Padding(8)
-                    .BorderThickness(1)
-                    .CornerRadius(8)
-                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                    .Child(
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(6)
-                            .Children(
-                                new TextBlock()
-                                    .TextWrapping(TextWrapping.Wrap)
-                                    .Text("Wrapped label followed by a button. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog."),
-                                new Border()
-                                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                                    .Child(
-                                        new TextBlock()
-                                            .Center()
-                                            .Text("After Wrap"))
-                            )
-                    )
-            ),
-
-            Card(
-                "TextTrimming",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new Border()
-                            .Width(200)
-                            .Padding(6)
-                            .BorderThickness(1)
-                            .CornerRadius(6)
-                            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                            .Child(
-                                new TextBlock()
-                                    .Text("No trimming: The quick brown fox jumps over the lazy dog")
-                            ),
-                        new Border()
-                            .Width(200)
-                            .Padding(6)
-                            .BorderThickness(1)
-                            .CornerRadius(6)
-                            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                            .Child(
-                                new TextBlock()
-                                    .Text("CharacterEllipsis: The quick brown fox jumps over the lazy dog")
-                                    .TextTrimming(TextTrimming.CharacterEllipsis)
-                            ),
-                        new Border()
-                            .Width(200)
-                            .Padding(6)
-                            .BorderThickness(1)
-                            .CornerRadius(6)
-                            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                            .Child(
-                                new TextBlock()
-                                    .Text("Ellipsis + Center: The quick brown fox jumps over the lazy dog")
-                                    .TextTrimming(TextTrimming.CharacterEllipsis)
-                                    .TextAlignment(TextAlignment.Center)
-                            ),
-                        new Border()
-                            .Width(200)
-                            .Height(50)
-                            .Padding(6)
-                            .BorderThickness(1)
-                            .CornerRadius(6)
-                            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-                            .Child(
-                                new TextBlock()
-                                    .Text("Wrap + Ellipsis: The quick brown fox jumps over the lazy dog. The quick brown fox jumps.")
-                                    .TextWrapping(TextWrapping.Wrap)
-                                    .TextTrimming(TextTrimming.CharacterEllipsis)
-                            )
-                    )
-            ),
-
-            Card(
-                "ScrollViewer",
-                new ScrollViewer()
-                    .Height(120)
-                    .Width(200)
-                    .VerticalScroll(ScrollMode.Auto)
-                    .HorizontalScroll(ScrollMode.Auto)
-                    .Content(
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(6)
-                            .Children(Enumerable.Range(1, 15).Select(i => new TextBlock().Text($"Line {i} - The quick brown fox jumps over the lazy dog.")).ToArray())
-                    )
-            )
-        );
-    }
 }
 
 partial class GalleryView
@@ -4027,19 +3897,19 @@ partial class GalleryView
             Card(
                 "ListBox (WrapPresenter)",
                 ListBoxWrapPresenterCard()
-            )
+            ),
+
+            Card("ListBox (Search highlight)", ListBoxSearchHighlightDemo()),
+            Card("ItemsControl (WrapPresenter)", ItemsControlWrapPresenterCard()),
+            ChatVariableHeightCard()
         );
     }
 
     private FrameworkElement TreeViewPage() =>
         CardGrid(
             Card("TreeView", TreeViewCard()),
-            Card("TreeView (Async children)", AsyncTreeViewCard()));
-
-    private FrameworkElement ItemsControlPage() =>
-        CardGrid(
-            Card("ItemsControl (WrapPresenter)", ItemsControlWrapPresenterCard()),
-            ChatVariableHeightCard());
+            Card("TreeView (Async children)", AsyncTreeViewCard()),
+            Card("TreeView (Search highlight)", TreeViewSearchHighlightDemo()));
 
     private FrameworkElement ListBoxWrapPresenterCard()
         {
@@ -4704,6 +4574,129 @@ partial class GalleryView
             };
         }
     }
+
+    private FrameworkElement ListBoxSearchHighlightDemo()
+    {
+        string[] controlNames =
+        [
+            "Button", "TextBox", "TextBlock", "TreeView", "ListBox", "ComboBox", "CheckBox",
+            "RadioButton", "Slider", "ProgressBar", "TabControl", "ToolTip", "ContextMenu",
+            "ScrollViewer", "MenuBar", "ToggleSwitch", "NumericUpDown", "ColorPicker"
+        ];
+        var listBox = new ListBox()
+            .Height(230)
+            .Items(controlNames);
+
+        return SearchHighlightDemo(listBox, highlight =>
+            listBox.ItemTemplate(new DelegateTemplate<string>(
+                build: ctx => new TextBlock().Register(ctx, "Text").CenterVertical(),
+                bind: (_, item, _, ctx) => highlight(ctx.Get<TextBlock>("Text"), item ?? ""))));
+    }
+
+    private FrameworkElement TreeViewSearchHighlightDemo()
+    {
+        var treeItems = new[]
+        {
+            new TreeViewNode("Controls",
+            [
+                new TreeViewNode("Button.cs"),
+                new TreeViewNode("TextBox.cs"),
+                new TreeViewNode("TreeView.cs"),
+                new TreeViewNode("ListBox.cs")
+            ]),
+            new TreeViewNode("Text",
+            [
+                new TreeViewNode("TextServices.cs"),
+                new TreeViewNode("ManagedTextEngine.cs"),
+                new TreeViewNode("ManagedTextRenderContext.cs"),
+                new TreeViewNode("TextViewLayout.cs")
+            ])
+        };
+        var treeView = new TreeView()
+            .Height(230)
+            .ItemsSource(treeItems);
+
+        var demo = SearchHighlightDemo(treeView, highlight =>
+            treeView.ItemTemplate<TreeViewNode>(
+                build: ctx => new TextBlock().Register(ctx, "Text").CenterVertical(),
+                bind: (_, item, _, ctx) => highlight(ctx.Get<TextBlock>("Text"), item.Text)));
+
+        foreach (var node in treeItems)
+        {
+            treeView.Expand(node);
+        }
+
+        return demo;
+    }
+
+    /// <summary>Hosts items under a search box; applyTemplate installs a template whose bind calls the given highlighter.</summary>
+    private static FrameworkElement SearchHighlightDemo(Element items, Action<Action<TextBlock, string>> applyTemplate)
+    {
+        string query = string.Empty;
+        var highlightColor = Color.FromArgb(110, 255, 184, 0);
+
+        // Paint spans repaint only, so the layout and measured width never change while typing.
+        void ApplyHighlight(TextBlock target, string text)
+        {
+            if (query.Length == 0 || !text.Contains(query, StringComparison.OrdinalIgnoreCase))
+            {
+                target.Text = text;
+                return;
+            }
+            target.Inlines.Clear();
+            int position = 0;
+            while (position < text.Length)
+            {
+                int match = text.IndexOf(query, position, StringComparison.OrdinalIgnoreCase);
+                if (match < 0)
+                {
+                    break;
+                }
+                if (match > position)
+                {
+                    target.Inlines.Add(new Run(text[position..match]));
+                }
+                target.Inlines.Add(new Run(text.Substring(match, query.Length)).Background(highlightColor));
+                position = match + query.Length;
+            }
+            if (position < text.Length)
+            {
+                target.Inlines.Add(new Run(text[position..]));
+            }
+        }
+
+        var description = new TextBlock()
+                   .DockBottom()
+                   .FontSize(ThemeFontSize.Small)
+                   .TextWrapping(TextWrapping.Wrap)
+                   .Text("Run.Background becomes a paint span behind the matched glyphs; items stay plain TextBlocks.");
+
+        // A fresh template instance is the public rebind trigger: the setter rebuilds realized
+        // containers while selection and expansion state stay on the control.
+        void ApplyTemplates()
+        {
+            applyTemplate(ApplyHighlight);
+            ApplyHighlight(description, description.Text);
+        }
+
+        ApplyTemplates();
+
+        var search = new TextBox()
+            .Placeholder("Type to highlight matches, e.g. box")
+            .OnTextChanged(text =>
+            {
+                query = text;
+                ApplyTemplates();
+            });
+
+        return new DockPanel()
+            .Width(260)
+            .Spacing(8)
+            .Children(
+                search.DockTop(),
+                description,
+                items);
+    }
 }
 
 sealed record DemoUser(int Id, string Name, string Role, bool IsOnline);
@@ -4719,6 +4712,193 @@ sealed class LazyTreeNode(string name, int depth, bool canLoadChildren)
     public bool IsLoaded { get; set; }
     public ObservableValue<bool> IsLoading { get; } = new(false);
     public CancellationTokenSource? LoadCancellation { get; set; }
+}
+
+partial class GalleryView
+{
+    private FrameworkElement MarkupTextPage()
+    {
+        const string INLINE_STYLES =
+            "Plain, <b>bold</b>, <i>italic</i>, <u>underline</u>, " +
+            "<s>strikethrough</s>, and <code>inline_code()</code>.";
+        const string NESTED_STYLES =
+            "<strong>Bold <em>and italic <u>with underline</u></em> back to bold</strong> back to normal.";
+        const string FONT_STYLES =
+            "Default | <font font='Times New Roman'>Times New Roman</font> | " +
+            "<tt>monospace</tt><br>" +
+            "<small>small</small> | normal | <big>big</big> | " +
+            "<span size='20px'>20 DIP</span> | <span size='1.5x'>1.5x</span><br>" +
+            "<span weight='300'>Light 300</span> | <span weight='600'>SemiBold 600</span> | " +
+            "<span weight='900'>Black 900</span>";
+        const string COLOR_FORMATS =
+            "<span color='#D13438'>#RRGGBB</span>  " +
+            "<span color='rgb(16, 124, 16)'>rgb(16,124,16)</span>  " +
+            "<span color='#CC0078D4'>#AARRGGBB</span><br>" +
+            "<span background='#403B82F6'>alpha background</span>  " +
+            "<span color='red'><span color='not-a-color'>invalid inherits red</span></span>";
+        const string NAMED_COLORS =
+            "<span background='black' color='white'> black </span> " +
+            "<span background='silver' color='black'> silver </span> " +
+            "<span background='gray' color='white'> gray </span> " +
+            "<span background='white' color='black'> white </span><br>" +
+            "<span background='maroon' color='white'> maroon </span> " +
+            "<span background='red' color='white'> red </span> " +
+            "<span background='purple' color='white'> purple </span> " +
+            "<span background='fuchsia' color='black'> fuchsia </span><br>" +
+            "<span background='green' color='white'> green </span> " +
+            "<span background='lime' color='black'> lime </span> " +
+            "<span background='olive' color='white'> olive </span> " +
+            "<span background='yellow' color='black'> yellow </span><br>" +
+            "<span background='navy' color='white'> navy </span> " +
+            "<span background='blue' color='white'> blue </span> " +
+            "<span background='teal' color='white'> teal </span> " +
+            "<span background='aqua' color='black'> aqua </span>";
+        const string ATTRIBUTE_STYLES =
+            "<span font='Georgia' size='18' weight='700' color='#7A3E9D' " +
+            "background='#207A3E9D' underline strikethrough>Combined attributes</span><br>" +
+            "<u>Outer underline <span underline='false' color='blue'>removed inside</span> restored outside</u>";
+        const string ENTITIES =
+            "&lt;b&gt; stays literal, &amp; &quot;quotes&quot; &apos;apostrophes&apos;<br>" +
+            "Decimal &#9731;, hexadecimal &#x1F642;, unknown &mew;";
+        const string MALFORMED =
+            "Unknown tags: <badge level='2'>kept as text</badge><br>" +
+            "Unmatched closing: before </b> after<br>" +
+            "Crossed closing: <b>bold <i>both</b> plain, then </i> is literal<br>" +
+            "Unclosed opening: <u>underline continues to the end";
+        const string WRAPPING =
+            "A single logical surface can wrap while <b>bold text remains bold across line boundaries</b>, " +
+            "<span background='#403B82F6'>background paint follows the wrapped range</span>, and " +
+            "<code>code_with_a_long_identifier()</code> participates in the same text layout.";
+        const string SCRIPTS =
+            "E = mc<sup>2</sup> | H<sub>2</sub>O | x<sup>n<sup>2</sup></sup> | " +
+            "a<sub>i<sub>j</sub></sub> | e<sup>i<sub>k</sub></sup><br>" +
+            "<u>underline x<sup>2</sup></u> | <s>strike H<sub>2</sub>O</s> | " +
+            "<span background='#403B82F6'>background x<sup>2</sup></span> | <code>x<sup>2</sup></code><br>" +
+            "<span size='24px'>24 DIP<sup>sup</sup><sub>sub</sub></span> | " +
+            "<big>big<sup>sup</sup></big> | <sup>outer <span size='20px'>20 DIP</span> outer</sup> | " +
+            "<span font='Georgia'>Georgia<sup>2</sup></span> | 한글<sup>위</sup><sub>아래</sub>";
+
+        var liveMarkup = new MarkupTextBlock
+            {
+                Width = 620,
+                FontSize = 16,
+                TextWrapping = TextWrapping.Wrap
+            }
+            .Markup("Runtime value: <b>bold</b>");
+        var decodedText = new TextBlock()
+            .FontFamily("Consolas")
+            .FontSize(ThemeFontSize.Small);
+        decodedText.SetBinding(TextBlock.TextProperty, liveMarkup, MarkupTextBlock.TextProperty);
+
+        return CardGrid(
+            Card("Basic Inline Styles", MarkupExample(INLINE_STYLES), minWidth: 650),
+            Card("Nested Styles and Restoration", MarkupExample(NESTED_STYLES), minWidth: 650),
+            Card("Combined Attributes", MarkupExample(ATTRIBUTE_STYLES), minWidth: 650),
+
+            Card(
+                "Font, Size, and Weight",
+                MarkupExample(FONT_STYLES, options: new TextMarkupOptions("Courier New")),
+                minWidth: 650),
+
+            Card("Fixed Color Formats", MarkupExample(COLOR_FORMATS), minWidth: 650),
+            Card("Named Colors", MarkupExample(NAMED_COLORS), minWidth: 650),
+            Card("Entities and Line Breaks", MarkupExample(ENTITIES), minWidth: 650),
+
+            Card(
+                "Wrapping",
+                MarkupExample(WRAPPING, resultWidth: 430),
+                minWidth: 650),
+
+            Card("Superscript and Subscript", MarkupExample(SCRIPTS), minWidth: 650),
+
+            Card(
+                "Run Baseline Offset",
+                new TextBlock
+                    {
+                        FontSize = 16,
+                        TextWrapping = TextWrapping.Wrap
+                    }
+                    .Width(620)
+                    .Inlines(
+                        new Run("Baseline "),
+                        new Run("+6").BaselineOffset(6).Foreground(Color.FromHex("#D83B01")),
+                        new Run(" | "),
+                        new Run("-4").BaselineOffset(-4).Foreground(Color.FromHex("#107C10")),
+                        new Run(" | "),
+                        new Run("+3 underline").BaselineOffset(3).Underline(),
+                        new Run(" | "),
+                        new Run("-3 strike").BaselineOffset(-3).Strikethrough(),
+                        new Run(" | "),
+                        new Run("+1.5 fraction").BaselineOffset(1.5),
+                        new Run(" | "),
+                        new Run("22 DIP +8").FontSize(22).BaselineOffset(8),
+                        new Run(" | "),
+                        new Run("Consolas -5").FontFamily("Consolas").BaselineOffset(-5),
+                        new Run(" | "),
+                        new Run("wrapped text keeps each run on its own shifted baseline across line breaks").BaselineOffset(4)),
+                minWidth: 650),
+
+            Card("Malformed and Unknown Markup", MarkupExample(MALFORMED), minWidth: 650),
+
+            Card(
+                "Runtime Markup and Read-only Text",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(10)
+                    .Children(
+                        liveMarkup,
+                        new StackPanel()
+                            .Horizontal()
+                            .Spacing(8)
+                            .Children(
+                                new Button()
+                                    .Content("Nested")
+                                    .OnClick(() => liveMarkup.Markup = "Runtime: <b>bold <i>italic</i></b>"),
+                                new Button()
+                                    .Content("Color")
+                                    .OnClick(() => liveMarkup.Markup = "Runtime: <span color='aqua' background='navy'>fixed colors</span>"),
+                                new Button()
+                                    .Content("Malformed")
+                                    .OnClick(() => liveMarkup.Markup = "Runtime: <b>unclosed")),
+                        new TextBlock()
+                            .Text("Decoded Text")
+                            .FontSize(ThemeFontSize.Small)
+                            .SemiBold(),
+                        decodedText),
+                minWidth: 650)
+        );
+    }
+
+    private FrameworkElement MarkupExample(
+        string markup,
+        double resultWidth = 620,
+        TextMarkupOptions? options = null)
+        => new StackPanel()
+            .Vertical()
+            .Spacing(8)
+            .Children(
+                new TextBlock()
+                    .Width(620)
+                    .FontFamily("Consolas")
+                    .FontSize(ThemeFontSize.Small)
+                    .TextWrapping(TextWrapping.Wrap)
+                    .Text(markup),
+                new Border()
+                    .Width(resultWidth)
+                    .Padding(12)
+                    .BorderThickness(1)
+                    .CornerRadius(6)
+                    .WithTheme((theme, border) => border
+                        .Background(theme.Palette.ContainerBackground)
+                        .BorderBrush(theme.Palette.ControlBorder))
+                    .Child(
+                        new MarkupTextBlock
+                            {
+                                FontSize = 16,
+                                TextWrapping = TextWrapping.Wrap,
+                                Options = options ?? TextMarkupOptions.Default
+                            }
+                            .Markup(markup)));
 }
 
 partial class GalleryView
@@ -4802,6 +4982,321 @@ partial class GalleryView
                     )
             )
         );
+}
+
+partial class GalleryView
+{
+    private FrameworkElement MenuPage()
+    {
+        var contextMenu = new ContextMenu()
+            .Item("Cut")
+            .Item("Copy")
+            .Item("Paste")
+            .Separator()
+            .Item("Select All");
+
+        return CardGrid(
+            MenusCard(),
+
+            Card(
+                "ContextMenu",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new Button()
+                            .Content("Right-click me")
+                            .ContextMenu(
+                                new ContextMenu()
+                                    .Item("Copy")
+                                    .Item("Paste")
+                                    .Separator()
+                                    .SubMenu("Transform", new ContextMenu()
+                                        .Item("Uppercase")
+                                        .Item("Lowercase")
+                                        .Separator()
+                                        .SubMenu("More", new ContextMenu()
+                                            .Item("Trim")
+                                            .Item("Normalize")
+                                            .Item("Sort"))
+                                    )
+                                    .SubMenu("View", new ContextMenu()
+                                        .Item("Zoom In")
+                                        .Item("Zoom Out")
+                                        .Item("Reset Zoom")
+                                    )
+                                    .Separator()
+                                    .Item("Disabled", isEnabled: false)
+                            ),
+
+                        new Button()
+                            .Content("Right-click: opens below")
+                            .ContextMenu(
+                                new ContextMenu { Placement = MenuPlacement.Below, PlacementOffset = new Point(0, 2) }
+                                    .Item("First")
+                                    .Item("Second")
+                                    .Item("Third")
+                            )
+                     )
+             ),
+
+            Card(
+                "ContextMenu font isolation",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new TextBlock()
+                            .Text("Right-click the button. It renders at 22pt, but the context menu stays in the theme font.")
+                            .TextWrapping(TextWrapping.Wrap)
+                            .FontSize(ThemeFontSize.Small),
+                        new Button()
+                            .Content("Right-click me (22pt)")
+                            .FontSize(22)
+                            .ContextMenu(contextMenu)
+                            .HorizontalAlignment(HorizontalAlignment.Left)
+                    )
+            ),
+
+            Card(
+                "MenuBar dropdown font",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new TextBlock()
+                            .Text("Both menu bars are identical. The second sits in a FontSize 16 container. Open the menus: the dropdown follows the ambient font.")
+                            .TextWrapping(TextWrapping.Wrap)
+                            .FontSize(ThemeFontSize.Small),
+                        new TextBlock().Text("Default (theme font):").FontSize(ThemeFontSize.Small),
+                        MenuDemoBar(),
+                        new TextBlock().Text("Inside a FontSize 16 container:").FontSize(ThemeFontSize.Small),
+                        new Border()
+                            .FontSize(16)
+                            .Child(MenuDemoBar())
+                    )
+            ),
+
+            AccessKeyCard()
+        );
+    }
+
+    private FrameworkElement MenusCard()
+    {
+        var copyPresentation = new ObservableValue<string>("_Copy");
+        var shortcutLog = new TextBlock()
+            .FontSize(ThemeFontSize.Small)
+            .TextWrapping(TextWrapping.Wrap)
+            .Text("Focus the TextBox inside the highlighted scope, then press a shortcut.");
+
+        void OnShortcut(string action) => shortcutLog.Text = $"[{DateTime.Now:HH:mm:ss.fff}] {action}";
+
+        var inputScope = new Border()
+            .BorderThickness(2)
+            .CornerRadius(6)
+            .Padding(8)
+            .WithTheme((theme, border) => border.BorderBrush(theme.Palette.Accent));
+
+        var scopeState = new TextBlock().FontSize(ThemeFontSize.Small).Bold();
+        scopeState.Bind(
+            TextBlock.TextProperty,
+            inputScope,
+            UIElement.IsFocusWithinProperty,
+            active => active
+                ? "Gallery local InputMap scope — ACTIVE"
+                : "Gallery local InputMap scope — INACTIVE");
+
+        inputScope.Child(
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    scopeState,
+                    CreateMenu(window.Commands, inputScope.InputMap, OnShortcut, copyPresentation),
+                    new TextBlock()
+                        .FontSize(ThemeFontSize.Small)
+                        .TextWrapping(TextWrapping.Wrap)
+                        .Text("The menu handlers live in Window.Commands. Shortcut gestures live only in this bordered InputMap scope."),
+                    new Button()
+                        .Content("Toggle Copy presentation")
+                        .OnClick(() => copyPresentation.Value =
+                            copyPresentation.Value == "_Copy" ? "복사(_C)" : "_Copy"),
+                    new TextBox()
+                        .Placeholder("Focus here: Ctrl/Cmd + N, S, numpad + or -"),
+                    shortcutLog));
+
+        return Card(
+                "MenuBar (Command scope vs InputMap scope)",
+                new StackPanel()
+                    .Width(290)
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new TextBlock()
+                            .FontSize(ThemeFontSize.Small)
+                            .TextWrapping(TextWrapping.Wrap)
+                            .Text("Focus inside the border to activate its local shortcuts. Move focus to NavigationView or another card to leave the scope."),
+                        inputScope
+                    )
+            );
+    }
+
+    public static MenuBar CreateMenu(Element commandHost, Action<string> onShortcut)
+        => CreateMenu(commandHost.Commands, commandHost.InputMap, onShortcut, copyPresentation: null);
+
+    private static MenuBar CreateMenu(
+        CommandScope commands,
+        InputMap inputMap,
+        Action<string> onShortcut,
+        ObservableValue<string>? copyPresentation)
+    {
+        var p = ModifierKeys.Primary;
+        IconTemplate MenuIcon(string name)
+        {
+            // Looked up when the menu is built rather than captured here, so a late-arriving icon
+            // dictionary still reaches it: menus are created when the user opens them.
+            return new IconTemplate(size =>
+            {
+                var all = IconResource.GetAll(Resources.Icons.Value);
+                var entry = Array.Find(all, x => x.Name == name);
+                var geometry = PathGeometry.Parse(entry?.PathData ?? FALLBACK_ICON);
+                geometry.Freeze();
+
+                var icon = new PathShape()
+                    .Data(geometry)
+                    .Size(size.Dip)
+                    .Stretch(Stretch.Uniform);
+                icon.Bind(Shape.FillProperty, icon, TextElement.ForegroundProperty,
+                    (Color color) => (Brush)new SolidColorBrush(color));
+                return icon;
+            });
+        }
+
+        Command MenuCommand(string id, string text, string message, KeyGesture? gesture = null, IconTemplate? icon = null)
+        {
+            var command = new Command($"gallery.menu.{id}", text, icon);
+            commands.Register(command, () => onShortcut(message));
+            if (gesture is KeyGesture keyGesture)
+                inputMap.Map(command, keyGesture);
+            return command;
+        }
+
+        var fileMenu = new Menu()
+            .Item(MenuCommand("file.new", "_New", "File > New document created", new KeyGesture(Key.N, p)))
+            .Item(MenuCommand("file.open", "_Open...", "File > Open file dialog", new KeyGesture(Key.O, p)))
+            .Item(MenuCommand("file.save", "_Save", "File > Document saved", new KeyGesture(Key.S, p)))
+            .Item(MenuCommand("file.saveAs", "Save _As...", "File > Save As dialog"))
+            .Separator()
+            .SubMenu("_Export", new Menu()
+                .Item(MenuCommand("file.export.png", "_PNG", "File > Export > PNG format"))
+                .Item(MenuCommand("file.export.jpeg", "_JPEG", "File > Export > JPEG format"))
+                .SubMenu("_Advanced", new Menu()
+                    .Item(MenuCommand("file.export.metadata", "With _metadata", "File > Export > Advanced > Include metadata"))
+                    .Item(MenuCommand("file.export.optimized", "_Optimized", "File > Export > Advanced > Optimized output"))
+                )
+            )
+            .Separator()
+            .Item(MenuCommand("file.exit", "E_xit", "File > Exit application"));
+
+        var copyCommand = MenuCommand(
+            "edit.copy",
+            "_Copy",
+            "Edit > Copy to clipboard",
+            new KeyGesture(Key.C, p),
+            MenuIcon("copy_regular"));
+        if (copyPresentation != null)
+        {
+            copyCommand.BindText(copyPresentation);
+        }
+
+        var editMenu = new Menu()
+            .Item(MenuCommand("edit.undo", "_Undo", "Edit > Undo last action", new KeyGesture(Key.Z, p)))
+            .Item(MenuCommand("edit.redo", "_Redo", "Edit > Redo last action", new KeyGesture(Key.Y, p)))
+            .Separator()
+            .Item(MenuCommand("edit.cut", "Cu_t", "Edit > Cut to clipboard", new KeyGesture(Key.X, p), MenuIcon("cut_regular")))
+            .Item(copyCommand)
+            .Item(MenuCommand("edit.paste", "_Paste", "Edit > Paste from clipboard", new KeyGesture(Key.V, p), MenuIcon("clipboard_paste_regular")))
+            .Separator()
+            .SubMenu("_Find", new Menu()
+                .Item(MenuCommand("edit.find", "_Find...", "Edit > Find > Open find dialog", new KeyGesture(Key.F, p)))
+                .Item(MenuCommand("edit.findNext", "Find _Next", "Edit > Find > Find next occurrence", new KeyGesture(Key.F3)))
+                .Item(MenuCommand("edit.replace", "_Replace...", "Edit > Find > Open replace dialog", new KeyGesture(Key.H, p)))
+            );
+
+        var viewMenu = new Menu()
+            .Item(MenuCommand("view.toggleSidebar", "_Toggle Sidebar", "View > Toggle sidebar visibility"))
+            .SubMenu("_Zoom", new Menu()
+                .Item(MenuCommand("view.zoomIn", "Zoom _In", "View > Zoom > Zoom in", new KeyGesture(Key.Add, p)))
+                .Item(MenuCommand("view.zoomOut", "Zoom _Out", "View > Zoom > Zoom out", new KeyGesture(Key.Subtract, p)))
+                .Item(MenuCommand("view.zoomReset", "_Reset", "View > Zoom > Reset to 100%", new KeyGesture(Key.D0, p)))
+            );
+        var menu = new MenuBar()
+                            .Height(28)
+                            .Items(
+                                new MenuItem("_File").Menu(fileMenu),
+                                new MenuItem("_Edit").Menu(editMenu),
+                                new MenuItem("_View").Menu(viewMenu)
+                            );
+        return menu;
+    }
+
+    private MenuBar MenuDemoBar()
+    {
+        var fileMenu = new Menu()
+            .Item("New")
+            .Item("Open")
+            .Separator()
+            .SubMenu("Export", new Menu()
+                .Item("PNG")
+                .Item("JPEG"));
+
+        var editMenu = new Menu()
+            .Item("Undo")
+            .Item("Redo");
+
+        // No fixed Height: the bar auto-sizes to the (inherited) font so the font-size effect shows.
+        return new MenuBar()
+            .Items(
+                new MenuItem("File").Menu(fileMenu),
+                new MenuItem("Edit").Menu(editMenu)
+            );
+    }
+
+    private FrameworkElement AccessKeyCard()
+    {
+        var nameBox = new TextBox().Placeholder("Name").Width(160);
+
+        return Card(
+            "AccessKey & Shortcuts",
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    new TextBlock().Text("Press Alt to show access key underlines (Windows/Linux).").FontSize(ThemeFontSize.Small),
+
+                    new StackPanel().Horizontal().Spacing(8).Children(
+                        new Label().CenterVertical().Text("_Name:").AccessKeyTarget(nameBox),
+                        nameBox
+                    ),
+
+                    new StackPanel().Horizontal().Spacing(8).Children(
+                        new Button().Content("_OK"),
+                        new Button().Content("_Cancel")
+                    ),
+
+                    new StackPanel().Vertical().Spacing(4).Children(
+                        new CheckBox().Content("_Remember me"),
+                        new CheckBox().Content("_Auto-save")
+                    ),
+
+                    new StackPanel().Vertical().Spacing(4).Children(
+                        new RadioButton().Content("_Small").GroupName("size"),
+                        new RadioButton().Content("_Medium").GroupName("size"),
+                        new RadioButton().Content("_Large").GroupName("size")
+                    )
+                )
+        );
+    }
 }
 
 partial class GalleryView
@@ -4935,7 +5430,125 @@ partial class GalleryView
 
 partial class GalleryView
 {
-    private FrameworkElement NavigationViewPage()
+    private FrameworkElement NavigationPage()
+    {
+        FrameworkElement TabPlacementSample(
+            string title,
+            TabPlacement placement,
+            Rotation? headerRotation = null)
+        {
+            Element Header(string text)
+            {
+                var label = new TextBlock().Text(text);
+                return headerRotation is { } rotation
+                    ? new RotationDecorator()
+                        .Rotation(rotation)
+                        .Child(label)
+                    : label;
+            }
+
+            return new StackPanel()
+                .Vertical()
+                .Spacing(4)
+                .Children(
+                    new TextBlock()
+                        .Text(title)
+                        .FontSize(ThemeFontSize.Small),
+                    new TabControl()
+                        .Height(headerRotation is null ? 140 : 180)
+                        .TabPlacement(placement)
+                        .TabItems(
+                            new TabItem()
+                                .Header(Header("Home"))
+                                .Content(
+                                    new TextBlock()
+                                        .Text("Home tab content")
+                                ),
+
+                            new TabItem()
+                                .Header(Header("Settings"))
+                                .Content(
+                                    new TextBlock()
+                                        .Text("Settings tab content")
+                                ),
+
+                            new TabItem()
+                                .Header(Header("About"))
+                                .Content(
+                                    new TextBlock()
+                                        .Text("About tab content")
+                                )
+                        )
+                );
+        }
+
+        return CardGrid(
+            NavigationViewCard(),
+
+            Card(
+                "TabControl",
+                new UniformGrid()
+                    .Columns(2)
+                    .Spacing(8)
+                    .Children(
+                        TabPlacementSample("Top", TabPlacement.Top),
+                        TabPlacementSample("Bottom", TabPlacement.Bottom),
+                        TabPlacementSample("Left", TabPlacement.Left),
+                        TabPlacementSample("Right", TabPlacement.Right)
+                    ),
+                minWidth: 700
+            ),
+
+            Card(
+                "TabControl Overflow",
+                new TabControl()
+                    .Width(260)
+                    .Height(140)
+                    .TabItems(
+                        new TabItem()
+                            .Header("Overview")
+                            .Content(new TextBlock().Text("Overview content")),
+                        new TabItem()
+                            .Header("Rendering Pipeline")
+                            .Content(new TextBlock().Text("Rendering Pipeline content")),
+                        new TabItem()
+                            .Header("Input Routing")
+                            .Content(new TextBlock().Text("Input Routing content")),
+                        new TabItem()
+                            .Header("Property Binding")
+                            .Content(new TextBlock().Text("Property Binding content")),
+                        new TabItem()
+                            .Header("Disabled Diagnostics")
+                            .Content(new TextBlock().Text("Disabled Diagnostics content"))
+                            .IsEnabled(false),
+                        new TabItem()
+                            .Header("Final Review")
+                            .Content(new TextBlock().Text("Final Review content")))
+                    .SelectedIndex(5),
+                minWidth: 340
+            ),
+
+            Card(
+                "TabControl + RotationDecorator",
+                new UniformGrid()
+                    .Columns(2)
+                    .Spacing(8)
+                    .Children(
+                        TabPlacementSample(
+                            "Left",
+                            TabPlacement.Left,
+                            Rotation.CounterClockwise90),
+                        TabPlacementSample(
+                            "Right",
+                            TabPlacement.Right,
+                            Rotation.Clockwise90)
+                    ),
+                minWidth: 700
+            )
+        );
+    }
+
+    private FrameworkElement NavigationViewCard()
     {
         var entries = new[]
         {
@@ -4977,7 +5590,7 @@ partial class GalleryView
         navigation.SelectedIndex = 0;
 
         return Card(
-            "NavigationView / Element icons",
+            "NavigationView (Element icons)",
             new StackPanel()
                 .Vertical()
                 .Spacing(8)
@@ -5012,9 +5625,6 @@ partial class GalleryView
 {
     private FrameworkElement OverlayPage()
     {
-        ConfettiOverlay confetti = new();
-        window.OverlayLayer.Add(confetti);
-
         return CardGrid(
             Card(
                 "Toast",
@@ -5033,6 +5643,7 @@ partial class GalleryView
                             .OnClick(() => window.ShowToast($"Toast at {DateTime.Now:HH:mm:ss}"))
                     )
             ),
+
             Card(
                 "BusyIndicator",
                 new StackPanel()
@@ -5047,46 +5658,32 @@ partial class GalleryView
                             .OnClick(() => ShowBusyDemo(cancellable: true))
                     )
             ),
-            Card("Confetti",
+
+            Card(
+                "ToolTip",
+                new Button()
+                    .Content("Hover me")
+                    .ToolTip("ToolTip text")
+            ),
+
+            Card(
+                "Tooltip font isolation",
                 new StackPanel()
                     .Vertical()
                     .Spacing(8)
                     .Children(
                         new TextBlock()
-                            .Text("Port of WpfConfetti by caefale")
-                            .WithTheme((t, c) => c.Foreground(t.Palette.DisabledText))
+                            .Text("The button is 20pt Consolas. Hover it: the tooltip keeps the theme font, not the button's font. A popup no longer inherits the triggering control's font.")
+                            .TextWrapping(TextWrapping.Wrap)
                             .FontSize(ThemeFontSize.Small),
-                        new Grid()
-                            .Columns("*,*")
-                            .Rows("Auto,Auto,Auto,Auto")
-                            .Spacing(4)
-                            .Children(
-                                new Button()
-                                    .Content("Burst")
-                                    .OnClick(() => confetti?.Burst())
-                                    .ColumnSpan(2),
-                                new Button()
-                                    .Content("Start Cannons")
-                                    .OnClick(() => confetti?.Cannons())
-                                    .Row(1),
-                                new Button()
-                                    .Content("Stop Cannons")
-                                    .OnClick(() => confetti?.StopCannons())
-                                    .Row(1).Column(1),
-                                new Button()
-                                    .Content("Start Rain")
-                                    .OnClick(() => confetti?.StartRain())
-                                    .Row(2),
-                                new Button()
-                                    .Content("Stop Rain")
-                                    .OnClick(() => confetti?.StopRain())
-                                    .Row(2).Column(1),
-                                new Button()
-                                    .Content("Clear All")
-                                    .OnClick(() => confetti?.Clear())
-                                    .Row(3).ColumnSpan(2)
-                            )
-                    ))
+                        new Button()
+                            .Content("Hover me (20pt / Consolas)")
+                            .FontSize(20)
+                            .FontFamily("Consolas")
+                            .ToolTip("This tooltip stays in the theme font.")
+                            .HorizontalAlignment(HorizontalAlignment.Left)
+                    )
+            )
         );
     }
 
@@ -5245,6 +5842,30 @@ partial class GalleryView
                 minWidth: 320
             ),
 
+            Card(
+                "StackPanel Wrap Growth",
+                new Border()
+                    .Width(260)
+                    .Top()
+                    .Padding(8)
+                    .BorderThickness(1)
+                    .CornerRadius(8)
+                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                    .Child(
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(6)
+                            .Children(
+                                new TextBlock()
+                                    .TextWrapping(TextWrapping.Wrap)
+                                    .Text("First wrapped label. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog."),
+                                new TextBlock()
+                                    .TextWrapping(TextWrapping.Wrap)
+                                    .Text("Second wrapped label. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog.")
+                            )
+                    )
+            ),
+
             PanelCard(
                 "SplitPanel",
                 new SplitPanel()
@@ -5300,194 +5921,19 @@ partial class GalleryView
     }
 }
 
-/// <summary>
-/// The images and icon dictionary the pages draw, held as values a host fills. This app reads them
-/// from disk before the window shows; the file-based app downloads them and they arrive later.
-/// </summary>
-sealed class GalleryResources
-{
-    public ObservableValue<IImageSource?> Logo { get; } = new(null);
-
-    public ObservableValue<IImageSource?> April { get; } = new(null);
-
-    public ObservableValue<IImageSource?> Soonduk { get; } = new(null);
-
-    public ObservableValue<IImageSource?> FolderOpen { get; } = new(null);
-
-    public ObservableValue<IImageSource?> FolderClosed { get; } = new(null);
-
-    public ObservableValue<IImageSource?> Document { get; } = new(null);
-
-    /// <summary>The icon dictionary's XAML, or null until it arrives.</summary>
-    public ObservableValue<string?> Icons { get; } = new(null);
-
-    /// <summary>File names the hosts fetch, in the order the pages need them.</summary>
-    public static string[] FileNames { get; } =
-    [
-        "logo_h-480.png",
-        "april.jpg",
-        "soonduk.jpg",
-        "folder-horizontal-open.png",
-        "folder-horizontal.png",
-        "document.png",
-        "Icons.xaml",
-    ];
-
-    /// <summary>
-    /// Routes one fetched file to the value that holds it, so a host only decides where bytes come
-    /// from. Unknown names are ignored rather than throwing: a host may carry extra files.
-    /// </summary>
-    public void Apply(string fileName, byte[] content)
-    {
-        switch (fileName)
-        {
-            case "logo_h-480.png": Logo.Value = ImageSource.FromBytes(content); break;
-            case "april.jpg": April.Value = ImageSource.FromBytes(content); break;
-            case "soonduk.jpg": Soonduk.Value = ImageSource.FromBytes(content); break;
-            case "folder-horizontal-open.png": FolderOpen.Value = ImageSource.FromBytes(content); break;
-            case "folder-horizontal.png": FolderClosed.Value = ImageSource.FromBytes(content); break;
-            case "document.png": Document.Value = ImageSource.FromBytes(content); break;
-            case "Icons.xaml": Icons.Value = System.Text.Encoding.UTF8.GetString(content); break;
-        }
-    }
-}
-
 partial class GalleryView
 {
-    /// <summary>The resources the pages bind to. The host fills them; excluded from fba generation.</summary>
-    public static GalleryResources Resources { get; } = new();
-}
-
-partial class GalleryView
-{
-    private FrameworkElement SelectionPage()
+    private FrameworkElement PickersPage()
     {
         var items = Enumerable
             .Range(1, 5)
             .Select(i => $"Item {i}")
             .Append("Item Long Long Long Long Long Long Long")
             .ToArray();
-            
+
         Calendar calendar = null!;
 
-        var doneEnabled = new ObservableValue<bool>(false);
-
-        FrameworkElement TabPlacementSample(
-            string title,
-            TabPlacement placement,
-            Rotation? headerRotation = null)
-        {
-            Element Header(string text)
-            {
-                var label = new TextBlock().Text(text);
-                return headerRotation is { } rotation
-                    ? new RotationDecorator()
-                        .Rotation(rotation)
-                        .Child(label)
-                    : label;
-            }
-
-            return new StackPanel()
-                .Vertical()
-                .Spacing(4)
-                .Children(
-                    new TextBlock()
-                        .Text(title)
-                        .FontSize(ThemeFontSize.Small),
-                    new TabControl()
-                        .Height(headerRotation is null ? 140 : 180)
-                        .TabPlacement(placement)
-                        .TabItems(
-                            new TabItem()
-                                .Header(Header("Home"))
-                                .Content(
-                                    new TextBlock()
-                                        .Text("Home tab content")
-                                ),
-
-                            new TabItem()
-                                .Header(Header("Settings"))
-                                .Content(
-                                    new TextBlock()
-                                        .Text("Settings tab content")
-                                ),
-
-                            new TabItem()
-                                .Header(Header("About"))
-                                .Content(
-                                    new TextBlock()
-                                        .Text("About tab content")
-                                )
-                        )
-                );
-        }
-
         return CardGrid(
-            Card(
-                "CheckBox",
-                new Grid()
-                    .Columns("Auto,Auto")
-                    .Rows("Auto,Auto,Auto")
-                    .Spacing(8)
-                    .Children(
-                        new CheckBox()
-                            .Content("CheckBox"),
-
-                        new CheckBox()
-                            .Content("Disabled")
-                            .Disable(),
-
-                        new CheckBox()
-                            .Content("Checked")
-                            .IsChecked(true),
-
-                        new CheckBox()
-                            .Content("Disabled (Checked)")
-                            .IsChecked(true)
-                            .Disable(),
-
-                        new CheckBox()
-                            .Content("Three-state")
-                            .IsThreeState(true)
-                            .IsChecked(null),
-
-                        new CheckBox()
-                            .Content("Disabled (Indeterminate)")
-                            .IsThreeState(true)
-                            .IsChecked(null)
-                            .Disable()
-                    )
-            ),
-
-            Card(
-                "RadioButton",
-                new Grid()
-                    .Columns("Auto,Auto")
-                    .Rows("Auto,Auto")
-                    .Spacing(8)
-                    .Children(
-                        new RadioButton()
-                            .Content("A")
-                            .GroupName("g"),
-
-                        new RadioButton()
-                            .Content("C (Disabled)")
-                            .GroupName("g2")
-                            .Disable(),
-
-                        new RadioButton()
-                            .Content("B")
-                            .GroupName("g")
-                            .IsChecked(true),
-
-                        new RadioButton()
-                            .Content("Disabled (Checked)")
-                            .GroupName("g2")
-                            .IsChecked(true)
-                            .Disable()
-                    )
-            ),
-
             Card(
                 "ComboBox",
                 new StackPanel()
@@ -5515,106 +5961,6 @@ partial class GalleryView
                 "ComboBox (SelectedItemTemplate)",
                 ComboBoxSelectedItemTemplateSample(),
                 minWidth: 250
-            ),
-
-            Card(
-                "SegmentedControl",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(12)
-                    .Children(
-                        // Text only.
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(4)
-                            .Children(
-                                new TextBlock().Text("Text").FontSize(ThemeFontSize.Small),
-                                new SegmentedControl()
-                                    .Items("Day", "Week", "Month")
-                                    .SelectedIndex(0)),
-
-                        // Text + icon.
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(4)
-                            .Children(
-                                new TextBlock().Text("Text + Icon").FontSize(ThemeFontSize.Small),
-                                new SegmentedControl()
-                                    .Items(
-                                        new[]
-                                        {
-                                            new SegmentItem("apps_list_regular", "List"),
-                                            new SegmentItem("table_regular", "Table"),
-                                            new SegmentItem("data_pie_regular", "Chart"),
-                                        },
-                                        v => v.Label)
-                                    .ItemTemplate<SegmentItem>(
-                                        build: ctx =>
-                                        {
-                                            var icon = SegmentIconShape(16).CenterVertical();
-                                            var label = new TextBlock().CenterVertical();
-                                            ctx.Register("icon", icon);
-                                            ctx.Register("label", label);
-                                            return new StackPanel()
-                                                .Horizontal()
-                                                .Spacing(6)
-                                                .Center()
-                                                .Children(icon, label);
-                                        },
-                                        bind: (view, item, _, ctx) =>
-                                        {
-                                            BindNamedIcon(ctx.Get<PathShape>("icon"), item.Icon);
-                                            ctx.Get<TextBlock>("label").Text = item.Label;
-                                        })
-                                    .SelectedIndex(0)),
-
-                        // Icon only.
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(4)
-                            .Children(
-                                new TextBlock().Text("Icon").FontSize(ThemeFontSize.Small),
-                                new SegmentedControl()
-                                    .Items(
-                                        new[]
-                                        {
-                                            new SegmentItem("home_regular", "Home"),
-                                            new SegmentItem("settings_regular", "Settings"),
-                                            new SegmentItem("calendar_regular", "Calendar"),
-                                        },
-                                        v => v.Label)
-                                    .ItemTemplate<SegmentItem>(
-                                        build: _ => SegmentIconShape(16).Center(),
-                                        bind: (view, item, _, _) => BindNamedIcon((PathShape)view, item.Icon))
-                                    .SelectedIndex(1)),
-
-                        // One segment enabled via binding (PrepareContainer + BindIsEnabled).
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(4)
-                            .Children(
-                                new TextBlock().Text("Disabled segment (bound)").FontSize(ThemeFontSize.Small),
-                                new SegmentedControl()
-                                    .Items("All", "Active", "Done")
-                                    .PrepareContainer<string>((c, item, _) =>
-                                    {
-                                        if (item == "Done") c.BindIsEnabled(doneEnabled);
-                                    })
-                                    .SelectedIndex(0),
-                                new CheckBox().Content("Enable ‘Done’").BindIsChecked(doneEnabled)),
-
-                        // Whole control disabled.
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(4)
-                            .Children(
-                                new TextBlock().Text("Disabled").FontSize(ThemeFontSize.Small),
-                                new SegmentedControl()
-                                    .Items("Day", "Week", "Month")
-                                    .SelectedIndex(0)
-                                    .Disable())
-                    ),
-                minWidth: 320
             ),
 
             Card(
@@ -5692,91 +6038,9 @@ partial class GalleryView
                             .Disable()
                     ),
                 minWidth: 250
-            ),
-
-            Card(
-                "TabControl",
-                new UniformGrid()
-                    .Columns(2)
-                    .Spacing(8)
-                    .Children(
-                        TabPlacementSample("Top", TabPlacement.Top),
-                        TabPlacementSample("Bottom", TabPlacement.Bottom),
-                        TabPlacementSample("Left", TabPlacement.Left),
-                        TabPlacementSample("Right", TabPlacement.Right)
-                    ),
-                minWidth: 700
-            ),
-
-            Card(
-                "TabControl Overflow",
-                new TabControl()
-                    .Width(260)
-                    .Height(140)
-                    .TabItems(
-                        new TabItem()
-                            .Header("Overview")
-                            .Content(new TextBlock().Text("Overview content")),
-                        new TabItem()
-                            .Header("Rendering Pipeline")
-                            .Content(new TextBlock().Text("Rendering Pipeline content")),
-                        new TabItem()
-                            .Header("Input Routing")
-                            .Content(new TextBlock().Text("Input Routing content")),
-                        new TabItem()
-                            .Header("Property Binding")
-                            .Content(new TextBlock().Text("Property Binding content")),
-                        new TabItem()
-                            .Header("Disabled Diagnostics")
-                            .Content(new TextBlock().Text("Disabled Diagnostics content"))
-                            .IsEnabled(false),
-                        new TabItem()
-                            .Header("Final Review")
-                            .Content(new TextBlock().Text("Final Review content")))
-                    .SelectedIndex(5),
-                minWidth: 340
-            ),
-
-            Card(
-                "TabControl + RotationDecorator",
-                new UniformGrid()
-                    .Columns(2)
-                    .Spacing(8)
-                    .Children(
-                        TabPlacementSample(
-                            "Left",
-                            TabPlacement.Left,
-                            Rotation.CounterClockwise90),
-                        TabPlacementSample(
-                            "Right",
-                            TabPlacement.Right,
-                            Rotation.Clockwise90)
-                    ),
-                minWidth: 700
             )
         );
     }
-
-    private sealed record SegmentItem(string Icon, string Label);
-
-    // Binds the icon fill to the inherited Foreground, so it follows selection, theme, and disabled
-    // dimming exactly like the text label. Inherited-value changes now notify property bindings, so
-    // this stays in sync; SolidColorBrush is a lightweight, non-disposable value descriptor.
-    private static PathShape SegmentIconShape(double size)
-    {
-        var shape = new PathShape()
-            .Stretch(Stretch.Uniform)
-            .Width(size).Height(size);
-
-        shape.Bind(Shape.FillProperty, shape, Control.ForegroundProperty,
-            (Color color) => new SolidColorBrush(color));
-        return shape;
-    }
-
-    // The icon set is drawn on standard grids and the resource carries no metadata, so the grid is the
-    // smallest standard one that covers the ink. Handing that to ViewBox keeps the margin the designer
-    // left: stretching to the ink instead scales every icon by however tightly it happens to be drawn.
-    private static readonly double[] _iconGrids = [16, 20, 24, 28, 32, 48];
 
     // SelectedItemTemplate presents the selection in the header the same way ItemTemplate presents a
     // row, so the closed ComboBox shows the status dot instead of falling back to the item text.
@@ -5849,30 +6113,216 @@ partial class GalleryView
                     .SelectedItemTemplate(MemberTemplate(showRole: true))
             );
     }
+}
 
-    private static Rect IconViewBox(PathGeometry geometry)
+partial class GalleryView
+{
+    private FrameworkElement ProgressPage()
     {
-        var ink = geometry.GetBounds();
-        double extent = Math.Max(ink.Right, ink.Bottom);
+        var ring = new ProgressRing { IsActive = false };
 
-        foreach (double grid in _iconGrids)
-        {
-            if (extent <= grid)
-            {
-                return new Rect(0, 0, grid, grid);
-            }
-        }
+        return CardGrid(
+            Card(
+                "ProgressBar",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new ProgressBar().Value(20),
+                        new ProgressBar().Value(65),
+                        new ProgressBar().Value(65).Disable(),
+                        new ProgressBar().IsIndeterminate()
+                    )
+            ),
 
-        return new Rect(0, 0, extent, extent);
+            Card(
+                "ProgressRing",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new Border()
+                            .Height(60)
+                            .HorizontalAlignment(HorizontalAlignment.Center)
+                            .Child(
+                                ring
+                                    .Width(48)
+                                    .Height(48)
+                                    .WithTheme((t, c) => c.Foreground(t.Palette.Accent))
+                            ),
+                        new Button()
+                            .Content("Toggle")
+                            .OnClick(() => ring.IsActive = !ring.IsActive)
+                    )
+            )
+        );
     }
+}
+
+partial class GalleryView
+{
+    private ObservableValue<int> intBinding = new ObservableValue<int>(1);
+    private ObservableValue<double> doubleBinding = new ObservableValue<double>(42.5);
+
+    private FrameworkElement RangePage() =>
+        CardGrid(
+            Card(
+                "NumericUpDown (int/double)",
+                new Grid()
+                    .Columns("Auto,Auto,Auto")
+                    .Rows("Auto,Auto,Auto")
+                    .Spacing(8)
+                    .AutoIndexing()
+                    .Children(
+                        new TextBlock()
+                            .Text("Int")
+                            .CenterVertical(),
+
+                        new NumericUpDown()
+                            .Width(140)
+                            .Minimum(0)
+                            .Maximum(100)
+                            .Step(1)
+                            .Format("0")
+                            .BindValue(intBinding)
+                            .CenterVertical(),
+
+                        new TextBlock()
+                            .BindText(intBinding, value => $"Value: {value}")
+                            .CenterVertical(),
+
+                        new TextBlock()
+                            .Text("Double")
+                            .CenterVertical(),
+
+                        new NumericUpDown()
+                            .Width(140)
+                            .Minimum(0)
+                            .Maximum(100)
+                            .Step(0.1)
+                            .Format("0.##")
+                            .BindValue(doubleBinding)
+                            .CenterVertical(),
+
+                        new TextBlock()
+                            .BindText(doubleBinding, value => $"Value: {value:0.##}")
+                            .CenterVertical(),
+
+                        new TextBlock()
+                            .Text("Disabled")
+                            .CenterVertical(),
+
+                        new NumericUpDown()
+                            .Disable()
+                            .Width(140)
+                            .Minimum(0)
+                            .Maximum(100)
+                            .Step(0.1)
+                            .Format("0.##")
+                            .BindValue(doubleBinding)
+                            .CenterVertical()
+                    )
+            ),
+
+            Card(
+                "Slider",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new Slider().Minimum(0).Maximum(100).Value(25),
+                        new Slider().Minimum(0).Maximum(100).Value(25).Disable()
+                    )
+            )
+        );
+}
+
+/// <summary>
+/// The images, icon dictionary and font the pages draw, held as values a host fills. This app reads them
+/// from disk before the window shows; the file-based app downloads them and they arrive later.
+/// </summary>
+sealed class GalleryResources
+{
+    /// <summary>The horizontal logo as pixels, for the pages that demonstrate raster images.</summary>
+    public ObservableValue<IImageSource?> Logo { get; } = new(null);
+
+    /// <summary>The same logo as vector art, which is what the app's own chrome draws.</summary>
+    public ObservableValue<IImageSource?> LogoVector { get; } = new(null);
+
+    public ObservableValue<IImageSource?> April { get; } = new(null);
+
+    public ObservableValue<IImageSource?> Soonduk { get; } = new(null);
+
+    public ObservableValue<IImageSource?> FolderOpen { get; } = new(null);
+
+    public ObservableValue<IImageSource?> FolderClosed { get; } = new(null);
+
+    public ObservableValue<IImageSource?> Document { get; } = new(null);
+
+    /// <summary>The icon dictionary's XAML, or null until it arrives.</summary>
+    public ObservableValue<string?> Icons { get; } = new(null);
+
+    /// <summary>
+    /// The family name of Inter Variable once it is registered, or null until it arrives. One file
+    /// with a weight axis supplies every weight.
+    /// </summary>
+    public ObservableValue<string?> InterVariable { get; } = new(null);
+
+    // Kept for the process: disposing a registered font deletes its cached file.
+    private FontResource? _interVariable;
+
+    /// <summary>File names the hosts fetch, in the order the pages need them.</summary>
+    public static string[] FileNames { get; } =
+    [
+        "logo_h.svg",
+        "logo_h-480.png",
+        "april.jpg",
+        "soonduk.jpg",
+        "folder-horizontal-open.png",
+        "folder-horizontal.png",
+        "document.png",
+        "Icons.xaml",
+        "Inter-Variable.ttf",
+    ];
+
+    /// <summary>
+    /// Routes one fetched file to the value that holds it, so a host only decides where bytes come
+    /// from. Unknown names are ignored rather than throwing: a host may carry extra files.
+    /// </summary>
+    public void Apply(string fileName, byte[] content)
+    {
+        switch (fileName)
+        {
+            case "logo_h.svg": LogoVector.Value = SimpleSvgSource.FromBytes(content); break;
+            case "logo_h-480.png": Logo.Value = ImageSource.FromBytes(content); break;
+            case "april.jpg": April.Value = ImageSource.FromBytes(content); break;
+            case "soonduk.jpg": Soonduk.Value = ImageSource.FromBytes(content); break;
+            case "folder-horizontal-open.png": FolderOpen.Value = ImageSource.FromBytes(content); break;
+            case "folder-horizontal.png": FolderClosed.Value = ImageSource.FromBytes(content); break;
+            case "document.png": Document.Value = ImageSource.FromBytes(content); break;
+            case "Icons.xaml": Icons.Value = System.Text.Encoding.UTF8.GetString(content); break;
+            case "Inter-Variable.ttf": InterVariable.Value = RegisterFont(content); break;
+        }
+    }
+
+    private string RegisterFont(byte[] content)
+    {
+        using var stream = new MemoryStream(content, writable: false);
+        _interVariable ??= FontResources.Register(stream, ".ttf");
+        return _interVariable.FontFamily;
+    }
+}
+
+partial class GalleryView
+{
+    /// <summary>The resources the pages bind to. The host fills them; excluded from fba generation.</summary>
+    public static GalleryResources Resources { get; } = new();
 }
 
 partial class GalleryView
 {
     private FrameworkElement ShapesPage() =>
         CardGrid(
-            RectangleCard(),
-
             Card(
                 "Ellipse",
                 new StackPanel()
@@ -5904,6 +6354,8 @@ partial class GalleryView
                             .StrokeStyle(new StrokeStyle { DashArray = [6, 4] })
                     )
             ),
+
+            RectangleCard(),
 
             Card(
                 "Path (SVG)",
@@ -5971,37 +6423,14 @@ partial class GalleryView
                     )
             ),
 
+            IconsCard(),
+
             Card(
                 "Prompt Icons",
                 PromptIconsCard(),
                 minWidth: 720
             )
         );
-
-    private FrameworkElement PromptIconsCard()
-        => new WrapPanel()
-            .Orientation(Orientation.Horizontal)
-            .Spacing(12)
-            .Children(
-                PromptIconTile("Question", new PromptIcon { Kind = PromptIconKind.Question }),
-                PromptIconTile("Info", new PromptIcon { Kind = PromptIconKind.Info }),
-                PromptIconTile("Warning", new PromptIcon { Kind = PromptIconKind.Warning }),
-                PromptIconTile("Error", new PromptIcon { Kind = PromptIconKind.Error }),
-                PromptIconTile("Success", new PromptIcon { Kind = PromptIconKind.Success }),
-                PromptIconTile("Shield", new PromptIcon { Kind = PromptIconKind.Shield }),
-                PromptIconTile("Crash", new PromptIcon { Kind = PromptIconKind.Crash })
-            );
-
-    private FrameworkElement PromptIconTile(string title, FrameworkElement icon)
-        => new StackPanel()
-            .Width(90)
-            .Vertical()
-            .Spacing(6)
-            .Children(
-                icon.Width(60).Height(60).Center(),
-
-                new TextBlock().Text(title).Center()
-            );
 
     private static PathGeometry BuildTriangle()
     {
@@ -6071,54 +6500,86 @@ partial class GalleryView
 
 partial class GalleryView
 {
-    private FrameworkElement ShowDialogPage()
+    private FrameworkElement PromptDialogCard()
     {
-        var syncStatus = new ObservableValue<string>("Result: -");
-        var asyncStatus = new ObservableValue<string>("Result: -");
+        var promptStatus = new ObservableValue<string>("Result: -");
 
-        return CardGrid(
-            Card(
-                "Synchronous ShowDialog",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new TextBlock()
-                            .FontSize(ThemeFontSize.Small)
-                            .Text("ShowDialog() blocks this click handler (no await)\nwhile a nested loop keeps input and paint live."),
-                        new Button()
-                            .Content("Show (sync)")
-                            .OnClick(() =>
-                            {
-                                // Note: this handler is NOT async. ShowDialog blocks here until the dialog closes.
-                                var dialog = new SyncDialogWindow();
-                                dialog.ShowDialog(window);
-                                syncStatus.Value = $"Result: {dialog.Result}, clicks={dialog.ClickCount}";
-                            }),
-                        new TextBlock().BindText(syncStatus).FontSize(ThemeFontSize.Small)
-                    )
-            ),
-            Card(
-                "Asynchronous ShowDialogAsync",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new TextBlock()
-                            .FontSize(ThemeFontSize.Small)
-                            .Text("ShowDialogAsync() returns a Task on the same loop.\nSame dialog, awaited instead of blocking."),
-                        new Button()
-                            .Content("Show (async)")
-                            .OnClick(async () =>
-                            {
-                                var dialog = new SyncDialogWindow();
-                                await dialog.ShowDialogAsync(window);
-                                asyncStatus.Value = $"Result: {dialog.Result}, clicks={dialog.ClickCount}";
-                            }),
-                        new TextBlock().BindText(asyncStatus).FontSize(ThemeFontSize.Small)
-                    )
-            )
+        return Card(
+            "Prompt Dialog (FitContentHeight)",
+            new StackPanel()
+                .Vertical()
+                .Spacing(8)
+                .Children(
+                    new TextBlock()
+                        .FontSize(ThemeFontSize.Small)
+                        .Text("Opens a FitContentHeight dialog.\nWindow height adjusts to content."),
+                    new Button()
+                        .Content("Show Prompt")
+                        .OnClick(async () =>
+                        {
+                            var result = await ShowPromptAsync(
+                                window,
+                                "Input",
+                                "Enter your name:",
+                                "Name...");
+                            promptStatus.Value = result is null
+                                ? "Result: canceled"
+                                : $"Result: {result}";
+                        }),
+                    new TextBlock()
+                        .BindText(promptStatus)
+                        .FontSize(ThemeFontSize.Small)
+                )
         );
+    }
+
+    private async Task<string?> ShowPromptAsync(
+        Window owner,
+        string title,
+        string message,
+        string? placeholder = null)
+    {
+        string? result = null;
+        TextBox input = null!;
+        Window dialog = null!;
+        var acceptCommand = new Command("gallery.dialog.accept", "OK");
+
+        await new Window()
+            .Ref(out dialog)
+            .Apply(w => w.Commands.Register(acceptCommand, () =>
+            {
+                result = input.Text;
+                dialog.Close();
+            }, () => !string.IsNullOrWhiteSpace(input.Text)))
+            .Title(title)
+            .FitContentHeight(300, 300)
+            .Padding(12)
+            .Content(
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(12)
+                    .Children(
+                        new TextBlock()
+                            .Text(message),
+                        new TextBox()
+                            .Ref(out input)
+                            .Placeholder(placeholder ?? string.Empty),
+                        new StackPanel()
+                            .Horizontal()
+                            .Right()
+                            .Spacing(6)
+                            .Children(
+                                new Button()
+                                    .Content("OK")
+                                    .Command(acceptCommand),
+                                new Button()
+                                    .Content("Cancel")
+                                    .OnClick(dialog.Close)
+                            )
+                    )
+            ).ShowDialogAsync(owner);
+
+        return result;
     }
 }
 
@@ -6218,51 +6679,7 @@ partial class GalleryView
     // Popup inheritance samples plus StyleSheet scope, type rules, BasedOn and Unset.
     private FrameworkElement StylingPage()
     {
-        var contextMenu = new ContextMenu()
-            .Item("Cut")
-            .Item("Copy")
-            .Item("Paste")
-            .Separator()
-            .Item("Select All");
-
         return CardGrid(
-            Card(
-                "Tooltip font isolation",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new TextBlock()
-                            .Text("The button is 20pt Consolas. Hover it: the tooltip keeps the theme font, not the button's font. A popup no longer inherits the triggering control's font.")
-                            .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(ThemeFontSize.Small),
-                        new Button()
-                            .Content("Hover me (20pt / Consolas)")
-                            .FontSize(20)
-                            .FontFamily("Consolas")
-                            .ToolTip("This tooltip stays in the theme font.")
-                            .HorizontalAlignment(HorizontalAlignment.Left)
-                    )
-            ),
-
-            Card(
-                "ContextMenu font isolation",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new TextBlock()
-                            .Text("Right-click the button. It renders at 22pt, but the context menu stays in the theme font.")
-                            .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(ThemeFontSize.Small),
-                        new Button()
-                            .Content("Right-click me (22pt)")
-                            .FontSize(22)
-                            .ContextMenu(contextMenu)
-                            .HorizontalAlignment(HorizontalAlignment.Left)
-                    )
-            ),
-
             Card(
                 "Named StyleSheet + Setter.Unset",
                 NamedStyleUnsetDemo()
@@ -6271,49 +6688,8 @@ partial class GalleryView
             Card(
                 "Scoped StyleSheet type rule",
                 TypeRuleDemo()
-            ),
-
-            Card(
-                "MenuBar dropdown font",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new TextBlock()
-                            .Text("Both menu bars are identical. The second sits in a FontSize 16 container. Open the menus: the dropdown follows the ambient font.")
-                            .TextWrapping(TextWrapping.Wrap)
-                            .FontSize(ThemeFontSize.Small),
-                        new TextBlock().Text("Default (theme font):").FontSize(ThemeFontSize.Small),
-                        MenuDemoBar(),
-                        new TextBlock().Text("Inside a FontSize 16 container:").FontSize(ThemeFontSize.Small),
-                        new Border()
-                            .FontSize(16)
-                            .Child(MenuDemoBar())
-                    )
             )
         );
-    }
-
-    private MenuBar MenuDemoBar()
-    {
-        var fileMenu = new Menu()
-            .Item("New")
-            .Item("Open")
-            .Separator()
-            .SubMenu("Export", new Menu()
-                .Item("PNG")
-                .Item("JPEG"));
-
-        var editMenu = new Menu()
-            .Item("Undo")
-            .Item("Redo");
-
-        // No fixed Height: the bar auto-sizes to the (inherited) font so the font-size effect shows.
-        return new MenuBar()
-            .Items(
-                new MenuItem("File").Menu(fileMenu),
-                new MenuItem("Edit").Menu(editMenu)
-            );
     }
 
     private FrameworkElement NamedStyleUnsetDemo()
@@ -6424,6 +6800,835 @@ partial class GalleryView
                     ),
                 status
             );
+    }
+}
+
+partial class GalleryView
+{
+    private ObservableValue<string> name = new ObservableValue<string>("This is my name");
+    // Multi-line text box demo that shows the live selection (start / length) bound to the read-only
+    // SelectionStart/SelectionLength MewProperties - used to inspect selection geometry.
+    private FrameworkElement MultiLineTextBoxDemo()
+    {
+        var box = new MultiLineTextBox()
+            .Height(120)
+            .Width(290)
+            .Wrap(false)
+            .Text("The quick brown fox jumps over the lazy dog, then keeps running far beyond the visible editor width.\n\n- Wrap supported\n- Selection supported\n- Scroll supported");
+
+        return new StackPanel()
+            .Vertical()
+            .Spacing(6)
+            .Children(
+                new CheckBox()
+                    .Content("Wrap")
+                    .IsChecked(box.Wrap)
+                    .OnCheckedChanged(isChecked => box.Wrap = isChecked == true),
+                box,
+                new TextBlock()
+                    .FontSize(ThemeFontSize.Small)
+                    .Bind(TextBlock.TextProperty, box, TextBase.SelectionStartProperty,
+                        (int start) => $"SelectionStart: {start}"),
+                new TextBlock()
+                    .FontSize(ThemeFontSize.Small)
+                    .Bind(TextBlock.TextProperty, box, TextBase.SelectionLengthProperty,
+                        (int length) => $"SelectionLength: {length}")
+            );
+    }
+
+
+    private const string FIND_DEMO_TEXT =
+        "The text engine assembles logical lines into visual lines, wraps them to the viewport, " +
+        "and materializes only the lines that are visible.\n\n" +
+        "Classifiers attach paint spans to a line without changing its geometry. A search classifier " +
+        "is the smallest useful classifier: it scans the line, emits a background span per match, " +
+        "and the engine paints the span behind the glyphs.\n\n" +
+        "Wrapped lines keep highlight spans consistent: a match that crosses a wrap boundary is " +
+        "painted on both visual lines. Scrolling does not recompute matches, because the match " +
+        "offsets live in the document, not in the view.\n\n" +
+        "Editing the document refreshes the matches. Type into this editor and the highlight " +
+        "follows the text. Search for the word line to see many matches, or search for engine " +
+        "to see a few.\n\n" +
+        "The chevron buttons move the current match, select it, and scroll it into view. The " +
+        "current match uses a stronger highlight than the other matches.";
+
+    // Search-match highlighter for the demo: recomputes absolute match offsets on text change and
+    // emits line-relative background spans; the current match gets a stronger color.
+    private sealed class FindHighlightClassifier : ITextClassifier
+    {
+        private static readonly Color _matchColor = Color.FromArgb(88, 255, 214, 0);
+        private static readonly Color _currentColor = Color.FromArgb(176, 255, 150, 40);
+
+        public List<int> Matches { get; } = new();
+        public int QueryLength { get; private set; }
+        public int CurrentIndex { get; set; } = -1;
+
+        public void Update(string documentText, string query)
+        {
+            Matches.Clear();
+            CurrentIndex = -1;
+            QueryLength = query.Length;
+            if (query.Length == 0)
+            {
+                return;
+            }
+
+            int searchStart = 0;
+            while (true)
+            {
+                int hit = documentText.IndexOf(query, searchStart, StringComparison.OrdinalIgnoreCase);
+                if (hit < 0)
+                {
+                    break;
+                }
+
+                Matches.Add(hit);
+                searchStart = hit + query.Length;
+            }
+        }
+
+        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
+        {
+            if (Matches.Count == 0)
+            {
+                return;
+            }
+
+            int lineStart = context.LogicalLine.Offset;
+            int lineEnd = lineStart + context.LogicalLine.Length;
+
+            for (int index = 0; index < Matches.Count; index++)
+            {
+                int matchStart = Matches[index];
+                if (matchStart >= lineEnd)
+                {
+                    break;
+                }
+
+                int clampedStart = Math.Max(lineStart, matchStart);
+                int clampedEnd = Math.Min(lineEnd, matchStart + QueryLength);
+                if (clampedEnd > clampedStart)
+                {
+                    output.Add(new TextPaintSpan(
+                        new TextRange(clampedStart - lineStart, clampedEnd - clampedStart),
+                        Background: index == CurrentIndex ? _currentColor : _matchColor));
+                }
+            }
+        }
+    }
+
+    private FrameworkElement FindHighlightDemo()
+    {
+        var classifier = new FindHighlightClassifier();
+
+        var box = new MultiLineTextBox()
+            .Height(240)
+            .Width(360)
+            .Wrap(true)
+            .Text(FIND_DEMO_TEXT);
+        box.Extensions.Classifiers.Add(classifier);
+
+        var searchBox = new TextBox().Placeholder("Find...").Width(150);
+        var countLabel = new TextBlock().FontSize(ThemeFontSize.Small).CenterVertical();
+        var previousMatch = new Command("gallery.find.previous", "Previous match");
+        var nextMatch = new Command("gallery.find.next", "Next match");
+
+        void UpdateCountLabel()
+            => countLabel.Text = classifier.Matches.Count == 0
+                ? "0/0"
+                : $"{classifier.CurrentIndex + 1}/{classifier.Matches.Count}";
+
+        void RefreshMatches()
+        {
+            classifier.Update(box.Text, searchBox.Text);
+            box.InvalidateTextView();
+            UpdateCountLabel();
+        }
+
+        void MoveCurrent(int direction)
+        {
+            int count = classifier.Matches.Count;
+            if (count == 0)
+            {
+                return;
+            }
+
+            if (classifier.CurrentIndex < 0)
+            {
+                classifier.CurrentIndex = direction > 0 ? 0 : count - 1;
+            }
+            else
+            {
+                classifier.CurrentIndex = (classifier.CurrentIndex + direction + count) % count;
+            }
+
+            int offset = classifier.Matches[classifier.CurrentIndex];
+            box.Select(offset, classifier.QueryLength);
+            box.ScrollToCaret();
+            box.InvalidateTextView();
+            UpdateCountLabel();
+        }
+
+        var findNavigation = new ButtonGroup()
+            .Items([previousMatch, nextMatch], command => command.Text ?? string.Empty)
+            .ItemTemplate<Command>(
+                build: _ => new GlyphElement(),
+                bind: (view, _, index, _) =>
+                    ((GlyphElement)view).Kind = index == 0
+                        ? GlyphKind.ChevronUp
+                        : GlyphKind.ChevronDown)
+            .ItemPadding(Thickness.Zero)
+            .PrepareContainer<Command>((segment, command, _) =>
+            {
+                segment.Command = command;
+                segment.ToolTip(command.Text);
+                segment.WithTheme((theme, current) =>
+                    current.MinWidth(theme.Metrics.BaseControlHeight));
+            });
+        findNavigation.Commands.Register(
+            previousMatch,
+            () => MoveCurrent(-1),
+            () => classifier.Matches.Count > 0);
+        findNavigation.Commands.Register(
+            nextMatch,
+            () => MoveCurrent(+1),
+            () => classifier.Matches.Count > 0);
+
+        searchBox.TextChanged += _ => RefreshMatches();
+        box.DocumentChanged += _ => RefreshMatches();
+        UpdateCountLabel();
+
+        return new StackPanel()
+            .Vertical()
+            .Spacing(8)
+            .Children(
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(8)
+                    .Children(
+                        searchBox,
+                        findNavigation,
+                        countLabel),
+                box);
+    }
+
+    private FrameworkElement TextInputPage() =>
+            CardGrid(
+                Card(
+                    "TextBox",
+                    new StackPanel()
+                        .Vertical()
+                        .Spacing(8)
+                        .Children(
+                            new TextBox(),
+                            new TextBox().Placeholder("Type your name..."),
+                            new TextBox().BindText(name),
+                            new TextBox().Text("Disabled").Disable()
+                        )
+                ),
+
+                Card(
+                    "PasswordBox",
+                    new StackPanel()
+                        .Vertical()
+                        .Spacing(8)
+                        .Children(
+                            new PasswordBox().Placeholder("Password"),
+                            new PasswordBox { PasswordChar = '★' }.Placeholder("Custom mask"),
+                            new PasswordBox().Password("Disabled").Disable()
+                        )
+                ),
+
+                Card(
+                    "MultiLineTextBox",
+                    MultiLineTextBoxDemo()
+                ),
+
+                Card(
+                    "Find Highlight",
+                    FindHighlightDemo()
+                )
+            );
+
+}
+
+partial class GalleryView
+{
+    private FrameworkElement TextLayoutPage()
+    {
+        FrameworkElement LabelBox(string title, TextAlignment horizontal, TextAlignment vertical, TextWrapping wrapping)
+        {
+            const string sample =
+                "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog";
+
+            return new StackPanel()
+                .Vertical()
+                .Spacing(4)
+                .Children(
+                    new TextBlock()
+                        .Text(title)
+                        .FontSize(ThemeFontSize.Small),
+                    new Border()
+                        .Width(240)
+                        .Height(80)
+                        .Padding(6)
+                        .BorderThickness(1)
+                        .CornerRadius(6)
+                        .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                        .Child(
+                            new TextBlock()
+                                .Text(sample)
+                                .TextWrapping(wrapping)
+                                .TextAlignment(horizontal)
+                                .VerticalTextAlignment(vertical)
+                        )
+                );
+        }
+
+        var runDemo = new TextBlock()
+            .Width(620)
+            .FontSize(16)
+            .TextWrapping(TextWrapping.Wrap)
+            .Inlines(
+                new Run("Normal text, "),
+                new Run("bold text").Bold(),
+                new Run(", "),
+                new Run("italic text").Italic(),
+                new Run(", "),
+                new Run("accent text").Foreground(Color.FromHex("#D83B01")),
+                new Run(", "),
+                new Run("underlined text").Underline(),
+                new Run(", and "),
+                new Run("struck text").Strikethrough(),
+                new Run(".\nMixed fonts: Segoe UI + "),
+                new Run("Consolas").FontFamily("Consolas"),
+                new Run(" + "),
+                new Run("22 pt").FontSize(22),
+                new Run("."));
+
+        return CardGrid(
+            Card(
+                "Run-like Inline Text",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(6)
+                    .Children(
+                        runDemo,
+                        new TextBlock()
+                            .FontSize(ThemeFontSize.Small)
+                            .Text("One logical text surface with per-range color, weight, italic, decoration, font, and size.")),
+                minWidth: 650),
+
+            Card("Line Box (LineSpacing / LineBoxTrim)", LineBoxDemo(), minWidth: 500),
+
+            Card(
+                "Label Wrap/Alignment",
+                new UniformGrid()
+                    .Columns(3)
+                    .Spacing(8)
+                    .Children(
+                        LabelBox("Left/Top + Wrap", TextAlignment.Left, TextAlignment.Top, TextWrapping.Wrap),
+                        LabelBox("Center/Top + Wrap", TextAlignment.Center, TextAlignment.Top, TextWrapping.Wrap),
+                        LabelBox("Right/Top + Wrap", TextAlignment.Right, TextAlignment.Top, TextWrapping.Wrap),
+                        LabelBox("Left/Center + Wrap", TextAlignment.Left, TextAlignment.Center, TextWrapping.Wrap),
+                        LabelBox("Left/Bottom + Wrap", TextAlignment.Left, TextAlignment.Bottom, TextWrapping.Wrap),
+                        LabelBox("Left/Top + NoWrap", TextAlignment.Left, TextAlignment.Top, TextWrapping.NoWrap),
+                        LabelBox("Right/Top + NoWrap", TextAlignment.Right, TextAlignment.Top, TextWrapping.NoWrap)
+                    )
+            ),
+
+            Card(
+                "Wrap + Button",
+                new Border()
+                    .Width(260)
+                    .Top()
+                    .Padding(8)
+                    .BorderThickness(1)
+                    .CornerRadius(8)
+                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                    .Child(
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(6)
+                            .Children(
+                                new TextBlock()
+                                    .TextWrapping(TextWrapping.Wrap)
+                                    .Text("Wrapped label followed by a button. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog."),
+                                new Border()
+                                    .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                                    .Child(
+                                        new TextBlock()
+                                            .Center()
+                                            .Text("After Wrap"))
+                            )
+                    )
+            ),
+
+            Card(
+                "TextTrimming",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new Border()
+                            .Width(200)
+                            .Padding(6)
+                            .BorderThickness(1)
+                            .CornerRadius(6)
+                            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                            .Child(
+                                new TextBlock()
+                                    .Text("No trimming: The quick brown fox jumps over the lazy dog")
+                            ),
+                        new Border()
+                            .Width(200)
+                            .Padding(6)
+                            .BorderThickness(1)
+                            .CornerRadius(6)
+                            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                            .Child(
+                                new TextBlock()
+                                    .Text("CharacterEllipsis: The quick brown fox jumps over the lazy dog")
+                                    .TextTrimming(TextTrimming.CharacterEllipsis)
+                            ),
+                        new Border()
+                            .Width(200)
+                            .Padding(6)
+                            .BorderThickness(1)
+                            .CornerRadius(6)
+                            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                            .Child(
+                                new TextBlock()
+                                    .Text("Ellipsis + Center: The quick brown fox jumps over the lazy dog")
+                                    .TextTrimming(TextTrimming.CharacterEllipsis)
+                                    .TextAlignment(TextAlignment.Center)
+                            ),
+                        new Border()
+                            .Width(200)
+                            .Height(50)
+                            .Padding(6)
+                            .BorderThickness(1)
+                            .CornerRadius(6)
+                            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
+                            .Child(
+                                new TextBlock()
+                                    .Text("Wrap + Ellipsis: The quick brown fox jumps over the lazy dog. The quick brown fox jumps.")
+                                    .TextWrapping(TextWrapping.Wrap)
+                                    .TextTrimming(TextTrimming.CharacterEllipsis)
+                            )
+                    )
+            ),
+
+            // Last: the widest card on the page, so the ones that wrap in a row keep their places.
+            Card("SyntaxViewer", SyntaxViewerDemo(), minWidth: 650)
+        );
+    }
+
+    private FrameworkElement LineBoxDemo()
+    {
+        var lineSpacing = new ObservableValue<double>();
+
+        var sample = new TextBlock()
+            .FontSize(ThemeFontSize.Large)
+            .Bind(TextBlock.LineSpacingProperty, lineSpacing)
+            .Text("Àccents float above the cap line,\nglyphs like g, y and p hang\ntheir descenders below the baseline,\nand spacing opens the leading.");
+
+        // The border's height tracks the measured box, so trimming visibly pulls the top and
+        // bottom edges onto the glyphs; stretching keeps the render width equal to the measure
+        // width, which pins the wrap points.
+        var border = new Border()
+            .Left()
+            .BorderThickness(1)
+            .WithTheme((t, b) => b.BorderBrush(t.Palette.Accent.WithAlpha(128)))
+            .Child(sample);
+
+        var spacingLabel = new TextBlock()
+            .FontSize(ThemeFontSize.Small)
+            .CenterVertical()
+            .Bind(TextBlock.TextProperty, lineSpacing, x => $"LineSpacing: {x:0.#}");
+
+        return new StackPanel()
+            .Vertical()
+            .Spacing(10)
+            .Children(
+                border,
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(10)
+                    .Children(
+                        new RadioButton()
+                            .Content("None")
+                            .IsChecked(true)
+                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.None),
+                        new RadioButton()
+                            .Content("Cap")
+                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.Cap),
+                        new RadioButton()
+                            .Content("Cap + Baseline")
+                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.CapAndBaseline)),
+                new StackPanel()
+                    .Horizontal()
+                    .Spacing(10)
+                    .Children(
+                        new Slider()
+                            .Width(120)
+                            .Minimum(-16)
+                            .Maximum(16)
+                            .Value(0)
+                            .BindValue(lineSpacing),
+                        new Button()
+                            .Content("Reset")
+                            .OnClick(() => lineSpacing.Value = 0),
+                        spacingLabel),
+                new TextBlock()
+                    .FontSize(ThemeFontSize.Small)
+                    .Text("The border tracks the measured box: trimming cuts it to cap and baseline while the ink overflows; the slider tightens or opens the leading."));
+    }
+
+    private FrameworkElement SyntaxViewerDemo()
+    {
+        var viewer = new SyntaxViewer
+        {
+            Width = 680,
+            Height = 360,
+            Wrap = false,
+            FontFamily = "Consolas, Menlo, DejaVu Sans Mono",
+            Text = """
+                using System.Collections.Generic;
+                using System.Linq;
+
+                namespace Gallery.Syntax;
+
+                [Obsolete("Use CreateAsync instead")]
+                public sealed record Result(int Id, string Name);
+
+                public static class ResultService
+                {
+                    // Keywords, types, numbers, members, strings, and interpolation.
+                    public static async Task<IReadOnlyList<Result>> CreateAsync(
+                        IEnumerable<string?> names,
+                        CancellationToken cancellationToken = default)
+                    {
+                        const int minimumLength = 3;
+                        await Task.Delay(42, cancellationToken);
+
+                        return names
+                            .Where(name => !string.IsNullOrWhiteSpace(name) && name.Length >= minimumLength)
+                            .Select((name, index) => new Result(index + 1, $"Item {index}: {name!.Trim()}"))
+                            .ToArray();
+                    }
+                }
+                """
+        };
+        var classifier = new GalleryCSharpClassifier();
+        viewer.Extensions.Classifiers.Add(classifier);
+        viewer.WithTheme((theme, target) =>
+        {
+            classifier.IsDark = theme.IsDark;
+            target.InvalidateTextView();
+        });
+        return viewer;
+    }
+
+    private sealed class GalleryCSharpClassifier : ITextClassifier
+    {
+        public bool IsDark { get; set; } = true;
+
+        private string CommentColor => IsDark ? "#6A9955" : "#008000";
+        private string StringColor => IsDark ? "#CE9178" : "#A31515";
+        private string NumberColor => IsDark ? "#B5CEA8" : "#098658";
+        private string KeywordColor => IsDark ? "#569CD6" : "#0000FF";
+        private string TypeColor => IsDark ? "#4EC9B0" : "#267F99";
+        private string MemberColor => IsDark ? "#DCDCAA" : "#795E26";
+
+        private static readonly HashSet<string> Keywords =
+        [
+            "async", "await", "class", "const", "default", "false", "namespace", "new", "null",
+            "public", "record", "return", "sealed", "static", "true", "using"
+        ];
+
+        private static readonly HashSet<string> BuiltInTypes =
+            ["bool", "double", "int", "object", "string", "var", "void"];
+
+        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
+        {
+            ReadOnlySpan<char> text = context.Text.Span;
+            int index = 0;
+            while (index < text.Length)
+            {
+                if (char.IsWhiteSpace(text[index]))
+                {
+                    index++;
+                    continue;
+                }
+
+                if (index + 1 < text.Length && text[index] == '/' && text[index + 1] == '/')
+                {
+                    Add(output, index, text.Length - index, CommentColor);
+                    break;
+                }
+
+                int stringPrefix = text[index] == '$' && index + 1 < text.Length && text[index + 1] == '"' ? 1 : 0;
+                if (text[index + stringPrefix] is '"' or '\'')
+                {
+                    char delimiter = text[index + stringPrefix];
+                    int end = index + stringPrefix + 1;
+                    while (end < text.Length)
+                    {
+                        if (text[end] == '\\')
+                        {
+                            end = Math.Min(text.Length, end + 2);
+                            continue;
+                        }
+                        if (text[end++] == delimiter) break;
+                    }
+                    Add(output, index, end - index, StringColor);
+                    index = end;
+                    continue;
+                }
+
+                if (char.IsDigit(text[index]))
+                {
+                    int end = index + 1;
+                    while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] is '.' or '_')) end++;
+                    Add(output, index, end - index, NumberColor);
+                    index = end;
+                    continue;
+                }
+
+                if (char.IsLetter(text[index]) || text[index] == '_')
+                {
+                    int end = index + 1;
+                    while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_')) end++;
+                    string identifier = text[index..end].ToString();
+                    if (Keywords.Contains(identifier) || BuiltInTypes.Contains(identifier))
+                        Add(output, index, end - index, KeywordColor);
+                    else if (char.IsUpper(identifier[0]))
+                        Add(output, index, end - index, TypeColor);
+                    else if (PreviousNonWhitespace(text, index) == '.')
+                        Add(output, index, end - index, MemberColor);
+                    index = end;
+                    continue;
+                }
+
+                index++;
+            }
+        }
+
+        private static char PreviousNonWhitespace(ReadOnlySpan<char> text, int index)
+        {
+            for (int current = index - 1; current >= 0; current--)
+            {
+                if (!char.IsWhiteSpace(text[current])) return text[current];
+            }
+            return '\0';
+        }
+
+        private static void Add(IList<TextPaintSpan> output, int start, int length, string color)
+            => output.Add(new TextPaintSpan(
+                new TextRange(start, length),
+                Foreground: Color.FromHex(color)));
+    }
+}
+
+partial class GalleryView
+{
+    private FrameworkElement TogglesPage()
+    {
+        var doneEnabled = new ObservableValue<bool>(false);
+
+        return CardGrid(
+            Card(
+                "ToggleButton",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new ToggleButton().Content("Toggle"),
+                        new ToggleButton().Content("Checked").IsChecked(true),
+                        new ToggleButton().Content("Disabled").Disable(),
+                        new ToggleButton().Content("Disabled (Checked)").IsChecked(true).Disable()
+                    )
+            ),
+
+            Card(
+                "ToggleSwitch",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new ToggleSwitch().IsChecked(true),
+                        new ToggleSwitch().IsChecked(false),
+                        new ToggleSwitch().IsChecked(true).Disable(),
+                        new ToggleSwitch().IsChecked(false).Disable()
+                    )
+            ),
+
+            Card(
+                "CheckBox",
+                new Grid()
+                    .Columns("Auto,Auto")
+                    .Rows("Auto,Auto,Auto")
+                    .Spacing(8)
+                    .Children(
+                        new CheckBox()
+                            .Content("CheckBox"),
+
+                        new CheckBox()
+                            .Content("Disabled")
+                            .Disable(),
+
+                        new CheckBox()
+                            .Content("Checked")
+                            .IsChecked(true),
+
+                        new CheckBox()
+                            .Content("Disabled (Checked)")
+                            .IsChecked(true)
+                            .Disable(),
+
+                        new CheckBox()
+                            .Content("Three-state")
+                            .IsThreeState(true)
+                            .IsChecked(null),
+
+                        new CheckBox()
+                            .Content("Disabled (Indeterminate)")
+                            .IsThreeState(true)
+                            .IsChecked(null)
+                            .Disable()
+                    )
+            ),
+
+            Card(
+                "RadioButton",
+                new Grid()
+                    .Columns("Auto,Auto")
+                    .Rows("Auto,Auto")
+                    .Spacing(8)
+                    .Children(
+                        new RadioButton()
+                            .Content("A")
+                            .GroupName("g"),
+
+                        new RadioButton()
+                            .Content("C (Disabled)")
+                            .GroupName("g2")
+                            .Disable(),
+
+                        new RadioButton()
+                            .Content("B")
+                            .GroupName("g")
+                            .IsChecked(true),
+
+                        new RadioButton()
+                            .Content("Disabled (Checked)")
+                            .GroupName("g2")
+                            .IsChecked(true)
+                            .Disable()
+                    )
+            ),
+
+            Card(
+                "SegmentedControl",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(12)
+                    .Children(
+                        // Text only.
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(4)
+                            .Children(
+                                new TextBlock().Text("Text").FontSize(ThemeFontSize.Small),
+                                new SegmentedControl()
+                                    .Items("Day", "Week", "Month")
+                                    .SelectedIndex(0)),
+
+                        // Text + icon.
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(4)
+                            .Children(
+                                new TextBlock().Text("Text + Icon").FontSize(ThemeFontSize.Small),
+                                new SegmentedControl()
+                                    .Items(
+                                        new[]
+                                        {
+                                            new SegmentItem("apps_list_regular", "List"),
+                                            new SegmentItem("table_regular", "Table"),
+                                            new SegmentItem("data_pie_regular", "Chart"),
+                                        },
+                                        v => v.Label)
+                                    .ItemTemplate<SegmentItem>(
+                                        build: ctx =>
+                                        {
+                                            var icon = SegmentIconShape(16).CenterVertical();
+                                            var label = new TextBlock().CenterVertical();
+                                            ctx.Register("icon", icon);
+                                            ctx.Register("label", label);
+                                            return new StackPanel()
+                                                .Horizontal()
+                                                .Spacing(6)
+                                                .Center()
+                                                .Children(icon, label);
+                                        },
+                                        bind: (view, item, _, ctx) =>
+                                        {
+                                            BindNamedIcon(ctx.Get<PathShape>("icon"), item.Icon);
+                                            ctx.Get<TextBlock>("label").Text = item.Label;
+                                        })
+                                    .SelectedIndex(0)),
+
+                        // Icon only.
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(4)
+                            .Children(
+                                new TextBlock().Text("Icon").FontSize(ThemeFontSize.Small),
+                                new SegmentedControl()
+                                    .Items(
+                                        new[]
+                                        {
+                                            new SegmentItem("home_regular", "Home"),
+                                            new SegmentItem("settings_regular", "Settings"),
+                                            new SegmentItem("calendar_regular", "Calendar"),
+                                        },
+                                        v => v.Label)
+                                    .ItemTemplate<SegmentItem>(
+                                        build: _ => SegmentIconShape(16).Center(),
+                                        bind: (view, item, _, _) => BindNamedIcon((PathShape)view, item.Icon))
+                                    .SelectedIndex(1)),
+
+                        // One segment enabled via binding (PrepareContainer + BindIsEnabled).
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(4)
+                            .Children(
+                                new TextBlock().Text("Disabled segment (bound)").FontSize(ThemeFontSize.Small),
+                                new SegmentedControl()
+                                    .Items("All", "Active", "Done")
+                                    .PrepareContainer<string>((c, item, _) =>
+                                    {
+                                        if (item == "Done") c.BindIsEnabled(doneEnabled);
+                                    })
+                                    .SelectedIndex(0),
+                                new CheckBox().Content("Enable ‘Done’").BindIsChecked(doneEnabled)),
+
+                        // Whole control disabled.
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(4)
+                            .Children(
+                                new TextBlock().Text("Disabled").FontSize(ThemeFontSize.Small),
+                                new SegmentedControl()
+                                    .Items("Day", "Week", "Month")
+                                    .SelectedIndex(0)
+                                    .Disable())
+                    ),
+                minWidth: 320
+            )
+        );
     }
 }
 
@@ -7040,32 +8245,7 @@ partial class GalleryView
             delayView.Content = MakeTransitionBlock(fadeItems[delayIndex], delayIndex);
         }
 
-        // --- ProgressRing ---
-        var ring = new ProgressRing { IsActive = false };
-
         return CardGrid(
-            Card(
-                "ProgressRing",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new Border()
-                            .Height(60)
-                            .HorizontalAlignment(HorizontalAlignment.Center)
-                            .Child(
-                                ring
-                                    .Width(48)
-                                    .Height(48)
-                                    .WithTheme((t, c) => c.Foreground(t.Palette.Accent))
-                            ),
-                        new Button()
-                            .Content("Toggle")
-                            .OnClick(() => ring.IsActive = !ring.IsActive)
-                    )
-            ),
-
-
             Card(
                 "Fade",
                 new StackPanel()
@@ -7093,6 +8273,21 @@ partial class GalleryView
                         new Button()
                             .Content("Next")
                             .OnClick(NextFadeImage)
+                    )
+            ),
+
+            Card(
+                "Fade + Delay (200ms)",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new Border()
+                            .Height(60)
+                            .Child(delayView),
+                        new Button()
+                            .Content("Next")
+                            .OnClick(NextDelay)
                     )
             ),
 
@@ -7154,21 +8349,6 @@ partial class GalleryView
                             .Content("Next")
                             .OnClick(NextRotate)
                     )
-            ),
-
-            Card(
-                "Fade + Delay (200ms)",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new Border()
-                            .Height(60)
-                            .Child(delayView),
-                        new Button()
-                            .Content("Next")
-                            .OnClick(NextDelay)
-                    )
             )
         );
     }
@@ -7220,540 +8400,10 @@ partial class GalleryView
 
 partial class GalleryView
 {
-    private FrameworkElement TypographyPage()
-    {
-        var runDemo = new TextBlock()
-            .Width(620)
-            .FontSize(16)
-            .TextWrapping(TextWrapping.Wrap)
-            .Inlines(
-                new Run("Normal text, "),
-                new Run("bold text").Bold(),
-                new Run(", "),
-                new Run("italic text").Italic(),
-                new Run(", "),
-                new Run("accent text").Foreground(Color.FromHex("#D83B01")),
-                new Run(", "),
-                new Run("underlined text").Underline(),
-                new Run(", and "),
-                new Run("struck text").Strikethrough(),
-                new Run(".\nMixed fonts: Segoe UI + "),
-                new Run("Consolas").FontFamily("Consolas"),
-                new Run(" + "),
-                new Run("22 pt").FontSize(22),
-                new Run("."));
-
-        // Font Inheritance: Border sets FontSize=16, children inherit
-        var inheritanceDemo = new Border()
-            .FontSize(16)
-            .Padding(12)
-            .BorderThickness(1)
-            .CornerRadius(8)
-            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-            .Child(
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(6)
-                    .Children(
-                        new TextBlock().Text("Inherited 16pt (from parent Border)"),
-                        new TextBlock().Text("Also inherited 16pt"),
-                        new TextBlock().Text("Override: 10pt").FontSize(10),
-                        new Button().Content("Button (inherited 16pt)"),
-                        new TextBox().Placeholder("TextBox (inherited 16pt)")
-                    ));
-
-        // FontFamily Inheritance
-        var fontFamilyDemo = new Border()
-            .FontFamily("Consolas, Menlo, DejaVu Sans Mono")
-            .Padding(12)
-            .BorderThickness(1)
-            .CornerRadius(8)
-            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-            .Child(
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(6)
-                    .Children(
-                        new TextBlock().Text("Inherited Fixed"),
-                        new TextBlock().Text("Also Fixed"),
-                        new TextBlock().Text("Override: Default").FontFamily(Theme.Metrics.FontFamily),
-                        new Button().Content("Fixed Button")
-                    ));
-
-        // FontWeight Inheritance
-        var fontWeightDemo = new Border()
-            .Bold()
-            .Padding(12)
-            .BorderThickness(1)
-            .CornerRadius(8)
-            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-            .Child(
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(6)
-                    .Children(
-                        new TextBlock().Text("Inherited Bold"),
-                        new TextBlock().Text("Also Bold"),
-                        new TextBlock().Text("Override: Normal").FontWeight(FontWeight.Normal),
-                        new Button().Content("Bold Button")
-                    ));
-
-        // FontStyle Inheritance. Times New Roman because its italic is a face of its own: a family without
-        // one is slanted by the backend, which reads as italic but is not the same drawing.
-        var italicLabel = new TextBlock().Text("Inherited Italic");
-        var uprightLabel = new TextBlock().Text("Override: Normal").Italic(false);
-        var italicButton = new Button().Content("Italic Button");
-
-        var fontStyleDemo = new Border()
-            .FontFamily("Times New Roman")
-            .FontSize(16)
-            .Italic()
-            .Padding(12)
-            .BorderThickness(1)
-            .CornerRadius(8)
-            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-            .Child(
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(6)
-                    .Children(
-                        italicLabel,
-                        new TextBlock().Text("Bold Italic").Bold(),
-                        uprightLabel,
-                        italicButton
-                    ));
-
-        // Nested inheritance: outer=20pt, inner=12pt
-        var nestedDemo = new Border()
-            .FontSize(20)
-            .Padding(12)
-            .BorderThickness(1)
-            .CornerRadius(8)
-            .WithTheme((t, b) => b.Background(t.Palette.ContainerBackground).BorderBrush(t.Palette.ControlBorder))
-            .Child(
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(6)
-                    .Children(
-                        new TextBlock().Text("20pt (from outer)"),
-                        new Border()
-                            .FontSize(12)
-                            .Padding(8)
-                            .BorderThickness(1)
-                            .CornerRadius(6)
-                            .WithTheme((t, b) => b.BorderBrush(t.Palette.ControlBorder))
-                            .Child(
-                                new StackPanel()
-                                    .Vertical()
-                                    .Spacing(4)
-                                    .Children(
-                                        new TextBlock().Text("12pt (from inner Border)"),
-                                        new TextBlock().Text("Also 12pt")
-                                    )),
-                        new TextBlock().Text("Back to 20pt")
-                    ));
-
-        return CardGrid(
-            Card(
-                "Run-like Inline Text",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(6)
-                    .Children(
-                        runDemo,
-                        new TextBlock()
-                            .FontSize(ThemeFontSize.Small)
-                            .Text("One logical text surface with per-range color, weight, italic, decoration, font, and size.")),
-                minWidth: 650),
-            Card("Line Box (LineSpacing / LineBoxTrim)", LineBoxDemo(), minWidth: 500),
-            Card("Search Highlight (ListBox / TreeView)", SearchHighlightDemo(), minWidth: 500),
-            Card("Font Size Inheritance", inheritanceDemo),
-            Card("Font Family Inheritance", fontFamilyDemo),
-            Card("Font Weight Inheritance", fontWeightDemo),
-            Card("Font Style Inheritance", fontStyleDemo),
-            Card("Nested Inheritance", nestedDemo),
-
-            // Last: the widest card on the page, so the ones that wrap in a row keep their places.
-            Card("SyntaxViewer", SyntaxViewerDemo(), minWidth: 650)
-        );
-    }
-
-    private FrameworkElement LineBoxDemo()
-    {
-        var lineSpacing = new ObservableValue<double>();
-
-        var sample = new TextBlock()
-            .FontSize(ThemeFontSize.Large)
-            .Bind(TextBlock.LineSpacingProperty, lineSpacing)
-            .Text("Àccents float above the cap line,\nglyphs like g, y and p hang\ntheir descenders below the baseline,\nand spacing opens the leading.");
-
-        // The border's height tracks the measured box, so trimming visibly pulls the top and
-        // bottom edges onto the glyphs; stretching keeps the render width equal to the measure
-        // width, which pins the wrap points.
-        var border = new Border()
-            .Left()
-            .BorderThickness(1)
-            .WithTheme((t, b) => b.BorderBrush(t.Palette.Accent.WithAlpha(128)))
-            .Child(sample);
-
-        var spacingLabel = new TextBlock()
-            .FontSize(ThemeFontSize.Small)
-            .CenterVertical()
-            .Bind(TextBlock.TextProperty, lineSpacing, x => $"LineSpacing: {x:0.#}");
-
-        return new StackPanel()
-            .Vertical()
-            .Spacing(10)
-            .Children(
-                border,
-                new StackPanel()
-                    .Horizontal()
-                    .Spacing(10)
-                    .Children(
-                        new RadioButton()
-                            .Content("None")
-                            .IsChecked(true)
-                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.None),
-                        new RadioButton()
-                            .Content("Cap")
-                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.Cap),
-                        new RadioButton()
-                            .Content("Cap + Baseline")
-                            .OnChecked(() => sample.LineBoxTrim = LineBoxTrim.CapAndBaseline)),
-                new StackPanel()
-                    .Horizontal()
-                    .Spacing(10)
-                    .Children(
-                        new Slider()
-                            .Width(120)
-                            .Minimum(-16)
-                            .Maximum(16)
-                            .Value(0)
-                            .BindValue(lineSpacing),
-                        new Button()
-                            .Content("Reset")
-                            .OnClick(() => lineSpacing.Value = 0),
-                        spacingLabel),
-                new TextBlock()
-                    .FontSize(ThemeFontSize.Small)
-                    .Text("The border tracks the measured box: trimming cuts it to cap and baseline while the ink overflows; the slider tightens or opens the leading."));
-    }
-
-    private FrameworkElement SearchHighlightDemo()
-    {
-        string[] controlNames =
-        [
-            "Button", "TextBox", "TextBlock", "TreeView", "ListBox", "ComboBox", "CheckBox",
-            "RadioButton", "Slider", "ProgressBar", "TabControl", "ToolTip", "ContextMenu",
-            "ScrollViewer", "MenuBar", "ToggleSwitch", "NumericUpDown", "ColorPicker"
-        ];
-        var treeItems = new[]
-        {
-            new TreeViewNode("Controls",
-            [
-                new TreeViewNode("Button.cs"),
-                new TreeViewNode("TextBox.cs"),
-                new TreeViewNode("TreeView.cs"),
-                new TreeViewNode("ListBox.cs")
-            ]),
-            new TreeViewNode("Text",
-            [
-                new TreeViewNode("TextServices.cs"),
-                new TreeViewNode("ManagedTextEngine.cs"),
-                new TreeViewNode("ManagedTextRenderContext.cs"),
-                new TreeViewNode("TextViewLayout.cs")
-            ])
-        };
-
-        string query = string.Empty;
-        var highlightColor = Color.FromArgb(110, 255, 184, 0);
-
-        // Paint spans repaint only, so the layout and measured width never change while typing.
-        void ApplyHighlight(TextBlock target, string text)
-        {
-            if (query.Length == 0 || !text.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                target.Text = text;
-                return;
-            }
-            target.Inlines.Clear();
-            int position = 0;
-            while (position < text.Length)
-            {
-                int match = text.IndexOf(query, position, StringComparison.OrdinalIgnoreCase);
-                if (match < 0)
-                {
-                    break;
-                }
-                if (match > position)
-                {
-                    target.Inlines.Add(new Run(text[position..match]));
-                }
-                target.Inlines.Add(new Run(text.Substring(match, query.Length)).Background(highlightColor));
-                position = match + query.Length;
-            }
-            if (position < text.Length)
-            {
-                target.Inlines.Add(new Run(text[position..]));
-            }
-        }
-
-        var listBox = new ListBox()
-            .Height(230)
-            .Items(controlNames);
-        var treeView = new TreeView()
-            .Height(230)
-            .Width(250)
-            .ItemsSource(treeItems);
-
-        var description = new TextBlock()
-                   .DockBottom()
-                   .FontSize(ThemeFontSize.Small)
-                   .Text("Run.Background becomes a paint span behind the matched glyphs; items stay plain TextBlocks.");
-
-        // A fresh template instance is the public rebind trigger: the setter rebuilds realized
-        // containers while selection and expansion state stay on the control.
-        void ApplyTemplates()
-        {
-            listBox.ItemTemplate(new DelegateTemplate<string>(
-                build: ctx => new TextBlock().Register(ctx, "Text").CenterVertical(),
-                bind: (_, item, _, ctx) => ApplyHighlight(ctx.Get<TextBlock>("Text"), item ?? "")));
-            treeView.ItemTemplate<TreeViewNode>(
-                build: ctx => new TextBlock().Register(ctx, "Text").CenterVertical(),
-                bind: (_, item, _, ctx) => ApplyHighlight(ctx.Get<TextBlock>("Text"), item.Text));
-
-            ApplyHighlight(description, description.Text);
-        }
-
-        ApplyTemplates();
-
-        foreach (var node in treeItems)
-        {
-            treeView.Expand(node);
-        }
-
-        var search = new TextBox()
-            .Placeholder("Type to highlight matches, e.g. box")
-            .OnTextChanged(text =>
-            {
-                query = text;
-                ApplyTemplates();
-            });
-
-        return new DockPanel()
-            .Spacing(8)
-            .Children(
-                search.DockTop(),
-                description,
-                treeView.DockRight(),
-                listBox);
-    }
-
-    private FrameworkElement SyntaxViewerDemo()
-    {
-        var viewer = new SyntaxViewer
-        {
-            Width = 680,
-            Height = 360,
-            Wrap = false,
-            FontFamily = "Consolas, Menlo, DejaVu Sans Mono",
-            Text = """
-                using System.Collections.Generic;
-                using System.Linq;
-
-                namespace Gallery.Syntax;
-
-                [Obsolete("Use CreateAsync instead")]
-                public sealed record Result(int Id, string Name);
-
-                public static class ResultService
-                {
-                    // Keywords, types, numbers, members, strings, and interpolation.
-                    public static async Task<IReadOnlyList<Result>> CreateAsync(
-                        IEnumerable<string?> names,
-                        CancellationToken cancellationToken = default)
-                    {
-                        const int minimumLength = 3;
-                        await Task.Delay(42, cancellationToken);
-
-                        return names
-                            .Where(name => !string.IsNullOrWhiteSpace(name) && name.Length >= minimumLength)
-                            .Select((name, index) => new Result(index + 1, $"Item {index}: {name!.Trim()}"))
-                            .ToArray();
-                    }
-                }
-                """
-        };
-        var classifier = new GalleryCSharpClassifier();
-        viewer.Extensions.Classifiers.Add(classifier);
-        viewer.WithTheme((theme, target) =>
-        {
-            classifier.IsDark = theme.IsDark;
-            target.InvalidateTextView();
-        });
-        return viewer;
-    }
-
-    private sealed class GalleryCSharpClassifier : ITextClassifier
-    {
-        public bool IsDark { get; set; } = true;
-
-        private string CommentColor => IsDark ? "#6A9955" : "#008000";
-        private string StringColor => IsDark ? "#CE9178" : "#A31515";
-        private string NumberColor => IsDark ? "#B5CEA8" : "#098658";
-        private string KeywordColor => IsDark ? "#569CD6" : "#0000FF";
-        private string TypeColor => IsDark ? "#4EC9B0" : "#267F99";
-        private string MemberColor => IsDark ? "#DCDCAA" : "#795E26";
-
-        private static readonly HashSet<string> Keywords =
-        [
-            "async", "await", "class", "const", "default", "false", "namespace", "new", "null",
-            "public", "record", "return", "sealed", "static", "true", "using"
-        ];
-
-        private static readonly HashSet<string> BuiltInTypes =
-            ["bool", "double", "int", "object", "string", "var", "void"];
-
-        public void Classify(in TextClassificationContext context, IList<TextPaintSpan> output)
-        {
-            ReadOnlySpan<char> text = context.Text.Span;
-            int index = 0;
-            while (index < text.Length)
-            {
-                if (char.IsWhiteSpace(text[index]))
-                {
-                    index++;
-                    continue;
-                }
-
-                if (index + 1 < text.Length && text[index] == '/' && text[index + 1] == '/')
-                {
-                    Add(output, index, text.Length - index, CommentColor);
-                    break;
-                }
-
-                int stringPrefix = text[index] == '$' && index + 1 < text.Length && text[index + 1] == '"' ? 1 : 0;
-                if (text[index + stringPrefix] is '"' or '\'')
-                {
-                    char delimiter = text[index + stringPrefix];
-                    int end = index + stringPrefix + 1;
-                    while (end < text.Length)
-                    {
-                        if (text[end] == '\\')
-                        {
-                            end = Math.Min(text.Length, end + 2);
-                            continue;
-                        }
-                        if (text[end++] == delimiter) break;
-                    }
-                    Add(output, index, end - index, StringColor);
-                    index = end;
-                    continue;
-                }
-
-                if (char.IsDigit(text[index]))
-                {
-                    int end = index + 1;
-                    while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] is '.' or '_')) end++;
-                    Add(output, index, end - index, NumberColor);
-                    index = end;
-                    continue;
-                }
-
-                if (char.IsLetter(text[index]) || text[index] == '_')
-                {
-                    int end = index + 1;
-                    while (end < text.Length && (char.IsLetterOrDigit(text[end]) || text[end] == '_')) end++;
-                    string identifier = text[index..end].ToString();
-                    if (Keywords.Contains(identifier) || BuiltInTypes.Contains(identifier))
-                        Add(output, index, end - index, KeywordColor);
-                    else if (char.IsUpper(identifier[0]))
-                        Add(output, index, end - index, TypeColor);
-                    else if (PreviousNonWhitespace(text, index) == '.')
-                        Add(output, index, end - index, MemberColor);
-                    index = end;
-                    continue;
-                }
-
-                index++;
-            }
-        }
-
-        private static char PreviousNonWhitespace(ReadOnlySpan<char> text, int index)
-        {
-            for (int current = index - 1; current >= 0; current--)
-            {
-                if (!char.IsWhiteSpace(text[current])) return text[current];
-            }
-            return '\0';
-        }
-
-        private static void Add(IList<TextPaintSpan> output, int start, int length, string color)
-            => output.Add(new TextPaintSpan(
-                new TextRange(start, length),
-                Foreground: Color.FromHex(color)));
-    }
-}
-
-partial class GalleryView
-{
-    private FrameworkElement MenuPage() =>
-        CardGrid(
-            MenusCard(),
-            AccessKeyCard()
-        );
-
     private FrameworkElement WindowPage()
     {
-        var dialogStatus = new ObservableValue<string>("Dialog: -");
         var transparentStatus = new ObservableValue<string>("Transparent: -");
         var manualPositionStatus = new ObservableValue<string>("Manual: -");
-
-        // owner is the window the button lives in, so a dialog opened from a dialog stacks on it:
-        // the parent dialog is disabled and stays behind while the nested one is up.
-        async void ShowDialogSample(Window owner)
-        {
-            dialogStatus.Value = "Dialog: opening...";
-
-            var dialog = new Window()
-                .Resizable(420, 220)
-                .StartCenterScreen()
-                .Build(x => x
-                    .Title("ShowDialog sample")
-                    .Padding(16)
-                    .Content(
-                        new StackPanel()
-                            .Vertical()
-                            .Spacing(10)
-                            .Children(
-                                new TextBlock()
-                                    .Text("This is a modal window. The owner is disabled until you close this dialog."),
-
-                                new StackPanel()
-                                    .Horizontal()
-                                    .Spacing(8)
-                                    .Children(
-                                        new Button()
-                                            .Content("Open dialog")
-                                            .OnClick(() => ShowDialogSample(x)),
-                                        new Button()
-                                            .Content("Close")
-                                            .OnClick(() => x.Close())
-                                    )
-                            )
-                    )
-                );
-
-            try
-            {
-                await dialog.ShowDialogAsync(owner);
-                dialogStatus.Value = "Dialog: closed";
-            }
-            catch (Exception ex)
-            {
-                dialogStatus.Value = $"Dialog: error ({ex.GetType().Name})";
-            }
-        }
 
         void ShowTransparentSample()
         {
@@ -7873,6 +8523,56 @@ partial class GalleryView
             }
         }
 
+        var syncStatus = new ObservableValue<string>("Result: -");
+        var asyncStatus = new ObservableValue<string>("Result: -");
+        var dialogStatus = new ObservableValue<string>("Dialog: -");
+
+        // owner is the window the button lives in, so a dialog opened from a dialog stacks on it:
+        // the parent dialog is disabled and stays behind while the nested one is up.
+        async void ShowDialogSample(Window owner)
+        {
+            dialogStatus.Value = "Dialog: opening...";
+
+            var dialog = new Window()
+                .Resizable(420, 220)
+                .StartCenterScreen()
+                .Build(x => x
+                    .Title("ShowDialog sample")
+                    .Padding(16)
+                    .Content(
+                        new StackPanel()
+                            .Vertical()
+                            .Spacing(10)
+                            .Children(
+                                new TextBlock()
+                                    .Text("This is a modal window. The owner is disabled until you close this dialog."),
+
+                                new StackPanel()
+                                    .Horizontal()
+                                    .Spacing(8)
+                                    .Children(
+                                        new Button()
+                                            .Content("Open dialog")
+                                            .OnClick(() => ShowDialogSample(x)),
+                                        new Button()
+                                            .Content("Close")
+                                            .OnClick(() => x.Close())
+                                    )
+                            )
+                    )
+                );
+
+            try
+            {
+                await dialog.ShowDialogAsync(owner);
+                dialogStatus.Value = "Dialog: closed";
+            }
+            catch (Exception ex)
+            {
+                dialogStatus.Value = $"Dialog: error ({ex.GetType().Name})";
+            }
+        }
+
         return CardGrid(
             Card(
                 "Native Custom Chrome",
@@ -7903,35 +8603,6 @@ partial class GalleryView
                             .FontSize(ThemeFontSize.Small)
                             .TextWrapping(TextWrapping.Wrap)
                             .Text("AllowsTransparency-based custom chrome.\nProvides rounded borders on Win10 and earlier.\nWin32: higher overhead. Prefer NativeCustomWindow.")
-                    )
-            ),
-
-            Card(
-                "Hot-reload",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new TextBlock()
-                            .FontSize(ThemeFontSize.Small)
-                            .TextWrapping(TextWrapping.Wrap)
-                            .Text("Modify the code and save to see hot-reload in action.\nThis card will update with the current time."),
-                        new TextBlock()
-                            .Text($"Loaded: {DateTime.Now}"))
-            ),
-
-            Card(
-                "ShowDialogAsync",
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(8)
-                    .Children(
-                        new Button()
-                            .Content("Open dialog")
-                            .OnClick(() => ShowDialogSample(window)),
-                        new TextBlock()
-                            .BindText(dialogStatus)
-                            .FontSize(ThemeFontSize.Small)
                     )
             ),
 
@@ -7969,209 +8640,68 @@ partial class GalleryView
             ),
 
             AsyncCloseCard(),
-
-            PromptDialogCard(),
-
             NativeMessageHookCard(),
 
-            DevToolsCard()
-        );
-    }
-
-    private FrameworkElement AccessKeyCard()
-    {
-        var nameBox = new TextBox().Placeholder("Name").Width(160);
-
-        return Card(
-            "AccessKey & Shortcuts",
-            new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    new TextBlock().Text("Press Alt to show access key underlines (Windows/Linux).").FontSize(ThemeFontSize.Small),
-
-                    new StackPanel().Horizontal().Spacing(8).Children(
-                        new Label().CenterVertical().Text("_Name:").AccessKeyTarget(nameBox),
-                        nameBox
-                    ),
-
-                    new StackPanel().Horizontal().Spacing(8).Children(
-                        new Button().Content("_OK"),
-                        new Button().Content("_Cancel")
-                    ),
-
-                    new StackPanel().Vertical().Spacing(4).Children(
-                        new CheckBox().Content("_Remember me"),
-                        new CheckBox().Content("_Auto-save")
-                    ),
-
-                    new StackPanel().Vertical().Spacing(4).Children(
-                        new RadioButton().Content("_Small").GroupName("size"),
-                        new RadioButton().Content("_Medium").GroupName("size"),
-                        new RadioButton().Content("_Large").GroupName("size")
-                    )
-                )
-        );
-    }
-
-
-    private FrameworkElement MenusCard()
-    {
-        var copyPresentation = new ObservableValue<string>("_Copy");
-        var shortcutLog = new TextBlock()
-            .FontSize(ThemeFontSize.Small)
-            .TextWrapping(TextWrapping.Wrap)
-            .Text("Focus the TextBox inside the highlighted scope, then press a shortcut.");
-
-        void OnShortcut(string action) => shortcutLog.Text = $"[{DateTime.Now:HH:mm:ss.fff}] {action}";
-
-        var inputScope = new Border()
-            .BorderThickness(2)
-            .CornerRadius(6)
-            .Padding(8)
-            .WithTheme((theme, border) => border.BorderBrush(theme.Palette.Accent));
-
-        var scopeState = new TextBlock().FontSize(ThemeFontSize.Small).Bold();
-        scopeState.Bind(
-            TextBlock.TextProperty,
-            inputScope,
-            UIElement.IsFocusWithinProperty,
-            active => active
-                ? "Gallery local InputMap scope — ACTIVE"
-                : "Gallery local InputMap scope — INACTIVE");
-
-        inputScope.Child(
-            new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    scopeState,
-                    CreateMenu(window.Commands, inputScope.InputMap, OnShortcut, copyPresentation),
-                    new TextBlock()
-                        .FontSize(ThemeFontSize.Small)
-                        .TextWrapping(TextWrapping.Wrap)
-                        .Text("The menu handlers live in Window.Commands. Shortcut gestures live only in this bordered InputMap scope."),
-                    new Button()
-                        .Content("Toggle Copy presentation")
-                        .OnClick(() => copyPresentation.Value =
-                            copyPresentation.Value == "_Copy" ? "복사(_C)" : "_Copy"),
-                    new TextBox()
-                        .Placeholder("Focus here: Ctrl/Cmd + N, S, numpad + or -"),
-                    shortcutLog));
-
-        return Card(
-                "MenuBar (Command scope vs InputMap scope)",
+            Card(
+                "Synchronous ShowDialog",
                 new StackPanel()
-                    .Width(290)
                     .Vertical()
                     .Spacing(8)
                     .Children(
                         new TextBlock()
                             .FontSize(ThemeFontSize.Small)
-                            .TextWrapping(TextWrapping.Wrap)
-                            .Text("Focus inside the border to activate its local shortcuts. Move focus to NavigationView or another card to leave the scope."),
-                        inputScope
+                            .Text("ShowDialog() blocks this click handler (no await)\nwhile a nested loop keeps input and paint live."),
+                        new Button()
+                            .Content("Show (sync)")
+                            .OnClick(() =>
+                            {
+                                // Note: this handler is NOT async. ShowDialog blocks here until the dialog closes.
+                                var dialog = new SyncDialogWindow();
+                                dialog.ShowDialog(window);
+                                syncStatus.Value = $"Result: {dialog.Result}, clicks={dialog.ClickCount}";
+                            }),
+                        new TextBlock().BindText(syncStatus).FontSize(ThemeFontSize.Small)
                     )
-            );
-    }
+            ),
 
-    public static MenuBar CreateMenu(Element commandHost, Action<string> onShortcut)
-        => CreateMenu(commandHost.Commands, commandHost.InputMap, onShortcut, copyPresentation: null);
+            Card(
+                "Asynchronous ShowDialogAsync",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new TextBlock()
+                            .FontSize(ThemeFontSize.Small)
+                            .Text("ShowDialogAsync() returns a Task on the same loop.\nSame dialog, awaited instead of blocking."),
+                        new Button()
+                            .Content("Show (async)")
+                            .OnClick(async () =>
+                            {
+                                var dialog = new SyncDialogWindow();
+                                await dialog.ShowDialogAsync(window);
+                                asyncStatus.Value = $"Result: {dialog.Result}, clicks={dialog.ClickCount}";
+                            }),
+                        new TextBlock().BindText(asyncStatus).FontSize(ThemeFontSize.Small)
+                    )
+            ),
 
-    private static MenuBar CreateMenu(
-        CommandScope commands,
-        InputMap inputMap,
-        Action<string> onShortcut,
-        ObservableValue<string>? copyPresentation)
-    {
-        var p = ModifierKeys.Primary;
-        IconTemplate MenuIcon(string name)
-        {
-            // Looked up when the menu is built rather than captured here, so a late-arriving icon
-            // dictionary still reaches it: menus are created when the user opens them.
-            return new IconTemplate(size =>
-            {
-                var all = IconResource.GetAll(Resources.Icons.Value);
-                var entry = Array.Find(all, x => x.Name == name);
-                var geometry = PathGeometry.Parse(entry?.PathData ?? FALLBACK_ICON);
-                geometry.Freeze();
+            Card(
+                "Nested Dialogs (owner)",
+                new StackPanel()
+                    .Vertical()
+                    .Spacing(8)
+                    .Children(
+                        new Button()
+                            .Content("Open dialog")
+                            .OnClick(() => ShowDialogSample(window)),
+                        new TextBlock()
+                            .BindText(dialogStatus)
+                            .FontSize(ThemeFontSize.Small)
+                    )
+            ),
 
-                var icon = new PathShape()
-                    .Data(geometry)
-                    .Size(size.Dip)
-                    .Stretch(Stretch.Uniform);
-                icon.Bind(Shape.FillProperty, icon, TextElement.ForegroundProperty,
-                    (Color color) => (Brush)new SolidColorBrush(color));
-                return icon;
-            });
-        }
-
-        Command MenuCommand(string id, string text, string message, KeyGesture? gesture = null, IconTemplate? icon = null)
-        {
-            var command = new Command($"gallery.menu.{id}", text, icon);
-            commands.Register(command, () => onShortcut(message));
-            if (gesture is KeyGesture keyGesture)
-                inputMap.Map(command, keyGesture);
-            return command;
-        }
-
-        var fileMenu = new Menu()
-            .Item(MenuCommand("file.new", "_New", "File > New document created", new KeyGesture(Key.N, p)))
-            .Item(MenuCommand("file.open", "_Open...", "File > Open file dialog", new KeyGesture(Key.O, p)))
-            .Item(MenuCommand("file.save", "_Save", "File > Document saved", new KeyGesture(Key.S, p)))
-            .Item(MenuCommand("file.saveAs", "Save _As...", "File > Save As dialog"))
-            .Separator()
-            .SubMenu("_Export", new Menu()
-                .Item(MenuCommand("file.export.png", "_PNG", "File > Export > PNG format"))
-                .Item(MenuCommand("file.export.jpeg", "_JPEG", "File > Export > JPEG format"))
-                .SubMenu("_Advanced", new Menu()
-                    .Item(MenuCommand("file.export.metadata", "With _metadata", "File > Export > Advanced > Include metadata"))
-                    .Item(MenuCommand("file.export.optimized", "_Optimized", "File > Export > Advanced > Optimized output"))
-                )
-            )
-            .Separator()
-            .Item(MenuCommand("file.exit", "E_xit", "File > Exit application"));
-
-        var copyCommand = MenuCommand(
-            "edit.copy",
-            "_Copy",
-            "Edit > Copy to clipboard",
-            new KeyGesture(Key.C, p),
-            MenuIcon("copy_regular"));
-        if (copyPresentation != null)
-        {
-            copyCommand.BindText(copyPresentation);
-        }
-
-        var editMenu = new Menu()
-            .Item(MenuCommand("edit.undo", "_Undo", "Edit > Undo last action", new KeyGesture(Key.Z, p)))
-            .Item(MenuCommand("edit.redo", "_Redo", "Edit > Redo last action", new KeyGesture(Key.Y, p)))
-            .Separator()
-            .Item(MenuCommand("edit.cut", "Cu_t", "Edit > Cut to clipboard", new KeyGesture(Key.X, p), MenuIcon("cut_regular")))
-            .Item(copyCommand)
-            .Item(MenuCommand("edit.paste", "_Paste", "Edit > Paste from clipboard", new KeyGesture(Key.V, p), MenuIcon("clipboard_paste_regular")))
-            .Separator()
-            .SubMenu("_Find", new Menu()
-                .Item(MenuCommand("edit.find", "_Find...", "Edit > Find > Open find dialog", new KeyGesture(Key.F, p)))
-                .Item(MenuCommand("edit.findNext", "Find _Next", "Edit > Find > Find next occurrence", new KeyGesture(Key.F3)))
-                .Item(MenuCommand("edit.replace", "_Replace...", "Edit > Find > Open replace dialog", new KeyGesture(Key.H, p)))
-            );
-
-        var viewMenu = new Menu()
-            .Item(MenuCommand("view.toggleSidebar", "_Toggle Sidebar", "View > Toggle sidebar visibility"))
-            .SubMenu("_Zoom", new Menu()
-                .Item(MenuCommand("view.zoomIn", "Zoom _In", "View > Zoom > Zoom in", new KeyGesture(Key.Add, p)))
-                .Item(MenuCommand("view.zoomOut", "Zoom _Out", "View > Zoom > Zoom out", new KeyGesture(Key.Subtract, p)))
-                .Item(MenuCommand("view.zoomReset", "_Reset", "View > Zoom > Reset to 100%", new KeyGesture(Key.D0, p)))
-            );
-        var menu = new MenuBar()
-                            .Height(28)
-                            .Items(
-                                new MenuItem("_File").Menu(fileMenu),
-                                new MenuItem("_Edit").Menu(editMenu),
-                                new MenuItem("_View").Menu(viewMenu)
-                            );
-        return menu;
+            PromptDialogCard()
+        );
     }
 
     private FrameworkElement AsyncCloseCard()
@@ -8260,168 +8790,6 @@ partial class GalleryView
                     new TextBlock()
                         .BindText(status)
                         .FontSize(ThemeFontSize.Small)));
-    }
-
-    private FrameworkElement PromptDialogCard()
-    {
-        var promptStatus = new ObservableValue<string>("Result: -");
-
-        return Card(
-            "Prompt Dialog (FitContentHeight)",
-            new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    new TextBlock()
-                        .FontSize(ThemeFontSize.Small)
-                        .Text("Opens a FitContentHeight dialog.\nWindow height adjusts to content."),
-                    new Button()
-                        .Content("Show Prompt")
-                        .OnClick(async () =>
-                        {
-                            var result = await ShowPromptAsync(
-                                window,
-                                "Input",
-                                "Enter your name:",
-                                "Name...");
-                            promptStatus.Value = result is null
-                                ? "Result: canceled"
-                                : $"Result: {result}";
-                        }),
-                    new TextBlock()
-                        .BindText(promptStatus)
-                        .FontSize(ThemeFontSize.Small)
-                )
-        );
-    }
-
-    private async Task<string?> ShowPromptAsync(
-        Window owner,
-        string title,
-        string message,
-        string? placeholder = null)
-    {
-        string? result = null;
-        TextBox input = null!;
-        Window dialog = null!;
-        var acceptCommand = new Command("gallery.dialog.accept", "OK");
-
-        await new Window()
-            .Ref(out dialog)
-            .Apply(w => w.Commands.Register(acceptCommand, () =>
-            {
-                result = input.Text;
-                dialog.Close();
-            }, () => !string.IsNullOrWhiteSpace(input.Text)))
-            .Title(title)
-            .FitContentHeight(300, 300)
-            .Padding(12)
-            .Content(
-                new StackPanel()
-                    .Vertical()
-                    .Spacing(12)
-                    .Children(
-                        new TextBlock()
-                            .Text(message),
-                        new TextBox()
-                            .Ref(out input)
-                            .Placeholder(placeholder ?? string.Empty),
-                        new StackPanel()
-                            .Horizontal()
-                            .Right()
-                            .Spacing(6)
-                            .Children(
-                                new Button()
-                                    .Content("OK")
-                                    .Command(acceptCommand),
-                                new Button()
-                                    .Content("Cancel")
-                                    .OnClick(dialog.Close)
-                            )
-                    )
-            ).ShowDialogAsync(owner);
-
-        return result;
-    }
-
-    private FrameworkElement DevToolsCard()
-    {
-        var shortcuts = new TextBlock()
-            .FontSize(ThemeFontSize.Small)
-            .Text("Shortcuts:\n- Inspector: Ctrl/Cmd+Shift+I\n- Visual Tree: Ctrl/Cmd+Shift+T");
-
-        FrameworkElement content;
-        if (window.DevTools is WindowDevTools devTools)
-        {
-            bool updating = false;
-            var inspectorToggle = new ToggleButton()
-                .Content("Inspector Overlay");
-            var treeToggle = new ToggleButton()
-                .Content("Visual Tree Window");
-
-            void UpdateToggles()
-            {
-                updating = true;
-                try
-                {
-                    inspectorToggle.IsChecked = devTools.InspectorIsVisible;
-                    treeToggle.IsChecked = devTools.VisualTreeIsOpen;
-                }
-                finally
-                {
-                    updating = false;
-                }
-            }
-
-            inspectorToggle.CheckedChanged += _ =>
-            {
-                if (updating)
-                {
-                    return;
-                }
-
-                devTools.ToggleInspector();
-                UpdateToggles();
-            };
-
-            treeToggle.CheckedChanged += _ =>
-            {
-                if (updating)
-                {
-                    return;
-                }
-
-                devTools.ToggleVisualTree();
-                UpdateToggles();
-            };
-
-            devTools.InspectorVisibleChanged += _ => UpdateToggles();
-            devTools.VisualTreeOpenChanged += _ => UpdateToggles();
-            UpdateToggles();
-
-            content = new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    inspectorToggle,
-                    treeToggle,
-                    shortcuts
-                );
-        }
-        else
-        {
-            content = new StackPanel()
-                .Vertical()
-                .Spacing(8)
-                .Children(
-                    new TextBlock()
-                        .FontSize(ThemeFontSize.Small)
-                        .Text("DevTools are off in this build. Set <MewUIDevTools>true</MewUIDevTools> to enable them."),
-                    shortcuts
-                );
-        }
-
-        return Card("DevTools", content);
     }
 
     private FrameworkElement NativeMessageHookCard()
@@ -8580,10 +8948,6 @@ partial class GalleryView
 partial class GalleryView : UserControl
 {
     private Window window;
-
-    // All card borders, so the global "Cached" toggle can flip BitmapCache on every card at once.
-    private readonly List<Border> _cardBorders = new();
-    private bool _cardsCached;
 
     protected override Element? OnBuild() => BuildNavigationShell();
 
@@ -8750,32 +9114,7 @@ partial class GalleryView : UserControl
                             .Bold(),
                         content
                     ));
-        _cardBorders.Add(border);
-        // Pages are built the first time they are navigated to, so a card created while the toggle is
-        // already on would otherwise stay uncached until the toggle is flipped again.
-        if (_cardsCached)
-        {
-            border.CacheMode = new BitmapCache();
-        }
-
         return border;
-    }
-
-    /// <summary>Globally turns BitmapCache on/off for every card (debug toggle).</summary>
-    public void SetCardsCached(bool cached)
-    {
-        if (_cardsCached == cached)
-        {
-            return;
-        }
-
-        _cardsCached = cached;
-        foreach (var border in _cardBorders)
-        {
-            // Assigning a fresh BitmapCache to a card that already has one would drop its bitmap and
-            // make it capture again, so only a real change reaches the cards.
-            border.CacheMode = cached ? new BitmapCache() : null;
-        }
     }
 
     private FrameworkElement CardGrid(params FrameworkElement[] cards) => new WrapPanel()
@@ -8785,7 +9124,7 @@ partial class GalleryView : UserControl
 
     private sealed record NavEntry(NavigationItemKind Kind, string Title, Element? Icon, Func<FrameworkElement>? Page);
 
-    // Group headers separate sections; pages are selectable items with their own icon elements.
+    // Group headers separate the groups of pages; pages are selectable items with their own icon elements.
     private NavEntry[] NavEntries()
     {
         NavEntry Group(string title) => new(NavigationItemKind.Header, title, null, null);
@@ -8794,45 +9133,91 @@ partial class GalleryView : UserControl
         // Headers carry no icon; each selectable item uses a distinct icon.
         return
         [
-            Group("Basics"),
+            Group("Input"),
             Page("Buttons", ButtonsPage, "tap_single_regular"),
-            Page("Inputs", InputsPage, "textbox_regular"),
-            Page("Data Binding", DataBindingPage, "link_regular"),
-            Page("Drag & Drop", DragDropPage, "drag_regular"),
-            Page("Selection", SelectionPage, "multiselect_regular"),
-            Page("Typography", TypographyPage, "text_font_regular"),
-            Page("Styling", StylingPage, "color_regular"),
+            Page("Toggles", TogglesPage, "toggle_right_regular"),
+            Page("Text Input", TextInputPage, "textbox_regular"),
+            Page("Range", RangePage, "options_regular"),
+            Page("Pickers", PickersPage, "calendar_regular"),
 
-            Group("Navigation"),
-            Page("NavigationView", NavigationViewPage, "navigation_regular"),
+            Group("Text"),
+            Page("Fonts", FontsPage, "text_font_regular"),
+            Page("Text Layout", TextLayoutPage, "text_wrap_regular"),
+            Page("Markup Text", MarkupTextPage, "code_regular"),
 
             Group("Collections"),
             Page("Lists", ListsPage, "list_regular"),
             Page("TreeView", TreeViewPage, "text_bullet_list_tree_regular"),
             Page("GridView", GridViewPage, "grid_regular"),
-            Page("ItemsControl", ItemsControlPage, "collections_regular"),
 
             Group("Layout"),
             Page("Panels", PanelsPage, "dock_regular"),
-            Page("Layout", LayoutPage, "match_app_layout_regular"),
-            Page("Transform", TransformPage, "resize_regular"),
+            Page("Containers", ContainersPage, "match_app_layout_regular"),
+            Page("Navigation", NavigationPage, "navigation_regular"),
+
+            Group("Commands"),
+            Page("Menu", MenuPage, "line_horizontal_3_regular"),
+            Page("ToolBar", ToolBarPage, "wrench_regular"),
+
+            Group("Status"),
+            Page("Progress", ProgressPage, "spinner_ios_regular"),
+            Page("Overlay", OverlayPage, "layer_regular"),
 
             Group("Graphics"),
             Page("Shapes", ShapesPage, "shapes_regular"),
-            Page("Icons", IconsPage, "icons_regular"),
             Page("Media", MediaPage, "image_library_regular"),
-            Page("Custom Rendering", CustomRenderingPage, "paint_brush_regular"),
+            Page("Transform", TransformPage, "resize_regular"),
             Page("Transitions", TransitionsPage, "arrow_sync_circle_regular"),
+            Page("Custom Rendering", CustomRenderingPage, "paint_brush_regular"),
 
             Group("Windowing"),
             Page("Window", WindowPage, "window_regular"),
-            Page("Menu", MenuPage, "options_regular"),
-            Page("ToolBar", ToolBarPage, "wrench_regular"),
             Page("MessageBox", MessageBoxPage, "alert_on_regular"),
             Page("File Dialog", FileDialogPage, "folder_open_regular"),
-            Page("ShowDialog", ShowDialogPage, "window_new_regular"),
-            Page("Overlay", OverlayPage, "layer_regular")
+
+            Group("Framework"),
+            Page("Data Binding", DataBindingPage, "link_regular"),
+            Page("Drag & Drop", DragDropPage, "drag_regular"),
+            Page("Styling", StylingPage, "color_regular"),
+            Page("DevTools", DevToolsPage, "bug_regular")
         ];
+    }
+
+    private sealed record SegmentItem(string Icon, string Label);
+
+    // Binds the icon fill to the inherited Foreground, so it follows selection, theme, and disabled
+    // dimming exactly like the text label. Inherited-value changes now notify property bindings, so
+    // this stays in sync; SolidColorBrush is a lightweight, non-disposable value descriptor.
+    private static PathShape SegmentIconShape(double size)
+    {
+        var shape = new PathShape()
+            .Stretch(Stretch.Uniform)
+            .Width(size).Height(size);
+
+        shape.Bind(Shape.FillProperty, shape, Control.ForegroundProperty,
+            (Color color) => new SolidColorBrush(color));
+        return shape;
+    }
+
+    // The icon set is drawn on standard grids and the resource carries no metadata, so the grid is the
+    // smallest standard one that covers the ink. Handing that to ViewBox keeps the margin the designer
+    // left: stretching to the ink instead scales every icon by however tightly it happens to be drawn.
+    private static readonly double[] _iconGrids = [16, 20, 24, 28, 32, 48];
+
+    private static Rect IconViewBox(PathGeometry geometry)
+    {
+        var ink = geometry.GetBounds();
+        double extent = Math.Max(ink.Right, ink.Bottom);
+
+        foreach (double grid in _iconGrids)
+        {
+            if (extent <= grid)
+            {
+                return new Rect(0, 0, grid, grid);
+            }
+        }
+
+        return new Rect(0, 0, extent, extent);
     }
 }
 
