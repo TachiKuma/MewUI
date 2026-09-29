@@ -9,6 +9,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/MewUI.Gallery.Browser/MewUI.Gallery.Browser.csproj" />
     <Project Path="samples/MewUI.Gallery/MewUI.Gallery.csproj" />
+    <Project Path="samples/MewUI.Geometry.Sample/MewUI.Geometry.Sample.csproj" />
     <Project Path="samples/MewUI.Markdown.Sample/MewUI.Markdown.Sample.csproj" />
     <Project Path="samples/MewUI.MewDock.Sample/MewUI.MewDock.Sample.csproj" />
     <Project Path="samples/MewUI.MewvalonEdit.Sample/MewUI.MewvalonEdit.Sample.csproj" />
