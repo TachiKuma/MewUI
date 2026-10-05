@@ -1962,7 +1962,7 @@ partial class GalleryView
     private static FrameworkElement AsyncConfettiContent()
     {
         var canvas = new AsyncConfettiCanvas { Height = 200, Width = 280 };
-        var ring = new ProgressRing { Width = 64, Height = 64 }
+        var ring = new ProgressIndicator { Width = 64, Height = 64 }
             .WithTheme((t, c) => c.Foreground(t.Palette.Accent))
             .HorizontalAlignment(HorizontalAlignment.Center)
             .VerticalAlignment(VerticalAlignment.Center)
@@ -4303,7 +4303,7 @@ partial class GalleryView
                                     .Register(ctx, "Icon")
                                     .Size(16, 16)
                                     .StretchMode(Stretch.None),
-                                new ProgressRing()
+                                new ProgressIndicator()
                                     .Register(ctx, "Loading")
                                     .Size(16, 16)
                                     .WithTheme((t, c) => c.Foreground(t.Palette.Accent))
@@ -4321,9 +4321,9 @@ partial class GalleryView
 
                     ctx.Get<TextBlock>("Text").Text(item.Name);
 
-                    var loading = ctx.Get<ProgressRing>("Loading");
+                    var loading = ctx.Get<ProgressIndicator>("Loading");
                     icon.BindIsVisible(item.IsLoading, isLoading => !isLoading);
-                    loading.Bind(ProgressRing.IsActiveProperty, item.IsLoading);
+                    loading.Bind(ProgressIndicator.IsActiveProperty, item.IsLoading);
                     loading.BindIsVisible(item.IsLoading);
                 });
 
@@ -6114,7 +6114,7 @@ partial class GalleryView
 {
     private FrameworkElement ProgressPage()
     {
-        var ring = new ProgressRing { IsActive = false };
+        var ring = new ProgressIndicator { IsActive = false };
 
         return CardGrid(
             Card(
@@ -6131,7 +6131,7 @@ partial class GalleryView
             ),
 
             Card(
-                "ProgressRing",
+                "ProgressIndicator",
                 new StackPanel()
                     .Vertical()
                     .Spacing(8)
