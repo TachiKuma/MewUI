@@ -45,8 +45,8 @@ public sealed partial class ScrollBar : RangeBase
     private double _thumbDragStartValue;
 
     /// <summary>
-    /// Multiplies the rendered thumb alpha (0..1). Used by an owner to fade the bar in/out; layout and
-    /// hit-testing are unaffected.
+    /// Gets or sets the multiplier on the rendered thumb alpha (0..1); layout and hit testing are
+    /// unaffected.
     /// </summary>
     /// <remarks>
     /// An owner uses it to fade the bar in and out.
@@ -84,10 +84,7 @@ public sealed partial class ScrollBar : RangeBase
         set => SetValue(OrientationProperty, value);
     }
 
-    /// <summary>
-    /// Gets or sets the viewport size in DIPs.
-    /// Used to compute thumb size relative to the scroll range.
-    /// </summary>
+    /// <summary>Gets or sets the viewport size in DIPs, which sizes the thumb relative to the scroll range.</summary>
     public double ViewportSize
     {
         get => GetValue(ViewportSizeProperty);
