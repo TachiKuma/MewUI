@@ -79,6 +79,8 @@
     <Project Path="meta/MewUI.Skia.Windows/MewUI.Skia.Windows.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/MewUI.MarkupAudit/MewUI.MarkupAudit.Core/MewUI.MarkupAudit.Core.csproj" />
+    <Project Path="tools/MewUI.MarkupAudit/MewUI.MarkupAudit/MewUI.MarkupAudit.csproj" />
     <File Path="tools/bench/bench_trimmed.cmd" />
     <File Path="tools/bench/bench_trimmed_analyze.ps1" />
     <File Path="tools/pack/pack_mewui.cmd" />
@@ -99,9 +101,5 @@
     <Project Path="tests/MewUI.Svg.Test/MewUI.Svg.Test.csproj" />
     <Project Path="tests/MewUI.Terminal.Test/MewUI.Terminal.Test.csproj" />
     <Project Path="tests/MewUI.WindowAutomationTest/MewUI.WindowAutomationTest.csproj" />
-  </Folder>
-  <Folder Name="/tools/">
-    <Project Path="tools/MewUI.MarkupAudit/MewUI.MarkupAudit.Core/MewUI.MarkupAudit.Core.csproj" />
-    <Project Path="tools/MewUI.MarkupAudit/MewUI.MarkupAudit/MewUI.MarkupAudit.csproj" />
   </Folder>
 </Solution>
